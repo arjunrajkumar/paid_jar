@@ -1,24 +1,16 @@
-# README
+# PaidJar
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
+PaidJar is an open-source, self-hostable Rails app.
 
-Things you may want to cover:
+## Development
 
-* Ruby version
+This app uses Ruby 3.4.5 and Rails 8.0.5.
 
-* System dependencies
+```bash
+bin/setup
+bin/rails server
+```
 
-* Configuration
+## License
 
-* Database creation
-
-* Database initialization
-
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+PaidJar is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
