@@ -10,5 +10,24 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 0) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_04_093000) do
+  create_table "accounts", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.index ["name"], name: "index_accounts_on_name"
+  end
+
+  create_table "users", force: :cascade do |t|
+    t.integer "account_id", null: false
+    t.boolean "active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.string "email", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_users_on_account_id"
+    t.index ["email"], name: "index_users_on_email", unique: true
+  end
+
+  add_foreign_key "users", "accounts"
 end
