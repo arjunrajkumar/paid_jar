@@ -7,6 +7,14 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_session_url(script_name: nil)
   end
 
+  test "index starts Xero connection when no connection exists" do
+    sign_up_and_complete(email_address: "owner-invoices-no-xero@example.com")
+
+    get invoices_url
+
+    assert_redirected_to new_xero_connection_url
+  end
+
   test "index shows synced invoices" do
     account = sign_up_and_complete
     integration = create_xero_integration(account)

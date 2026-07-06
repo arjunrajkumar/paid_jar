@@ -6,7 +6,7 @@ class LandingControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "h1", "Welcome to PaidJar"
-    assert_select "a[href=?]", new_xero_connection_path, "Connect Xero"
+    assert_select "a[href=?]", new_xero_connection_path, count: 0
     assert_select "a[href=?]", invoices_path, count: 0
   end
 

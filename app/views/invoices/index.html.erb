@@ -1,10 +1,6 @@
 <h1>Invoices</h1>
 
-<% if @xero_integration&.connected? %>
-  <p>Connected to <%= @xero_integration.external_account_name.presence || "Xero" %>.</p>
-<% else %>
-  <p><%= link_to "Connect Xero", new_xero_connection_path %></p>
-<% end %>
+<p>Connected to <%= @xero_integration.external_account_name.presence || "Xero" %>.</p>
 
 <% if @page.used? %>
   <table>
