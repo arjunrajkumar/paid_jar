@@ -14,28 +14,24 @@ module AccountingIntegrations
       tenant_id = primary_connection.fetch("tenantId")
       self.integration = integration.account.accounting_integrations.find_or_initialize_by(provider: :xero)
 
-      integration.transaction do
-        integration.invoices.destroy_all if replacing_connected_tenant?(tenant_id)
-
-        integration.update!(
-          provider: :xero,
-          status: :active,
-          external_account_id: tenant_id,
-          external_account_name: primary_connection["tenantName"],
-          access_token: token_set.fetch("access_token"),
-          refresh_token: token_set.fetch("refresh_token"),
-          expires_at: Time.current + token_set.fetch("expires_in").to_i.seconds,
-          scopes: token_set["scope"].to_s.split,
-          provider_data: {
-            xero_user_id: userinfo["xero_userid"] || userinfo["sub"],
-            email: userinfo["email"],
-            token_type: token_set.fetch("token_type", "Bearer"),
-            connections: connections
-          },
-          raw_token_data: token_set,
-          last_error: nil
-        )
-      end
+      integration.update!(
+        provider: :xero,
+        status: :active,
+        external_account_id: tenant_id,
+        external_account_name: primary_connection["tenantName"],
+        access_token: token_set.fetch("access_token"),
+        refresh_token: token_set.fetch("refresh_token"),
+        expires_at: Time.current + token_set.fetch("expires_in").to_i.seconds,
+        scopes: token_set["scope"].to_s.split,
+        provider_data: {
+          xero_user_id: userinfo["xero_userid"] || userinfo["sub"],
+          email: userinfo["email"],
+          token_type: token_set.fetch("token_type", "Bearer"),
+          connections: connections
+        },
+        raw_token_data: token_set,
+        last_error: nil
+      )
 
       integration
     end
@@ -66,12 +62,6 @@ module AccountingIntegrations
 
       def oauth_client
         @oauth_client ||= OauthClient.new
-      end
-
-      def replacing_connected_tenant?(tenant_id)
-        integration.persisted? &&
-          integration.external_account_id.present? &&
-          integration.external_account_id != tenant_id
       end
   end
 end

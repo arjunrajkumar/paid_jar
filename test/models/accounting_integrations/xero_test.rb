@@ -23,22 +23,6 @@ module AccountingIntegrations
       assert fake_client.userinfo_called
     end
 
-    test "connect replaces the account xero tenant and clears old invoices" do
-      integration = accounting_integrations(:xero)
-      assert_difference -> { AccountingIntegration.count }, 0 do
-        assert_difference -> { integration.invoices.count }, -1 do
-          fake_client = FakeXeroClient.new(tenant_id: "tenant-999", tenant_name: "New Xero Org")
-
-          AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
-
-          AccountingIntegrations::Xero.new(integration).connect!(code: "auth-code")
-        end
-      end
-
-      assert_equal "tenant-999", integration.reload.external_account_id
-      assert_equal "New Xero Org", integration.external_account_name
-    end
-
     test "sync_invoices stores Xero invoices" do
       integration = accounting_integrations(:xero)
       fake_client = FakeXeroClient.new
