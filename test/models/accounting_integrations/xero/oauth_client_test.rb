@@ -6,8 +6,7 @@ module AccountingIntegrations
       test "authorization_url includes Xero OAuth parameters" do
         with_xero_credentials(
           client_id: "client-123",
-          client_secret: "secret-123",
-          scopes: "openid profile offline_access"
+          client_secret: "secret-123"
         ) do
           config = Configuration.new
 
@@ -24,7 +23,7 @@ module AccountingIntegrations
           assert_equal "code", params["response_type"]
           assert_equal "client-123", params["client_id"]
           assert_equal "https://example.com/xero/callback", params["redirect_uri"]
-          assert_equal "openid profile offline_access", params["scope"]
+          assert_equal Configuration::DEFAULT_SCOPES.join(" "), params["scope"]
           assert_equal "state-123", params["state"]
         end
       end

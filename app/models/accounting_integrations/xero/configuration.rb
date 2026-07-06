@@ -23,7 +23,7 @@ module AccountingIntegrations
       end
 
       def scopes
-        credentials[:scopes].presence || DEFAULT_SCOPES.join(" ")
+        DEFAULT_SCOPES.join(" ")
       end
 
       def redirect_uri
