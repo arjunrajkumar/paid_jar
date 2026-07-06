@@ -5,6 +5,30 @@ Rails.application.routes.draw do
   get "/xero/callback", to: "xero_connections#create", as: :xero_callback
   resource :xero_connection, only: %i[show destroy]
 
+  resource :signup, only: %i[new create] do
+    collection do
+      scope module: :signups, as: :signup do
+        resource :completion, only: %i[new create]
+      end
+    end
+  end
+
+  resource :session, only: %i[new create destroy] do
+    scope module: :sessions do
+      resource :magic_link, only: %i[show create]
+    end
+  end
+
+  namespace :account do
+    resource :settings, only: %i[show update]
+  end
+
+  resources :users, only: %i[show destroy] do
+    scope module: :users do
+      resource :role, only: :update
+    end
+  end
+
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
   # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.

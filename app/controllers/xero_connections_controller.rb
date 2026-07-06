@@ -1,4 +1,6 @@
 class XeroConnectionsController < ApplicationController
+  allow_unauthenticated_access
+
   before_action :ensure_xero_configured, only: %i[new create]
   before_action :ensure_xero_approved, only: :create
   before_action :ensure_oauth_state, only: :create

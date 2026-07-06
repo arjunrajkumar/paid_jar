@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <%= render "layouts/shared/head" %>
+
+  <body class="public <%= @body_class %>" data-controller="timezone-cookie" data-platform="<%= platform.type %>">
+    <div id="global-container">
+      <header id="header">
+        <a href="#main" data-turbo="false">Skip to main content</a>
+
+        <nav>
+          <%= link_to "PaidJar", root_path %>
+        </nav>
+
+        <%= yield :header %>
+      </header>
+
+      <%= render "layouts/shared/flash" %>
+
+      <main id="main">
+        <%= yield %>
+      </main>
+    </div>
+
+    <footer id="footer">
+      <%= yield :footer %>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,27 @@
+<% @page_title = @user.name %>
+
+<% content_for :header do %>
+  <h1><%= @page_title %></h1>
+<% end %>
+
+<section>
+  <h2>Profile</h2>
+
+  <p>
+    <strong><%= @user.name %></strong>
+  </p>
+
+  <% if !@user.active? %>
+    <p><%= @user.name %> is no longer on this account.</p>
+  <% elsif !@user.verified? %>
+    <p>Unverified</p>
+  <% else %>
+    <p><%= mail_to @user.identity.email_address %></p>
+  <% end %>
+
+  <% if Current.user == @user %>
+    <%= button_to session_path(script_name: nil), method: :delete, form: { data: { turbo: false } } do %>
+      <span>Sign out</span>
+    <% end %>
+  <% end %>
+</section>

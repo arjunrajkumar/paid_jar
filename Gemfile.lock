@@ -202,6 +202,9 @@ GEM
     parser (3.3.11.1)
       ast (~> 2.4.1)
       racc
+    platform_agent (1.0.1)
+      activesupport (>= 5.2.0)
+      useragent (~> 0.16.3)
     pp (0.6.4)
       prettyprint
     prettyprint (0.2.0)
@@ -378,6 +381,7 @@ PLATFORMS
   aarch64-linux-musl
   arm-linux-gnu
   arm-linux-musl
+  arm64-darwin-22
   arm64-darwin-23
   arm64-darwin-25
   x86_64-linux
@@ -393,6 +397,7 @@ DEPENDENCIES
   jbuilder
   kamal
   mocha
+  platform_agent
   propshaft
   puma (>= 5.0)
   rails (~> 8.1.3)
