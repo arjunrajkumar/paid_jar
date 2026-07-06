@@ -1,6 +1,6 @@
 module AccountingIntegrations
   class Xero
-    attr_accessor :integration
+    attr_reader :integration
 
     def initialize(integration)
       @integration = integration
@@ -12,7 +12,6 @@ module AccountingIntegrations
       userinfo = oauth_client.userinfo(access_token: token_set.fetch("access_token"))
       primary_connection = connections.first || {}
       tenant_id = primary_connection.fetch("tenantId")
-      self.integration = integration.account.accounting_integrations.find_or_initialize_by(provider: :xero)
 
       integration.update!(
         provider: :xero,
