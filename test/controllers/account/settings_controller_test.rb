@@ -1,7 +1,7 @@
 require "test_helper"
 
 class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
-  test "show renders account name users and sign out" do
+  test "show renders account name and users" do
     account = sign_up_and_complete
 
     get account_settings_url(script_name: account.slug)
@@ -10,7 +10,7 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", "Account Settings"
     assert_select "input[name='account[name]'][value=?]", account.name
     assert_select "li", text: /Owner Person/
-    assert_select "button", text: /Sign out/
+    assert_select "button", text: /Sign out/, count: 0
   end
 
   test "owner updates account name" do
@@ -41,11 +41,11 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
 
     delete session_url(script_name: nil)
 
-    assert_redirected_to root_url
+    assert_redirected_to new_session_url
 
     get account_settings_url(script_name: account.slug)
 
-    assert_redirected_to new_signup_url(script_name: account.slug)
+    assert_redirected_to new_session_url(script_name: nil)
   end
 
   private

@@ -1,6 +1,40 @@
 require "test_helper"
 
 class UsersControllerTest < ActionDispatch::IntegrationTest
+  test "show renders profile and sign out for current user" do
+    account = sign_up_and_complete
+    user = account.users.owner.first
+
+    get user_url(user, script_name: account.slug)
+
+    assert_response :success
+    assert_select "h1", "Owner Person"
+    assert_select "a[href='mailto:owner-users@example.com']", "owner-users@example.com"
+    assert_select "button", text: /Sign out/
+  end
+
+  test "show does not render sign out for another user" do
+    account = sign_up_and_complete
+    member = account.users.create!(name: "Member User", identity: Identity.create!(email_address: "member-profile@example.com"), role: :member)
+
+    get user_url(member, script_name: account.slug)
+
+    assert_response :success
+    assert_select "h1", "Member User"
+    assert_select "button", text: /Sign out/, count: 0
+  end
+
+  test "show labels unverified users" do
+    account = sign_up_and_complete
+    member = account.users.create!(name: "Unverified User", identity: Identity.create!(email_address: "unverified@example.com"), role: :member)
+
+    get user_url(member, script_name: account.slug)
+
+    assert_response :success
+    assert_select "p", "Unverified"
+    assert_select "a[href='mailto:unverified@example.com']", count: 0
+  end
+
   test "admin deactivates member" do
     account = sign_up_and_complete
     member_identity = Identity.create!(email_address: "member@example.com")

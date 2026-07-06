@@ -1,0 +1,19 @@
+<h1>Sign in</h1>
+
+<%= form_with url: session_path, data: { turbo: false } do |form| %>
+  <p>
+    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address..." %>
+  </p>
+
+  <p>Enter your email and we'll send you a sign-in code.</p>
+
+  <button type="submit">
+    <span>Send code</span>
+    <span>-></span>
+  </button>
+<% end %>
+
+<p>
+  New to PaidJar?
+  <%= link_to "Create an account", new_signup_path %>.
+</p>

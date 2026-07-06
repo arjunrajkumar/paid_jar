@@ -10,9 +10,7 @@ Rails.application.routes.draw do
     end
   end
 
-  resource :session, only: [] do
-    delete "/", to: "sessions#destroy"
-
+  resource :session, only: %i[new create destroy] do
     scope module: :sessions do
       resource :magic_link, only: %i[show create]
     end
@@ -22,7 +20,7 @@ Rails.application.routes.draw do
     resource :settings, only: %i[show update]
   end
 
-  resources :users, only: %i[destroy] do
+  resources :users, only: %i[show destroy] do
     scope module: :users do
       resource :role, only: :update
     end

@@ -1,4 +1,5 @@
 class Sessions::MagicLinksController < ApplicationController
+  disallow_account_scope
   require_unauthenticated_access
   rate_limit to: 10, within: 15.minutes, only: :create, with: :rate_limit_exceeded
   before_action :ensure_that_email_address_pending_authentication_exists
@@ -18,9 +19,9 @@ class Sessions::MagicLinksController < ApplicationController
   private
     def ensure_that_email_address_pending_authentication_exists
       unless email_address_pending_authentication.present?
-        alert_message = "Enter your email address to sign up."
+        alert_message = "Enter your email address to continue."
         respond_to do |format|
-          format.html { redirect_to new_signup_path, alert: alert_message }
+          format.html { redirect_to new_session_path, alert: alert_message }
           format.json { render json: { message: alert_message }, status: :unauthorized }
         end
       end
@@ -53,7 +54,7 @@ class Sessions::MagicLinksController < ApplicationController
       alert_message = "Something went wrong. Please try again."
 
       respond_to do |format|
-        format.html { redirect_to new_signup_path, alert: alert_message }
+        format.html { redirect_to new_session_path, alert: alert_message }
         format.json { render json: { message: alert_message }, status: :unauthorized }
       end
     end

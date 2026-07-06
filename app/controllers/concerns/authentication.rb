@@ -22,6 +22,10 @@ module Authentication
       allow_unauthenticated_access **options
       before_action :redirect_authenticated_user, **options
     end
+
+    def disallow_account_scope(**options)
+      before_action :redirect_account_scoped_request, **options
+    end
   end
 
   private
@@ -40,11 +44,27 @@ module Authentication
     end
 
     def request_authentication
-      redirect_to new_signup_path
+      if Current.account.present?
+        session[:return_to_after_authenticating] = request.url
+      end
+
+      redirect_to_login_url
     end
 
     def after_authentication_url
       session.delete(:return_to_after_authenticating) || root_url
+    end
+
+    def login_url
+      new_session_url(script_name: nil)
+    end
+
+    def redirect_to_login_url
+      redirect_to login_url, allow_other_host: true
+    end
+
+    def redirect_account_scoped_request
+      redirect_to url_for(script_name: nil), status: :see_other if request.script_name.present?
     end
 
     def find_session_by_cookie

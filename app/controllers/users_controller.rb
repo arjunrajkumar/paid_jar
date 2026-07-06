@@ -1,6 +1,9 @@
 class UsersController < ApplicationController
   before_action :set_user
-  before_action :ensure_permission_to_change_user
+  before_action :ensure_permission_to_change_user, only: :destroy
+
+  def show
+  end
 
   def destroy
     @user.deactivate

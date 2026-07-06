@@ -12,9 +12,10 @@ module Authentication::ViaMagicLink
       end
     end
 
-    def redirect_to_session_magic_link(magic_link)
+    def redirect_to_session_magic_link(magic_link, return_to: nil)
       serve_development_magic_link(magic_link)
       set_pending_authentication_token(magic_link)
+      session[:return_to_after_authenticating] = return_to if return_to
 
       respond_to do |format|
         format.html { redirect_to session_magic_link_path }
