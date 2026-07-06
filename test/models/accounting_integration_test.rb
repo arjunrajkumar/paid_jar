@@ -30,13 +30,13 @@ class AccountingIntegrationTest < ActiveSupport::TestCase
     assert_predicate accounting_integrations(:xero), :connected?
   end
 
-  test "does not allow the same provider account twice" do
+  test "does not allow the same provider twice for an account" do
     integration = accounts(:paid_jar).accounting_integrations.build(
       provider: "xero",
-      external_account_id: accounting_integrations(:xero).external_account_id
+      external_account_id: "different-xero-tenant"
     )
 
     assert_not integration.valid?
-    assert_includes integration.errors[:external_account_id], "has already been taken"
+    assert_includes integration.errors[:provider], "has already been taken"
   end
 end

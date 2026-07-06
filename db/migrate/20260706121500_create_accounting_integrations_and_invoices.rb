@@ -9,6 +9,7 @@ class CreateAccountingIntegrationsAndInvoices < ActiveRecord::Migration[8.1]
     drop_table :invoices if table_exists?(:invoices)
 
     if table_exists?(:accounting_integrations)
+      remove_index :accounting_integrations, column: [ :account_id, :provider ] if index_exists?(:accounting_integrations, [ :account_id, :provider ])
       remove_index :accounting_integrations, column: [ :account_id, :provider, :external_account_id ] if index_exists?(:accounting_integrations, [ :account_id, :provider, :external_account_id ])
       remove_index :accounting_integrations, column: [ :provider, :status ] if index_exists?(:accounting_integrations, [ :provider, :status ])
 
@@ -51,7 +52,7 @@ class CreateAccountingIntegrationsAndInvoices < ActiveRecord::Migration[8.1]
 
       rename_table :invoice_integrations, :accounting_integrations
 
-      add_index :accounting_integrations, [ :account_id, :provider, :external_account_id ], unique: true
+      add_index :accounting_integrations, [ :account_id, :provider ], unique: true
       add_index :accounting_integrations, [ :provider, :status ]
     end
 

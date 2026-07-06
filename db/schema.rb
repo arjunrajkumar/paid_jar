@@ -32,7 +32,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_06_121500) do
     t.json "scopes", default: [], null: false
     t.string "status", default: "pending", null: false
     t.datetime "updated_at", null: false
-    t.index ["account_id", "provider", "external_account_id"], name: "idx_on_account_id_provider_external_account_id_2b3bad33b9", unique: true
+    t.index ["account_id", "provider"], name: "index_accounting_integrations_on_account_id_and_provider", unique: true
     t.index ["account_id"], name: "index_accounting_integrations_on_account_id"
     t.index ["provider", "status"], name: "index_accounting_integrations_on_provider_and_status"
   end

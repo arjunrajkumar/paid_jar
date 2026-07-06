@@ -3,12 +3,13 @@ require "test_helper"
 module AccountingIntegrations
   class XeroTest < ActiveSupport::TestCase
     test "connect exchanges the code and stores the active tenant" do
-      integration = accounts(:paid_jar).accounting_integrations.build(provider: :xero)
+      account = Account.create!(name: "New Xero Account")
+      integration = account.accounting_integrations.build(provider: :xero)
       fake_client = FakeXeroClient.new
 
       AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
 
-      AccountingIntegrations::Xero.new(integration).connect!(code: "auth-code")
+      integration = AccountingIntegrations::Xero.new(integration).connect!(code: "auth-code")
 
       assert_predicate integration, :persisted?
       assert_predicate integration, :active?
@@ -20,6 +21,22 @@ module AccountingIntegrations
       assert fake_client.exchange_code_called
       assert fake_client.connections_called
       assert fake_client.userinfo_called
+    end
+
+    test "connect replaces the account xero tenant and clears old invoices" do
+      integration = accounting_integrations(:xero)
+      assert_difference -> { AccountingIntegration.count }, 0 do
+        assert_difference -> { integration.invoices.count }, -1 do
+          fake_client = FakeXeroClient.new(tenant_id: "tenant-999", tenant_name: "New Xero Org")
+
+          AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+          AccountingIntegrations::Xero.new(integration).connect!(code: "auth-code")
+        end
+      end
+
+      assert_equal "tenant-999", integration.reload.external_account_id
+      assert_equal "New Xero Org", integration.external_account_name
     end
 
     test "sync_invoices stores Xero invoices" do
@@ -58,6 +75,11 @@ module AccountingIntegrations
       attr_accessor :exchange_code_called, :connections_called, :userinfo_called,
         :invoices_called, :refresh_token_called
 
+      def initialize(tenant_id: "tenant-123", tenant_name: "PaidJar Demo")
+        @tenant_id = tenant_id
+        @tenant_name = tenant_name
+      end
+
       def exchange_code(code:)
         raise "unexpected code" unless code == "auth-code"
 
@@ -91,8 +113,8 @@ module AccountingIntegrations
         self.connections_called = true
         [
           {
-            "tenantId" => "tenant-123",
-            "tenantName" => "PaidJar Demo"
+            "tenantId" => @tenant_id,
+            "tenantName" => @tenant_name
           }
         ]
       end

@@ -15,7 +15,9 @@ class AccountingIntegration < ApplicationRecord
 
   validates :provider, :status, presence: true
   validates :external_account_id, presence: true
-  validates :external_account_id, uniqueness: { scope: [ :account_id, :provider ] }
+  validates :provider, uniqueness: { scope: :account_id }
+
+  scope :connected, -> { active.where.not(external_account_id: [ nil, "" ]).where.not(refresh_token: [ nil, "" ]) }
 
   def provider_adapter
     provider_class.new(self)
