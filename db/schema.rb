@@ -10,30 +10,31 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_04_111100) do
-  create_table "xero_connections", force: :cascade do |t|
-    t.text "access_token", null: false
-    t.json "connections", default: [], null: false
-    t.datetime "created_at", null: false
-    t.string "email"
-    t.datetime "expires_at", null: false
-    t.text "id_token"
-    t.json "raw_token_set", default: {}, null: false
-    t.json "raw_userinfo", default: {}, null: false
-    t.text "refresh_token", null: false
-    t.json "scopes", default: [], null: false
-    t.string "tenant_id"
-    t.string "tenant_name"
-    t.string "token_type", null: false
-    t.datetime "updated_at", null: false
-    t.string "xero_user_id"
-    t.index ["tenant_id"], name: "index_xero_connections_on_tenant_id"
-    t.index ["xero_user_id"], name: "index_xero_connections_on_xero_user_id"
-  end
-
+ActiveRecord::Schema[8.1].define(version: 2026_07_06_121500) do
   create_table "account_external_id_sequences", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
+  end
+
+  create_table "accounting_integrations", force: :cascade do |t|
+    t.text "access_token"
+    t.integer "account_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at"
+    t.string "external_account_id", null: false
+    t.string "external_account_name"
+    t.text "last_error"
+    t.datetime "last_synced_at"
+    t.string "provider", null: false
+    t.json "provider_data", default: {}, null: false
+    t.json "raw_token_data", default: {}, null: false
+    t.text "refresh_token"
+    t.json "scopes", default: [], null: false
+    t.string "status", default: "pending", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "provider", "external_account_id"], name: "idx_on_account_id_provider_external_account_id_2b3bad33b9", unique: true
+    t.index ["account_id"], name: "index_accounting_integrations_on_account_id"
+    t.index ["provider", "status"], name: "index_accounting_integrations_on_provider_and_status"
   end
 
   create_table "accounts", force: :cascade do |t|
@@ -52,25 +53,31 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_111100) do
     t.index ["email_address"], name: "index_identities_on_email_address", unique: true
   end
 
-  create_table "invoice_integrations", force: :cascade do |t|
-    t.text "access_token"
+  create_table "invoices", force: :cascade do |t|
     t.integer "account_id", null: false
+    t.integer "accounting_integration_id", null: false
+    t.decimal "amount_due", precision: 12, scale: 2
+    t.decimal "amount_paid", precision: 12, scale: 2
+    t.string "contact_external_id"
+    t.string "contact_name"
     t.datetime "created_at", null: false
-    t.datetime "expires_at"
-    t.string "external_account_id", null: false
-    t.string "external_account_name"
-    t.text "last_error"
-    t.datetime "last_synced_at"
-    t.string "provider", null: false
+    t.string "currency"
+    t.date "due_on"
+    t.string "external_id", null: false
+    t.string "invoice_type"
+    t.date "issued_on"
+    t.string "number"
     t.json "provider_data", default: {}, null: false
-    t.json "raw_token_data", default: {}, null: false
-    t.text "refresh_token"
-    t.json "scopes", default: [], null: false
-    t.string "status", default: "pending", null: false
+    t.json "raw_data", default: {}, null: false
+    t.string "status"
+    t.datetime "synced_at"
+    t.decimal "total", precision: 12, scale: 2
     t.datetime "updated_at", null: false
-    t.index ["account_id", "provider", "external_account_id"], name: "idx_on_account_id_provider_external_account_id_800201937e", unique: true
-    t.index ["account_id"], name: "index_invoice_integrations_on_account_id"
-    t.index ["provider", "status"], name: "index_invoice_integrations_on_provider_and_status"
+    t.index ["account_id", "status"], name: "index_invoices_on_account_id_and_status"
+    t.index ["account_id"], name: "index_invoices_on_account_id"
+    t.index ["accounting_integration_id", "external_id"], name: "index_invoices_on_accounting_integration_id_and_external_id", unique: true
+    t.index ["accounting_integration_id"], name: "index_invoices_on_accounting_integration_id"
+    t.index ["due_on"], name: "index_invoices_on_due_on"
   end
 
   create_table "magic_links", force: :cascade do |t|
@@ -109,7 +116,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_04_111100) do
     t.index ["identity_id"], name: "index_users_on_identity_id"
   end
 
-  add_foreign_key "invoice_integrations", "accounts"
+  add_foreign_key "accounting_integrations", "accounts"
+  add_foreign_key "invoices", "accounting_integrations"
+  add_foreign_key "invoices", "accounts"
   add_foreign_key "magic_links", "identities"
   add_foreign_key "sessions", "identities"
   add_foreign_key "users", "accounts"

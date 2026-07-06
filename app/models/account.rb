@@ -1,5 +1,6 @@
 class Account < ApplicationRecord
-  has_many :invoice_integrations, dependent: :destroy
+  has_many :accounting_integrations, dependent: :destroy
+  has_many :invoices, dependent: :destroy
   has_many :users, dependent: :destroy
 
   before_create :assign_external_account_id

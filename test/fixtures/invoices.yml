@@ -1,0 +1,18 @@
+xero_invoice:
+  account: paid_jar
+  accounting_integration: xero
+  external_id: invoice-123
+  number: INV-001
+  invoice_type: ACCREC
+  status: AUTHORISED
+  currency: USD
+  amount_due: 125.00
+  amount_paid: 0.00
+  total: 125.00
+  issued_on: 2026-07-01
+  due_on: 2026-07-31
+  contact_external_id: contact-123
+  contact_name: Example Customer
+  provider_data: {}
+  raw_data: {}
+  synced_at: <%= Time.current %>

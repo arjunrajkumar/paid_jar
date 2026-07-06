@@ -4,6 +4,7 @@ Rails.application.routes.draw do
   get "/xero/connect", to: "xero_connections#new", as: :new_xero_connection
   get "/xero/callback", to: "xero_connections#create", as: :xero_callback
   resource :xero_connection, only: %i[show destroy]
+  resources :invoices, only: :index
 
   resource :signup, only: %i[new create] do
     collection do

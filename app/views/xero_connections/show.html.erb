@@ -1,9 +1,10 @@
 <h1>Xero connected</h1>
 
-<% if @xero_connection.tenant_name.present? %>
-  <p>Connected organisation: <%= @xero_connection.tenant_name %></p>
+<% if @accounting_integration.external_account_name.present? %>
+  <p>Connected organisation: <%= @accounting_integration.external_account_name %></p>
 <% else %>
   <p>Xero is connected.</p>
 <% end %>
 
+<p><%= link_to "View invoices", invoices_path %></p>
 <p><%= button_to "Disconnect Xero", xero_connection_path, method: :delete %></p>

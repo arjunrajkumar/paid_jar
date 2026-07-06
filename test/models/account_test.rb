@@ -5,8 +5,12 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes accounts(:paid_jar).users, users(:arjun)
   end
 
-  test "has many invoice integrations" do
-    assert_includes accounts(:paid_jar).invoice_integrations, invoice_integrations(:xero)
+  test "has many accounting integrations" do
+    assert_includes accounts(:paid_jar).accounting_integrations, accounting_integrations(:xero)
+  end
+
+  test "has many invoices" do
+    assert_includes accounts(:paid_jar).invoices, invoices(:xero_invoice)
   end
 
   test "creates account with owner and system user" do
