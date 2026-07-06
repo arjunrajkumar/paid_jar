@@ -1,38 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <%= page_title_tag %>
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <%= csrf_meta_tags %>
-    <%= csp_meta_tag %>
+  <%= render "layouts/shared/head" %>
 
-    <%= yield :head %>
+  <body class="public <%= @body_class %>" data-controller="timezone-cookie" data-platform="<%= platform.type %>">
+    <div id="global-container">
+      <header id="header">
+        <a href="#main" data-turbo="false">Skip to main content</a>
 
-    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
-    <%= javascript_importmap_tags %>
-  </head>
+        <nav>
+          <%= link_to "PaidJar", root_path %>
+        </nav>
 
-  <body data-platform="<%= platform.type %>">
-    <header>
-      <%= link_to "PaidJar", root_path %>
-      <%= yield :header %>
-    </header>
+        <%= yield :header %>
+      </header>
 
-    <% if flash.any? %>
-      <div id="flash">
-        <% flash.each do |type, message| %>
-          <p><%= message %></p>
-        <% end %>
-      </div>
-    <% end %>
+      <%= render "layouts/shared/flash" %>
 
-    <main id="main">
-      <%= yield %>
-    </main>
+      <main id="main">
+        <%= yield %>
+      </main>
+    </div>
 
-    <footer>
+    <footer id="footer">
       <%= yield :footer %>
     </footer>
   </body>
