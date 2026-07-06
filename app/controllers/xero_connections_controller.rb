@@ -3,6 +3,7 @@ class XeroConnectionsController < ApplicationController
   before_action :ensure_xero_approved, only: :create
   before_action :ensure_oauth_state, only: :create
   before_action :set_xero_integration, only: %i[show destroy]
+  before_action :ensure_xero_connected, only: :show
 
   def new
     session[:xero_oauth_state] = SecureRandom.urlsafe_base64(32)
@@ -21,9 +22,6 @@ class XeroConnectionsController < ApplicationController
   end
 
   def show
-    return if @accounting_integration
-
-    redirect_to root_path, alert: "Connect Xero first."
   end
 
   def destroy
@@ -49,6 +47,10 @@ class XeroConnectionsController < ApplicationController
 
   def set_xero_integration
     @accounting_integration = Current.account.accounting_integrations.xero.connected.first
+  end
+
+  def ensure_xero_connected
+    redirect_to root_path, alert: "Connect Xero first." unless @accounting_integration
   end
 
   def valid_oauth_state?
