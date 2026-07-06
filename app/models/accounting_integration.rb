@@ -19,8 +19,12 @@ class AccountingIntegration < ApplicationRecord
 
   scope :connected, -> { active.where.not(external_account_id: [ nil, "" ]).where.not(refresh_token: [ nil, "" ]) }
 
-  def provider_adapter
-    provider_class.new(self)
+  def connect!(...)
+    provider_adapter.connect!(...)
+  end
+
+  def sync_invoices!
+    provider_adapter.sync_invoices!
   end
 
   def connected?
@@ -45,6 +49,10 @@ class AccountingIntegration < ApplicationRecord
   end
 
   private
+    def provider_adapter
+      provider_class.new(self)
+    end
+
     def provider_class
       "AccountingIntegrations::#{provider.classify}".constantize
     end

@@ -30,6 +30,18 @@ class AccountingIntegrationTest < ActiveSupport::TestCase
     assert_predicate accounting_integrations(:xero), :connected?
   end
 
+  test "delegates connection and invoice sync to provider adapter" do
+    integration = accounting_integrations(:xero)
+    adapter = mock
+
+    AccountingIntegrations::Xero.expects(:new).twice.with(integration).returns(adapter)
+    adapter.expects(:connect!).with(code: "auth-code")
+    adapter.expects(:sync_invoices!)
+
+    integration.connect!(code: "auth-code")
+    integration.sync_invoices!
+  end
+
   test "does not allow the same provider twice for an account" do
     integration = accounts(:paid_jar).accounting_integrations.build(
       provider: "xero",

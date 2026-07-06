@@ -11,8 +11,8 @@ class XeroConnectionsController < ApplicationController
 
   def create
     @accounting_integration = Current.account.accounting_integrations.find_or_initialize_by(provider: :xero)
-    @accounting_integration.provider_adapter.connect!(code: params.require(:code))
-    @accounting_integration.provider_adapter.sync_invoices!
+    @accounting_integration.connect!(code: params.require(:code))
+    @accounting_integration.sync_invoices!
     session.delete(:xero_oauth_state)
 
     redirect_to invoices_path, notice: "Xero connected."
