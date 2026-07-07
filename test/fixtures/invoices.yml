@@ -1,6 +1,6 @@
 xero_invoice:
   account: paid_jar
-  accounting_integration: xero
+  invoice_source: xero
   external_id: invoice-123
   number: INV-001
   invoice_type: ACCREC

@@ -2,7 +2,7 @@ require "json"
 require "net/http"
 require "uri"
 
-module AccountingIntegrations
+module InvoiceSources
   class Xero
     class OauthClient
       class Error < StandardError; end

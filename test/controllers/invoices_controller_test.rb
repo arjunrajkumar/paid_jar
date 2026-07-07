@@ -17,8 +17,8 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
 
   test "index shows synced invoices" do
     account = sign_up_and_complete
-    integration = create_xero_integration(account)
-    integration.invoices.create!(
+    source = create_xero_source(account)
+    source.invoices.create!(
       account: account,
       external_id: "invoice-789",
       number: "INV-789",
@@ -42,12 +42,12 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
 
   test "index paginates synced invoices" do
     account = sign_up_and_complete(email_address: "owner-invoices-pages@example.com")
-    integration = create_xero_integration(account)
+    source = create_xero_source(account)
 
     16.times do |index|
       issued_on = Date.new(2026, 7, 1) + index
 
-      integration.invoices.create!(
+      source.invoices.create!(
         account: account,
         external_id: "invoice-#{index}",
         number: "INV-#{index.to_s.rjust(3, "0")}",
@@ -74,8 +74,8 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
-    def create_xero_integration(account)
-      account.accounting_integrations.create!(
+    def create_xero_source(account)
+      account.invoice_sources.create!(
         provider: :xero,
         status: :active,
         external_account_id: "tenant-123",

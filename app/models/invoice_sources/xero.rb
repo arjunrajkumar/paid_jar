@@ -1,9 +1,9 @@
-module AccountingIntegrations
+module InvoiceSources
   class Xero
-    attr_reader :integration
+    attr_reader :source
 
-    def initialize(integration)
-      @integration = integration
+    def initialize(source)
+      @source = source
     end
 
     def connect!(code:)
@@ -13,7 +13,7 @@ module AccountingIntegrations
       primary_connection = connections.first || {}
       tenant_id = primary_connection.fetch("tenantId")
 
-      integration.update!(
+      source.update!(
         provider: :xero,
         status: :active,
         external_account_id: tenant_id,
@@ -32,22 +32,22 @@ module AccountingIntegrations
         last_error: nil
       )
 
-      integration
+      source
     end
 
     def sync_invoices!
       ensure_access_token!
-      InvoiceSync.new(integration, client: oauth_client).sync!
+      InvoiceSync.new(source, client: oauth_client).sync!
     end
 
     def refresh_access_token!
-      token_set = oauth_client.refresh_token(refresh_token: integration.refresh_token)
+      token_set = oauth_client.refresh_token(refresh_token: source.refresh_token)
 
-      integration.update!(
+      source.update!(
         access_token: token_set.fetch("access_token"),
         refresh_token: token_set.fetch("refresh_token"),
         expires_at: Time.current + token_set.fetch("expires_in").to_i.seconds,
-        scopes: token_set["scope"].present? ? token_set["scope"].to_s.split : integration.scopes,
+        scopes: token_set["scope"].present? ? token_set["scope"].to_s.split : source.scopes,
         raw_token_data: token_set,
         status: :active,
         last_error: nil
@@ -56,7 +56,7 @@ module AccountingIntegrations
 
     private
       def ensure_access_token!
-        refresh_access_token! if integration.expired?
+        refresh_access_token! if source.expired?
       end
 
       def oauth_client

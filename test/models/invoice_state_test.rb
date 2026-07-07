@@ -28,7 +28,7 @@ class InvoiceStateTest < ActiveSupport::TestCase
   end
 
   test "latest invoice event must belong to the same invoice" do
-    invoice = accounting_integrations(:xero).invoices.create!(
+    invoice = invoice_sources(:xero).invoices.create!(
       account: accounts(:paid_jar),
       external_id: "invoice-with-mismatched-state"
     )

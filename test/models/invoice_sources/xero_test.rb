@@ -1,39 +1,39 @@
 require "test_helper"
 
-module AccountingIntegrations
+module InvoiceSources
   class XeroTest < ActiveSupport::TestCase
     test "connect exchanges the code and stores the active tenant" do
       account = Account.create!(name: "New Xero Account")
-      integration = account.accounting_integrations.build(provider: :xero)
+      source = account.invoice_sources.build(provider: :xero)
       fake_client = FakeXeroClient.new
 
-      AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
 
-      integration = AccountingIntegrations::Xero.new(integration).connect!(code: "auth-code")
+      source = InvoiceSources::Xero.new(source).connect!(code: "auth-code")
 
-      assert_predicate integration, :persisted?
-      assert_predicate integration, :active?
-      assert_equal "access-token", integration.access_token
-      assert_equal "refresh-token", integration.refresh_token
-      assert_equal "tenant-123", integration.external_account_id
-      assert_equal "PaidJar Demo", integration.external_account_name
-      assert_equal "person@example.com", integration.provider_data["email"]
+      assert_predicate source, :persisted?
+      assert_predicate source, :active?
+      assert_equal "access-token", source.access_token
+      assert_equal "refresh-token", source.refresh_token
+      assert_equal "tenant-123", source.external_account_id
+      assert_equal "PaidJar Demo", source.external_account_name
+      assert_equal "person@example.com", source.provider_data["email"]
       assert fake_client.exchange_code_called
       assert fake_client.connections_called
       assert fake_client.userinfo_called
     end
 
     test "sync_invoices stores Xero invoices" do
-      integration = accounting_integrations(:xero)
+      source = invoice_sources(:xero)
       fake_client = FakeXeroClient.new
 
-      AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
 
-      assert_difference -> { integration.invoices.count }, 1 do
-        AccountingIntegrations::Xero.new(integration).sync_invoices!
+      assert_difference -> { source.invoices.count }, 1 do
+        InvoiceSources::Xero.new(source).sync_invoices!
       end
 
-      invoice = integration.invoices.find_by!(external_id: "invoice-456")
+      invoice = source.invoices.find_by!(external_id: "invoice-456")
       assert_equal "INV-456", invoice.number
       assert_equal "Example Customer", invoice.contact_name
       assert_equal "AUTHORISED", invoice.status
@@ -42,16 +42,16 @@ module AccountingIntegrations
     end
 
     test "refreshes an expired access token before syncing invoices" do
-      integration = accounting_integrations(:xero)
-      integration.update!(access_token: "old-token", refresh_token: "old-refresh-token", expires_at: 1.minute.ago)
+      source = invoice_sources(:xero)
+      source.update!(access_token: "old-token", refresh_token: "old-refresh-token", expires_at: 1.minute.ago)
       fake_client = FakeXeroClient.new
 
-      AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
 
-      AccountingIntegrations::Xero.new(integration).sync_invoices!
+      InvoiceSources::Xero.new(source).sync_invoices!
 
-      assert_equal "new-access-token", integration.reload.access_token
-      assert_equal "new-refresh-token", integration.refresh_token
+      assert_equal "new-access-token", source.reload.access_token
+      assert_equal "new-refresh-token", source.refresh_token
       assert fake_client.refresh_token_called
     end
 

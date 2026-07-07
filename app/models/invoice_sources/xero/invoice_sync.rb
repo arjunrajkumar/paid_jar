@@ -1,33 +1,33 @@
-module AccountingIntegrations
+module InvoiceSources
   class Xero
     class InvoiceSync
-      def initialize(integration, client: OauthClient.new)
-        @integration = integration
+      def initialize(source, client: OauthClient.new)
+        @source = source
         @client = client
       end
 
       def sync!
         payload = client.invoices(
-          access_token: integration.access_token,
-          tenant_id: integration.external_account_id
+          access_token: source.access_token,
+          tenant_id: source.external_account_id
         )
 
         Array(payload.fetch("Invoices", [])).each do |invoice_payload|
           sync_invoice!(invoice_payload)
         end
 
-        integration.update!(status: :active, last_synced_at: Time.current, last_error: nil)
+        source.update!(status: :active, last_synced_at: Time.current, last_error: nil)
       rescue OauthClient::Error => error
-        integration.update!(status: :error, last_error: error.message)
+        source.update!(status: :error, last_error: error.message)
         raise
       end
 
       private
-        attr_reader :integration, :client
+        attr_reader :source, :client
 
         def sync_invoice!(payload)
-          invoice = integration.invoices.find_or_initialize_by(
-            account: integration.account,
+          invoice = source.invoices.find_or_initialize_by(
+            account: source.account,
             external_id: payload.fetch("InvoiceID")
           )
 

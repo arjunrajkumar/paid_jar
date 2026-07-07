@@ -1,6 +1,6 @@
 require "test_helper"
 
-module AccountingIntegrations
+module InvoiceSources
   class Xero
     class ConfigurationTest < ActiveSupport::TestCase
       test "default scopes request identity and read-only accounting access" do

@@ -1,4 +1,4 @@
-module AccountingIntegrations
+module InvoiceSources
   class Xero
     class Configuration
       DEFAULT_SCOPES = %w[

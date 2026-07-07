@@ -13,7 +13,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     with_xero_configured do
       fake_client = FakeXeroClient.new
 
-      AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
 
       get new_xero_connection_url
 
@@ -24,7 +24,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
 
   test "connect redirects home when credentials are missing" do
     sign_up_and_complete
-    AccountingIntegrations::Xero::Configuration.stubs(:new).returns(FakeXeroConfiguration.new(false))
+    InvoiceSources::Xero::Configuration.stubs(:new).returns(FakeXeroConfiguration.new(false))
 
     get new_xero_connection_url
 
@@ -37,22 +37,22 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     with_xero_configured do
       fake_client = FakeXeroClient.new
 
-      AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
 
       get new_xero_connection_url
       get xero_callback_url, params: { code: "auth-code", state: fake_client.state }
     end
 
-    integration = account.accounting_integrations.xero.first
+    source = account.invoice_sources.xero.first
 
     assert_redirected_to invoices_url
-    assert_predicate integration, :active?
-    assert_equal "access-token", integration.access_token
-    assert_equal "refresh-token", integration.refresh_token
-    assert_equal "tenant-123", integration.external_account_id
-    assert_equal "PaidJar Demo", integration.external_account_name
-    assert_equal "person@example.com", integration.provider_data["email"]
-    assert_equal [ "INV-456" ], account.invoices.where(accounting_integration: integration).pluck(:number)
+    assert_predicate source, :active?
+    assert_equal "access-token", source.access_token
+    assert_equal "refresh-token", source.refresh_token
+    assert_equal "tenant-123", source.external_account_id
+    assert_equal "PaidJar Demo", source.external_account_name
+    assert_equal "person@example.com", source.provider_data["email"]
+    assert_equal [ "INV-456" ], account.invoices.where(invoice_source: source).pluck(:number)
   end
 
   test "callback rejects invalid state" do
@@ -61,14 +61,14 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     with_xero_configured do
       fake_client = FakeXeroClient.new
 
-      AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
 
       get new_xero_connection_url
       get xero_callback_url, params: { code: "auth-code", state: "wrong-state" }
     end
 
     assert_redirected_to root_url
-    assert_empty account.accounting_integrations.xero
+    assert_empty account.invoice_sources.xero
   end
 
   test "callback handles denied access" do
@@ -79,28 +79,28 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     end
 
     assert_redirected_to root_url
-    assert_empty account.accounting_integrations.xero
+    assert_empty account.invoice_sources.xero
   end
 
   test "callback handles xero client errors" do
     account = sign_up_and_complete
 
     with_xero_configured do
-      fake_client = FakeXeroClient.new(error: AccountingIntegrations::Xero::OauthClient::Error.new("invalid grant"))
+      fake_client = FakeXeroClient.new(error: InvoiceSources::Xero::OauthClient::Error.new("invalid grant"))
 
-      AccountingIntegrations::Xero::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
 
       get new_xero_connection_url
       get xero_callback_url, params: { code: "auth-code", state: fake_client.state }
     end
 
     assert_redirected_to root_url
-    assert_empty account.accounting_integrations.xero
+    assert_empty account.invoice_sources.xero
   end
 
-  test "destroy disconnects current account xero integration" do
+  test "destroy disconnects current account xero source" do
     account = sign_up_and_complete
-    integration = account.accounting_integrations.create!(
+    source = account.invoice_sources.create!(
       provider: :xero,
       status: :active,
       external_account_id: "tenant-123",
@@ -112,9 +112,9 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     delete xero_connection_url
 
     assert_redirected_to root_url
-    assert_predicate integration.reload, :disconnected?
-    assert_nil integration.access_token
-    assert_nil integration.refresh_token
+    assert_predicate source.reload, :disconnected?
+    assert_nil source.access_token
+    assert_nil source.refresh_token
   end
 
   test "destroy redirects when xero is not connected" do
@@ -145,7 +145,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     end
 
     def with_xero_configured
-      AccountingIntegrations::Xero::Configuration.any_instance.stubs(:configured?).returns(true)
+      InvoiceSources::Xero::Configuration.any_instance.stubs(:configured?).returns(true)
       yield
     end
 

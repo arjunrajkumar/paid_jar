@@ -1,5 +1,5 @@
-class AccountingIntegration < ApplicationRecord
-  belongs_to :account, inverse_of: :accounting_integrations
+class InvoiceSource < ApplicationRecord
+  belongs_to :account, inverse_of: :invoice_sources
   has_many :invoices, dependent: :destroy
 
   enum :provider, {
@@ -54,6 +54,6 @@ class AccountingIntegration < ApplicationRecord
     end
 
     def provider_class
-      "AccountingIntegrations::#{provider.classify}".constantize
+      "InvoiceSources::#{provider.classify}".constantize
     end
 end

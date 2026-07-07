@@ -1,6 +1,6 @@
 require "test_helper"
 
-module AccountingIntegrations
+module InvoiceSources
   class Xero
     class OauthClientTest < ActiveSupport::TestCase
       test "authorization_url includes Xero OAuth parameters" do

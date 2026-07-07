@@ -1,7 +1,7 @@
 <h1>Xero connected</h1>
 
-<% if @accounting_integration.external_account_name.present? %>
-  <p>Connected organisation: <%= @accounting_integration.external_account_name %></p>
+<% if @invoice_source.external_account_name.present? %>
+  <p>Connected organisation: <%= @invoice_source.external_account_name %></p>
 <% else %>
   <p>Xero is connected.</p>
 <% end %>

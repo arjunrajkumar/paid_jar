@@ -1,6 +1,6 @@
 <h1>Invoices</h1>
 
-<p>Connected to <%= @xero_integration.external_account_name.presence || "Xero" %>.</p>
+<p>Connected to <%= @xero_source.external_account_name.presence || "Xero" %>.</p>
 
 <% if @page.used? %>
   <table>
