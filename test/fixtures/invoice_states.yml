@@ -1,0 +1,10 @@
+xero_invoice_state:
+  invoice: xero_invoice
+  latest_invoice_event: xero_needs_invoice_copy
+  customer_situation: needs_invoice_copy
+  customer_situation_at: 2026-07-03 10:00:00
+  latest_response: invoice_resent
+  latest_response_at: 2026-07-03 10:15:00
+  highlight: Can you resend the invoice?
+  next_step: Wait for payment
+  next_step_at: 2026-07-10 09:00:00

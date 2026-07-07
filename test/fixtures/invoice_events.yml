@@ -1,0 +1,11 @@
+xero_needs_invoice_copy:
+  invoice: xero_invoice
+  situation: needs_invoice_copy
+  asked_at: 2026-07-03 10:00:00
+  summary: Customer asked for invoice copy
+  highlight: Can you resend the invoice?
+  response: invoice_resent
+  responded_at: 2026-07-03 10:15:00
+  source: email
+  source_message_id: gmail-message-123
+  metadata: {}
