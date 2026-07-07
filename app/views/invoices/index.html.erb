@@ -2,6 +2,10 @@
 
 <p>Connected to <%= @invoice_sources.map { |source| source.external_account_name.presence || source.provider.titleize }.to_sentence %>.</p>
 
+<% @invoice_sources.each do |invoice_source| %>
+  <p><%= button_to "Refresh #{invoice_source.provider.titleize} invoices", invoice_source_refresh_path(invoice_source) %></p>
+<% end %>
+
 <% if @page.used? %>
   <table>
     <thead>
@@ -14,6 +18,7 @@
         <th>Total</th>
         <th>Due amount</th>
         <th>Platform</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -27,6 +32,7 @@
           <td><%= number_to_currency invoice.total, unit: "#{invoice.currency} " %></td>
           <td><%= number_to_currency invoice.amount_due, unit: "#{invoice.currency} " %></td>
           <td><%= invoice.invoice_source.provider.titleize %></td>
+          <td><%= button_to "Refresh", invoice_refresh_path(invoice) %></td>
         </tr>
       <% end %>
     </tbody>

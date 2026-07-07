@@ -12,7 +12,11 @@ Rails.application.routes.draw do
     resource :stripe_connection, controller: :stripe_connections, only: %i[show destroy]
   end
 
-  resources :invoice_sources, only: :index
+  resources :invoice_sources, only: :index do
+    scope module: :invoice_sources do
+      resource :refresh, only: :create
+    end
+  end
 
   namespace :invoice_sources do
     namespace :webhooks do
@@ -21,7 +25,11 @@ Rails.application.routes.draw do
     end
   end
 
-  resources :invoices, only: :index
+  resources :invoices, only: :index do
+    scope module: :invoices do
+      resource :refresh, only: :create
+    end
+  end
 
   resource :signup, only: %i[new create] do
     collection do

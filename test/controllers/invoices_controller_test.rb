@@ -18,7 +18,7 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
   test "index shows synced invoices" do
     account = sign_up_and_complete
     source = create_xero_source(account)
-    source.invoices.create!(
+    invoice = source.invoices.create!(
       account: account,
       external_id: "invoice-789",
       number: "INV-789",
@@ -38,6 +38,8 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     assert_select "td", "INV-789"
     assert_select "td", "Acme Ltd"
     assert_select "td", "AUTHORISED"
+    assert_select "form[action=?]", invoice_source_refresh_path(source)
+    assert_select "form[action=?]", invoice_refresh_path(invoice)
   end
 
   test "index shows synced Stripe invoices without Xero" do
