@@ -1,7 +1,7 @@
 require "test_helper"
 
 class StripeConnectionsControllerTest < ActionDispatch::IntegrationTest
-  test "connect requires a PaidJar session" do
+  test "connect requires a PaymentReminder session" do
     get new_stripe_connection_url
 
     assert_redirected_to new_session_url(script_name: nil)

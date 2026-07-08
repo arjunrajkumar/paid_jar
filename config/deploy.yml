@@ -19,7 +19,7 @@ servers:
 # Note: If using Cloudflare, set encryption mode in SSL/TLS setting to "Full" to enable CF-to-app encryption.
 proxy:
   ssl: false
-  host: app.paidjar.com
+  host: app.paymentreminderemails.com
 
 # Credentials for your image host.
 registry:
@@ -45,7 +45,7 @@ env:
 
     DB_HOST: 178.156.170.78
     RAILS_LOG_LEVEL: info
-    HOST: https://app.paidjar.com
+    HOST: https://app.paymentreminderemails.com
 
     # Log everything from Rails
     # RAILS_LOG_LEVEL: debug

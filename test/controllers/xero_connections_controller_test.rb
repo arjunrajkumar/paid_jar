@@ -1,7 +1,7 @@
 require "test_helper"
 
 class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
-  test "connect requires a PaidJar session" do
+  test "connect requires a PaymentReminder session" do
     get new_xero_connection_url
 
     assert_redirected_to new_session_url(script_name: nil)
@@ -50,7 +50,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "access-token", source.access_token
     assert_equal "refresh-token", source.refresh_token
     assert_equal "tenant-123", source.external_account_id
-    assert_equal "PaidJar Demo", source.external_account_name
+    assert_equal "PaymentReminder Demo", source.external_account_name
     assert_equal "person@example.com", source.provider_data["email"]
     assert_equal [ "INV-456" ], account.invoices.where(invoice_source: source).pluck(:number)
   end
@@ -187,7 +187,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
         [
           {
             "tenantId" => "tenant-123",
-            "tenantName" => "PaidJar Demo"
+            "tenantName" => "PaymentReminder Demo"
           }
         ]
       end

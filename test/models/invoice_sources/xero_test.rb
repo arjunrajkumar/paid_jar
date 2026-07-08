@@ -16,7 +16,7 @@ module InvoiceSources
       assert_equal "access-token", source.access_token
       assert_equal "refresh-token", source.refresh_token
       assert_equal "tenant-123", source.external_account_id
-      assert_equal "PaidJar Demo", source.external_account_name
+      assert_equal "PaymentReminder Demo", source.external_account_name
       assert_equal "person@example.com", source.provider_data["email"]
       assert fake_client.exchange_code_called
       assert fake_client.connections_called
@@ -59,7 +59,7 @@ module InvoiceSources
       attr_accessor :exchange_code_called, :connections_called, :userinfo_called,
         :invoices_called, :refresh_token_called
 
-      def initialize(tenant_id: "tenant-123", tenant_name: "PaidJar Demo")
+      def initialize(tenant_id: "tenant-123", tenant_name: "PaymentReminder Demo")
         @tenant_id = tenant_id
         @tenant_name = tenant_name
       end

@@ -4,13 +4,13 @@ class LandingControllerTest < ActionDispatch::IntegrationTest
   test "root redirects signed out users to the marketing site" do
     get root_url
 
-    assert_redirected_to "https://www.paidjar.com"
+    assert_redirected_to "https://www.paymentreminderemails.com"
   end
 
   test "home redirects signed out users to the marketing site" do
     get home_url
 
-    assert_redirected_to "https://www.paidjar.com"
+    assert_redirected_to "https://www.paymentreminderemails.com"
   end
 
   test "root redirects signed in accounts to invoices" do

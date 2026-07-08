@@ -1,7 +1,7 @@
 require "test_helper"
 
 class InvoicesControllerTest < ActionDispatch::IntegrationTest
-  test "index requires a PaidJar session" do
+  test "index requires a PaymentReminder session" do
     get invoices_url
 
     assert_redirected_to new_session_url(script_name: nil)
@@ -105,7 +105,7 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
         provider: :xero,
         status: :active,
         external_account_id: "tenant-123",
-        external_account_name: "PaidJar Xero",
+        external_account_name: "PaymentReminder Xero",
         access_token: "access-token",
         refresh_token: "refresh-token",
         expires_at: 30.minutes.from_now
@@ -117,7 +117,7 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
         provider: :stripe,
         status: :active,
         external_account_id: "acct_123",
-        external_account_name: "PaidJar Stripe"
+        external_account_name: "PaymentReminder Stripe"
       )
     end
 

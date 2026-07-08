@@ -1,10 +1,10 @@
 # Agent Guidelines
 
-Read this file before editing PaidJar.
+Read this file before editing PaymentReminder.
 
 ## Product Context
 
-- PaidJar is an open-source, self-hostable Rails app for accounts receivable.
+- PaymentReminder is an open-source, self-hostable Rails app for accounts receivable.
 - The product promise is an AI accounts-receivable inbox that helps freelancers and small teams get paid faster.
 - Keep public-facing copy clear and product-focused. Do not expose private implementation details unless the user explicitly asks for technical docs.
 - This app is AGPL-3.0 licensed. Keep license-related language consistent with `LICENSE`, `README.md`, and `CONTRIBUTING.md`.

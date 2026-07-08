@@ -1,4 +1,4 @@
-# PaidJar
+# PaymentReminder
 
 AI accounts-receivable inbox that gets freelancers and small teams paid faster — run by you or your agent.
 
@@ -29,7 +29,7 @@ bin/rails server
 If you use a local coding agent like Codex or Claude Code, you can clone this repo, open the folder in the agent, and paste this:
 
 ```text
-Please set up PaidJar locally.
+Please set up PaymentReminder locally.
 
 1. Read README.md and AGENTS.md first.
 2. Make sure Ruby 3.4.5 is active. If the system Ruby is used by mistake, switch to the project Ruby with mise, asdf, rbenv, or the local tool available on this machine.
@@ -112,7 +112,7 @@ stripe:
   webhook_signing_secret: whsec_your-webhook-secret
 ```
 
-PaidJar uses the connected Stripe account id returned by OAuth to read invoices through the Stripe API.
+PaymentReminder uses the connected Stripe account id returned by OAuth to read invoices through the Stripe API.
 
 For local webhook testing with the Stripe CLI:
 
@@ -124,4 +124,4 @@ After credentials are configured, sign in and open `/invoice_sources` to connect
 
 ## License
 
-PaidJar is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+PaymentReminder is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).

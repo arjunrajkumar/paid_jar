@@ -8,8 +8,8 @@ class MagicLinkMailerTest < ActionMailer::TestCase
     mail = MagicLinkMailer.sign_in_instructions(magic_link)
 
     assert_equal [ "person@example.com" ], mail.to
-    assert_equal "Your PaidJar code is G79NYX", mail.subject
-    assert_match "Welcome to PaidJar!", mail.text_part.body.to_s
+    assert_equal "Your PaymentReminder code is G79NYX", mail.subject
+    assert_match "Welcome to PaymentReminder!", mail.text_part.body.to_s
     assert_match "G79NYX", mail.text_part.body.to_s
   end
 end

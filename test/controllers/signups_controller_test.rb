@@ -52,7 +52,7 @@ class SignupsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to account_settings_url(script_name: user.account.slug)
     assert_equal "Owner Person", user.name
     assert_equal "owner@example.com", user.identity.email_address
-    assert_equal "Owner's PaidJar", user.account.name
+    assert_equal "Owner's PaymentReminder", user.account.name
     assert_equal magic_link.identity, user.identity
     assert_predicate user, :owner?
     assert_predicate user, :verified?

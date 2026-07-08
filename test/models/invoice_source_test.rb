@@ -66,7 +66,7 @@ class InvoiceSourceTest < ActiveSupport::TestCase
       provider: :stripe,
       status: :active,
       external_account_id: "acct_123",
-      external_account_name: "PaidJar Stripe"
+      external_account_name: "PaymentReminder Stripe"
     )
 
     available_sources = InvoiceSource.available_sources_for(accounts(:paid_jar))

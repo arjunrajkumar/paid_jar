@@ -8,7 +8,7 @@ class Invoices::RefreshesControllerTest < ActionDispatch::IntegrationTest
     clear_performed_jobs
   end
 
-  test "create requires a PaidJar session" do
+  test "create requires a PaymentReminder session" do
     post invoice_refresh_url(invoices(:xero_invoice))
 
     assert_redirected_to new_session_url(script_name: nil)
@@ -66,7 +66,7 @@ class Invoices::RefreshesControllerTest < ActionDispatch::IntegrationTest
         provider: :xero,
         status: :active,
         external_account_id: "tenant-refresh",
-        external_account_name: "PaidJar Xero",
+        external_account_name: "PaymentReminder Xero",
         access_token: "access-token",
         refresh_token: "refresh-token",
         expires_at: 30.minutes.from_now

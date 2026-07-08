@@ -5,7 +5,7 @@ class LandingController < ApplicationController
     if Current.account
       redirect_to invoices_path
     else
-      redirect_to "https://www.paidjar.com", allow_other_host: true
+      redirect_to "https://www.paymentreminderemails.com", allow_other_host: true
     end
   end
 end

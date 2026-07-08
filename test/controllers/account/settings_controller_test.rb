@@ -16,10 +16,10 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
   test "owner updates account name" do
     account = sign_up_and_complete
 
-    patch account_settings_url(script_name: account.slug), params: { account: { name: "Updated PaidJar" } }
+    patch account_settings_url(script_name: account.slug), params: { account: { name: "Updated PaymentReminder" } }
 
     assert_redirected_to account_settings_url(script_name: account.slug)
-    assert_equal "Updated PaidJar", account.reload.name
+    assert_equal "Updated PaymentReminder", account.reload.name
   end
 
   test "show renders account and users as json" do

@@ -3,7 +3,7 @@ xero:
   provider: xero
   status: active
   external_account_id: xero-tenant-123
-  external_account_name: PaidJar Xero
+  external_account_name: PaymentReminder Xero
   access_token: access-token
   refresh_token: refresh-token
   expires_at: <%= 30.minutes.from_now %>

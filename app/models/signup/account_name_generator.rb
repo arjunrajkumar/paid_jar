@@ -1,5 +1,5 @@
 class Signup::AccountNameGenerator
-  SUFFIX = "PaidJar".freeze
+  SUFFIX = "PaymentReminder".freeze
 
   attr_reader :identity, :name
 
