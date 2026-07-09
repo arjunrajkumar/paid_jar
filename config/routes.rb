@@ -1,6 +1,6 @@
 Rails.application.routes.draw do
   root "landing#index"
-  get "/home", to: "landing#index", as: :home
+  get "/home", to: "receivables#index", as: :home
 
   scope module: :invoice_sources do
     get "xero/connect", to: "xero_connections#new", as: :new_xero_connection
@@ -30,6 +30,8 @@ Rails.application.routes.draw do
       resource :refresh, only: :create
     end
   end
+
+  resources :receivables, only: :index
 
   resource :signup, only: %i[new create] do
     collection do

@@ -22,7 +22,7 @@ class InvoiceSources::RefreshesControllerTest < ActionDispatch::IntegrationTest
       post invoice_source_refresh_url(source)
     end
 
-    assert_redirected_to invoices_url
+    assert_redirected_to home_url
     assert_equal "PaymentReminder Xero invoice refresh started.", flash[:notice]
   end
 

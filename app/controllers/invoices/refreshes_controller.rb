@@ -4,7 +4,7 @@ module Invoices
 
     def create
       Invoices::RefreshJob.perform_later(@invoice)
-      redirect_to invoices_path, notice: "#{invoice_name} refresh started."
+      redirect_to home_path, notice: "#{invoice_name} refresh started."
     end
 
     private

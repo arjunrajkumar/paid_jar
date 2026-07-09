@@ -31,7 +31,7 @@ class InvoiceSourcesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     assert_select "p", "Connected to PaymentReminder Stripe."
-    assert_select "a[href=?]", invoices_path, "View invoices"
+    assert_select "a[href=?]", home_path, "View receivables"
     assert_select "form[action=?]", invoice_source_refresh_path(account.invoice_sources.stripe.first)
     assert_select "a[href=?]", new_stripe_connection_path, count: 0
   end

@@ -23,7 +23,7 @@ class Invoices::RefreshesControllerTest < ActionDispatch::IntegrationTest
       post invoice_refresh_url(invoice)
     end
 
-    assert_redirected_to invoices_url
+    assert_redirected_to home_url
     assert_equal "Invoice INV-REF refresh started.", flash[:notice]
   end
 

@@ -2,28 +2,18 @@
 <html lang="en">
   <%= render "layouts/shared/head" %>
 
-  <body class="<%= @body_class %>" data-controller="timezone-cookie" data-platform="<%= platform.type %>">
+  <body class="<%= body_classes %>" data-controller="timezone-cookie" data-platform="<%= platform.type %>">
     <div id="global-container">
-      <header id="header">
-        <a href="#main" data-turbo="false">Skip to main content</a>
+      <nav id="nav" class="app-nav" aria-label="Application navigation" data-controller="toggle-class" data-toggle-class-toggle-class="open">
+        <%= yield :nav %>
+      </nav>
 
-        <nav>
-          <%= link_to "PaymentReminder", root_path %>
-        </nav>
-
+      <main id="main" class="app-main">
+        <%= render "layouts/shared/flash" %>
+        <%= render "layouts/shared/time_zone" if Current.user %>
         <%= yield :header %>
-      </header>
-
-      <%= render "layouts/shared/flash" %>
-      <%= render "layouts/shared/time_zone" if Current.user %>
-
-      <main id="main">
         <%= yield %>
       </main>
     </div>
-
-    <footer id="footer">
-      <%= yield :footer %>
-    </footer>
   </body>
 </html>
