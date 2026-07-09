@@ -2,27 +2,13 @@
 <html lang="en">
   <%= render "layouts/shared/head" %>
 
-  <body class="public <%= @body_class %>" data-controller="timezone-cookie" data-platform="<%= platform.type %>">
+  <body class="<%= [ "public", body_classes ].reject(&:blank?).join(" ") %>" data-controller="timezone-cookie" data-platform="<%= platform.type %>">
     <div id="global-container">
-      <header id="header">
-        <a href="#main" data-turbo="false">Skip to main content</a>
-
-        <nav>
-          <%= link_to "PaymentReminder", root_path %>
-        </nav>
-
-        <%= yield :header %>
-      </header>
-
       <%= render "layouts/shared/flash" %>
 
-      <main id="main">
+      <main id="main" class="public-main">
         <%= yield %>
       </main>
     </div>
-
-    <footer id="footer">
-      <%= yield :footer %>
-    </footer>
   </body>
 </html>

@@ -1,19 +1,31 @@
-<h1>Sign up</h1>
+<% @page_title = "Sign up" %>
 
-<%= form_with model: @signup, url: signup_path, scope: "signup", data: { turbo: false } do |form| %>
-  <p>
-    <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "Enter your email address..." %>
-  </p>
+<div class="auth-shell">
+  <div class="auth-panel">
+    <div class="auth-logo" aria-hidden="true">
+      <%= render "layouts/shared/logo_mark", suffix: "signup", width: 48, height: 56 %>
+    </div>
 
-  <p>Enter your email to create an account.</p>
+    <div class="auth-card">
+      <h1 class="auth-title">Sign up</h1>
+      <p class="auth-subtitle">Enter your email to create an account.</p>
 
-  <button type="submit">
-    <span>Let's go</span>
-    <span>-></span>
-  </button>
-<% end %>
+      <%= form_with model: @signup, url: signup_path, scope: "signup", class: "auth-form", data: { turbo: false } do |form| %>
+        <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "you@company.com", class: "auth-input" %>
 
-<p>
-  Already have an account?
-  <%= link_to "Sign in", new_session_path %>.
-</p>
+        <button type="submit" class="auth-button">
+          <span>Let's go</span>
+          <svg class="auth-button__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14"></path>
+            <path d="m12 5 7 7-7 7"></path>
+          </svg>
+        </button>
+      <% end %>
+    </div>
+
+    <p class="auth-alt">
+      Already have an account?
+      <%= link_to "Sign in", new_session_path %>.
+    </p>
+  </div>
+</div>

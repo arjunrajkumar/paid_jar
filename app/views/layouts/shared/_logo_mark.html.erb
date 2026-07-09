@@ -1,4 +1,7 @@
-<svg width="34" height="40" viewBox="0 0 34 40" fill="none" aria-hidden="true">
+<% width = local_assigns.fetch(:width, 34) %>
+<% height = local_assigns.fetch(:height, 40) %>
+
+<svg width="<%= width %>" height="<%= height %>" viewBox="0 0 34 40" fill="none" aria-hidden="true">
   <defs>
     <linearGradient id="app-logo-back-<%= suffix %>" x1="5" y1="3" x2="27" y2="35" gradientUnits="userSpaceOnUse">
       <stop stop-color="#5f78d8"></stop>
