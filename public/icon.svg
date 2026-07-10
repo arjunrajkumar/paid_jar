@@ -1,3 +1,16 @@
-<svg width="512" height="512" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="256" cy="256" r="256" fill="red"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40" fill="none">
+  <defs>
+    <linearGradient id="logo-back" x1="5" y1="3" x2="27" y2="35" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5f78d8"/>
+      <stop offset="1" stop-color="#3652bd"/>
+    </linearGradient>
+    <linearGradient id="logo-fold" x1="17" y1="10" x2="30" y2="29" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#9baded" stop-opacity="0.46"/>
+      <stop offset="1" stop-color="#b9c5f3" stop-opacity="0.78"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(3)">
+    <path d="M13.4 2.2h10.1c5.3 0 8.8 3.8 8.8 9.1v2.2c0 7.4-5.5 12.5-13.2 12.5h-2.8c-3.7 0-6 2-7.3 5.6l-.8 2.3c-.9 2.6-3.1 4.5-4.8 4.1-1-.2-1.6-1.1-1.6-2.5V12.9C1.8 6.8 6.7 2.2 13.4 2.2Z" fill="url(#logo-back)"/>
+    <path d="M32 10.6v2.9c0 7.3-5.4 12.5-12.9 12.5h-2.8c-3.7 0-6 2-7.3 5.6 1.4-8.2 5.4-13.3 12-15.5 4.7-1.5 8-3.1 11-5.5Z" fill="url(#logo-fold)"/>
+  </g>
 </svg>

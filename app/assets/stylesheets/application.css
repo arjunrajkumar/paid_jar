@@ -17,28 +17,20 @@
 
   --color-canvas: #fbfbf3;
   --color-surface: #ffffff;
-  --color-surface-muted: var(--color-canvas);
-  --color-nav: #f1f1f3;
   --color-text: #0f172a;
   --color-text-soft: #1e293b;
   --color-text-muted: #64748b;
-  --color-text-subtle: #475569;
-  --color-border: #cfd3d5;
-  --color-border-strong: #bfc5c9;
   --color-card-border: #ececeb;
   --color-divider: #f1f5f9;
   --color-field-border: #e2e8f0;
   --color-field-background: #f8fafc;
-  --color-row-border: #cfd3d5;
-  --color-table-head: #f6f7f7;
-  --color-accent: oklch(0.55 0.235 264);
-  --color-accent-soft: oklch(0.92 0.025 264);
+  --color-accent: #3652bd;
+  --color-accent-dark: #2c439e;
 
   --radius-card: 1rem;
   --radius-control: 0.5rem;
   --space-page: 1.5rem;
   --space-page-wide: 2rem;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 body {
@@ -47,6 +39,24 @@ body {
   font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+body.app-workspace {
+  --font-heading: var(--font-sans);
+  --color-canvas: #fffff7;
+  --color-surface: #fffff7;
+  --color-nav: #f1f3f2;
+  --color-text: #111827;
+  --color-text-soft: #111827;
+  --color-text-muted: #667085;
+  --color-text-subtle: #475467;
+  --color-border-strong: #c5cbc8;
+  --color-card-border: #c9cecc;
+  --color-row-border: #c9cecc;
+  --color-table-head: #f4f6f4;
+  --color-accent-soft: #e7e9ef;
+  --radius-card: 0.75rem;
+  --shadow-card: none;
 }
 
 body.public {
@@ -146,8 +156,8 @@ body.public {
 }
 
 .auth-input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
 }
 
 .auth-input--code {
@@ -167,7 +177,7 @@ body.public {
   gap: 0.5rem;
   border: 0;
   border-radius: 0.75rem;
-  background: #2563eb;
+  background: var(--color-accent);
   color: var(--color-surface);
   cursor: pointer;
   font: inherit;
@@ -179,7 +189,7 @@ body.public {
 }
 
 .auth-button:hover {
-  background: #1d4ed8;
+  background: var(--color-accent-dark);
 }
 
 .auth-button:disabled {
@@ -202,13 +212,13 @@ body.public {
 }
 
 .auth-alt a {
-  color: #2563eb;
+  color: var(--color-accent);
   font-weight: 500;
   text-decoration: none;
 }
 
 .auth-alt a:hover {
-  color: #1d4ed8;
+  color: var(--color-accent-dark);
 }
 
 .auth-note {
@@ -270,7 +280,7 @@ body.public {
   display: none;
   grid-area: nav;
   flex-direction: column;
-  background: var(--color-nav);
+  background: linear-gradient(110deg, var(--color-nav) 0%, #f3f4f3 100%);
 }
 
 .app-workspace #nav {
@@ -361,7 +371,7 @@ body.public {
 .app-main {
   min-width: 0;
   grid-area: main;
-  background: var(--color-canvas);
+  background: linear-gradient(115deg, #fefff9 0%, var(--color-canvas) 52%, #fffef7 100%);
   padding: var(--space-page);
 }
 
@@ -370,8 +380,8 @@ body.public {
   color: var(--color-text-soft);
   font-family: var(--font-heading);
   font-size: 1.5rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-weight: 650;
+  letter-spacing: -0.025em;
   line-height: 2rem;
 }
 
@@ -384,7 +394,7 @@ body.public {
 .app-card {
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
-  background: var(--color-surface);
+  background: color-mix(in srgb, var(--color-surface) 96%, white);
   box-shadow: var(--shadow-card);
   padding: 1.5rem;
 }
@@ -397,7 +407,7 @@ body.public {
   color: var(--color-text-soft);
   font-family: var(--font-heading);
   font-size: 1.125rem;
-  font-weight: 550;
+  font-weight: 600;
   line-height: 1.75rem;
 }
 
@@ -406,7 +416,7 @@ body.public {
   color: var(--color-text-soft);
   font-family: var(--font-heading);
   font-size: 1.125rem;
-  font-weight: 550;
+  font-weight: 600;
   line-height: 1.75rem;
 }
 
@@ -415,8 +425,8 @@ body.public {
   color: var(--color-text-soft);
   font-family: var(--font-heading);
   font-size: 2.25rem;
-  font-weight: 650;
-  letter-spacing: -0.015em;
+  font-weight: 675;
+  letter-spacing: -0.025em;
   line-height: 2.5rem;
 }
 
@@ -437,12 +447,12 @@ body.public {
   margin-top: 0.25rem;
   color: var(--color-text-soft);
   font-size: 0.875rem;
-  font-weight: 550;
+  font-weight: 500;
   line-height: 1.25rem;
 }
 
 .app-table-card {
-  background: var(--color-canvas);
+  background: var(--color-surface);
   margin-top: 1.5rem;
   overflow: hidden;
   padding: 0;
@@ -555,7 +565,7 @@ body.public {
 
 .app-data-table thead tr {
   border-bottom: 1px solid var(--color-border-strong);
-  background: var(--color-table-head);
+  background: linear-gradient(115deg, #f5f6f5 0%, var(--color-table-head) 100%);
   color: var(--color-text);
   font-family: var(--font-heading);
   font-size: 1rem;
@@ -563,7 +573,7 @@ body.public {
 }
 
 .app-data-table tbody tr {
-  background: var(--color-canvas);
+  background: var(--color-surface);
   border-bottom: 1px solid var(--color-row-border);
 }
 
@@ -573,7 +583,7 @@ body.public {
 
 .app-data-table th {
   padding: 1.125rem 1.5rem;
-  font-weight: 550;
+  font-weight: 600;
 }
 
 .app-data-table td {
@@ -592,15 +602,15 @@ body.public {
   display: inline-block;
   background-blend-mode: screen, normal;
   border-radius: 9999px;
-  padding: 0.5rem 1.35rem;
-  font-size: 1rem;
+  padding: 0.375rem 1rem;
+  font-size: 0.9375rem;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.25rem;
   white-space: nowrap;
   text-decoration: none;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.52),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.04);
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.025);
 }
 
 .app-row .app-pill {
@@ -610,43 +620,43 @@ body.public {
 }
 
 .app-pill--green {
-  border: 1.5px solid #8bc997;
+  border: 1px solid #8bc997;
   background:
-    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.22) 0 18%, rgba(255, 255, 255, 0) 54%),
-    linear-gradient(180deg, #d1efda 0%, #bfe8c8 48%, #b1dfbb 100%);
-  color: #357a43;
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #d0edd6 0%, #bee6c7 52%, #adddb9 100%);
+  color: #2f7040;
 }
 
 .app-pill--red {
-  border: 1.5px solid #c9535e;
+  border: 1px solid #d34f55;
   background:
-    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.2) 0 18%, rgba(255, 255, 255, 0) 54%),
-    linear-gradient(180deg, #f9c0c6 0%, #f0a7af 50%, #e7919b 100%);
-  color: #9a2731;
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #f8bfbd 0%, #f1a6a6 52%, #e99296 100%);
+  color: #912b31;
 }
 
 .app-pill--orange {
-  border: 1.5px solid #dda465;
+  border: 1px solid #dda05f;
   background:
-    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.24) 0 18%, rgba(255, 255, 255, 0) 56%),
-    linear-gradient(180deg, #ffe1bd 0%, #ffd3a4 50%, #f8c38e 100%);
-  color: #9b5520;
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #ffdfb9 0%, #ffd09c 52%, #f5bd80 100%);
+  color: #925122;
 }
 
 .app-pill--slate {
-  border: 1.5px solid #6b7b8f;
+  border: 1px solid #687b91;
   background:
-    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.18) 0 18%, rgba(255, 255, 255, 0) 56%),
-    linear-gradient(180deg, #c8d6e2 0%, #b9c9d7 50%, #aabccc 100%);
-  color: #273446;
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #c8d5de 0%, #b7c6d1 52%, #a7b8c6 100%);
+  color: #273447;
 }
 
 .app-pill--amber {
-  border: 1.5px solid #d2ad2c;
+  border: 1px solid #d3ad2c;
   background:
-    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.22) 0 18%, rgba(255, 255, 255, 0) 56%),
-    linear-gradient(180deg, #ffe979 0%, #f7dc58 50%, #edcd3d 100%);
-  color: #806313;
+    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
+    linear-gradient(180deg, #ffe77a 0%, #f5d64e 52%, #ebc832 100%);
+  color: #785e16;
 }
 
 @media (min-width: 40rem) {
