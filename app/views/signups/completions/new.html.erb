@@ -1,25 +1,44 @@
-<h1>Complete your sign-up</h1>
+<% @page_title = "Complete your account" %>
 
-<%= form_with model: @signup, url: signup_completion_path, scope: "signup" do |form| %>
-  <p>
-    <%= form.text_field :full_name, autocomplete: "name", placeholder: "Enter your full name...", autofocus: true, required: true, maxlength: 240 %>
-  </p>
-
-  <p>You're one step away. Just enter your name to get your own PaymentReminder account.</p>
-
-  <% if @signup.errors.any? %>
-    <div>
-      <p>Your changes couldn't be saved:</p>
-      <ul>
-        <% @signup.errors.full_messages.each do |message| %>
-          <li><%= message %></li>
-        <% end %>
-      </ul>
+<div class="auth-shell">
+  <div class="auth-panel">
+    <div class="auth-logo" aria-hidden="true">
+      <%= render "layouts/shared/logo_mark", suffix: "signup-completion", width: 48, height: 56 %>
     </div>
-  <% end %>
 
-  <button type="submit">
-    <span>Continue</span>
-    <span>-></span>
-  </button>
-<% end %>
+    <div class="auth-card">
+      <h1 class="auth-title">Complete your account</h1>
+      <p class="auth-subtitle">Tell us your name to finish setting up PaymentReminder.</p>
+
+      <% if @signup.errors.any? %>
+        <div class="auth-errors" role="alert" id="signup-errors">
+          <p>We couldn't finish setting up your account:</p>
+          <ul>
+            <% @signup.errors.full_messages.each do |message| %>
+              <li><%= message %></li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <%= form_with model: @signup, url: signup_completion_path, scope: "signup", class: "auth-form" do |form| %>
+        <%= form.text_field :full_name,
+              autocomplete: "name",
+              placeholder: "Your full name",
+              autofocus: true,
+              required: true,
+              maxlength: 240,
+              class: "auth-input",
+              aria: { invalid: @signup.errors[:full_name].any?, describedby: (@signup.errors.any? ? "signup-errors" : nil) } %>
+
+        <button type="submit" class="auth-button">
+          <span>Continue</span>
+          <svg class="auth-button__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14"></path>
+            <path d="m12 5 7 7-7 7"></path>
+          </svg>
+        </button>
+      <% end %>
+    </div>
+  </div>
+</div>

@@ -38,6 +38,7 @@ module InvoiceSources
       assert_equal "Example Customer", invoice.contact_name
       assert_equal "AUTHORISED", invoice.status
       assert_equal BigDecimal("250.50"), invoice.total
+      assert_equal Date.new(2026, 7, 11), invoice.paid_on
       assert fake_client.invoices_called
     end
 
@@ -131,6 +132,7 @@ module InvoiceSources
               "Total" => "250.50",
               "DateString" => "2026-07-01",
               "DueDateString" => "2026-07-31",
+              "FullyPaidOnDate" => "/Date(1783728000000+0000)/",
               "Contact" => {
                 "ContactID" => "contact-456",
                 "Name" => "Example Customer"

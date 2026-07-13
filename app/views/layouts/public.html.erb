@@ -2,7 +2,7 @@
 <html lang="en">
   <%= render "layouts/shared/head" %>
 
-  <body class="<%= [ "public", body_classes ].reject(&:blank?).join(" ") %>" data-controller="timezone-cookie" data-platform="<%= platform.type %>">
+  <body class="<%= [ "public", body_classes ].reject(&:blank?).join(" ") %>" data-controller="timezone-cookie">
     <div id="global-container">
       <%= render "layouts/shared/flash" %>
 

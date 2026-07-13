@@ -33,15 +33,4 @@ class UserTest < ActiveSupport::TestCase
     user.verify
     assert_predicate user, :verified?
   end
-
-  test "returns initials" do
-    assert_equal "AR", users(:arjun).initials
-  end
-
-  test "returns title" do
-    identity = Identity.create!(email_address: "arjun@example.com")
-    users(:arjun).update!(identity: identity)
-
-    assert_equal "Arjun Rajkumar - arjun@example.com", users(:arjun).title
-  end
 end

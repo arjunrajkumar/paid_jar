@@ -56,6 +56,7 @@ module InvoiceSources
             total: payload["Total"],
             issued_on: parse_date(payload["DateString"] || payload["Date"]),
             due_on: parse_date(payload["DueDateString"] || payload["DueDate"]),
+            paid_on: parse_date(payload["FullyPaidOnDate"]),
             contact_external_id: contact["ContactID"],
             contact_name: contact["Name"],
             provider_data: {
@@ -69,7 +70,12 @@ module InvoiceSources
         end
 
         def parse_date(value)
-          Date.parse(value.to_s) if value.present?
+          return if value.blank?
+
+          milliseconds = value.to_s.match(%r{\A/Date\((-?\d+)})&.captures&.first
+          return Time.at(milliseconds.to_i / 1000.0).utc.to_date if milliseconds
+
+          Date.parse(value.to_s)
         rescue Date::Error
           nil
         end

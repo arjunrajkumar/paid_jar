@@ -13,33 +13,35 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".app-field", account.name
     assert_select ".app-field", "owner-settings@example.com"
     assert_select ".app-card__title", "Accounting integration"
-    assert_select ".app-card__title", "Reminder cadence"
-    assert_select ".app-card__title", "Notifications"
-    assert_select "section", { text: "People on this account", count: 0 }
-    assert_select "button", text: /Sign out/, count: 0
+    assert_select "a[href=?]", new_xero_connection_path, "Connect"
+    assert_select "a[href=?]", new_stripe_connection_path, "Connect"
+    assert_select ".app-card", count: 2
+    assert_select "section", { text: "Reminder cadence", count: 0 }
+    assert_select "section", { text: "Notifications", count: 0 }
+    assert_select "form[action=?]", session_path(script_name: nil) do
+      assert_select "button", "Sign out"
+    end
   end
 
-  test "owner updates account name" do
-    account = sign_up_and_complete
+  test "connected invoice sources can be resynced" do
+    account = sign_up_and_complete(email_address: "owner-settings-resync@example.com")
+    source = account.invoice_sources.create!(
+      provider: :xero,
+      status: :active,
+      external_account_id: "tenant-settings-resync",
+      external_account_name: "PaymentReminder Xero",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      expires_at: 30.minutes.from_now
+    )
 
-    patch account_settings_url(script_name: account.slug), params: { account: { name: "Updated PaymentReminder" } }
-
-    assert_redirected_to account_settings_url(script_name: account.slug)
-    assert_equal "Updated PaymentReminder", account.reload.name
-  end
-
-  test "show renders account and users as json" do
-    account = sign_up_and_complete(email_address: "json-settings@example.com")
-
-    get account_settings_url(script_name: account.slug, format: :json)
-
-    body = JSON.parse(response.body)
+    get account_settings_url(script_name: account.slug)
 
     assert_response :success
-    assert_equal account.id, body.dig("account", "id")
-    assert_equal account.name, body.dig("account", "name")
-    assert_equal account.slug, body.dig("account", "slug")
-    assert_equal [ "json-settings@example.com" ], body.fetch("users").map { |user| user.fetch("email_address") }
+    assert_select ".app-pill", "Connected"
+    assert_select "form[action=?]", invoice_source_refresh_path(source) do
+      assert_select "button", "Resync"
+    end
   end
 
   test "sign out clears session" do

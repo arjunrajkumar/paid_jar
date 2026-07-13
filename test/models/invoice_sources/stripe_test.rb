@@ -44,6 +44,7 @@ module InvoiceSources
       assert_equal BigDecimal("125.25"), invoice.amount_due
       assert_equal Date.new(2026, 7, 1), invoice.issued_on
       assert_equal Date.new(2026, 7, 31), invoice.due_on
+      assert_equal Date.new(2026, 7, 15), invoice.paid_on
       assert_equal "billing@example.com", invoice.provider_data["customer_email"]
       assert fake_client.invoices_called
     end
@@ -83,6 +84,9 @@ module InvoiceSources
               "total" => 25050,
               "created" => Time.zone.local(2026, 7, 1).to_i,
               "due_date" => Time.zone.local(2026, 7, 31).to_i,
+              "status_transitions" => {
+                "paid_at" => Time.zone.local(2026, 7, 15).to_i
+              },
               "customer" => "cus_123",
               "customer_name" => "Example Stripe Customer",
               "customer_email" => "billing@example.com",

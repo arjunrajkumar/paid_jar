@@ -3,7 +3,7 @@ module InvoiceSources
     before_action :ensure_stripe_configured, only: %i[new create]
     before_action :ensure_stripe_approved, only: :create
     before_action :ensure_oauth_state, only: :create
-    before_action :set_stripe_source, only: %i[show destroy]
+    before_action :set_stripe_source, only: :destroy
 
     def new
       session[:stripe_oauth_state] = SecureRandom.urlsafe_base64(32)
@@ -21,12 +21,9 @@ module InvoiceSources
       handle_stripe_error(error)
     end
 
-    def show
-    end
-
     def destroy
       @invoice_source&.disconnect!
-      redirect_to root_path, notice: "Stripe disconnected."
+      redirect_to account_settings_path, notice: "Stripe disconnected."
     end
 
     private

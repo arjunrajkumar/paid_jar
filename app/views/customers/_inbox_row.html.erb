@@ -1,0 +1,53 @@
+<% preview = communication_preview_for(customer) %>
+<% segment = collection_segment_for(customer) %>
+
+<tr
+  class="app-customer-card app-customer-inbox__row"
+  data-testid="collection-priority"
+  data-customer-status="<%= customer.attention_segment.parameterize %>"
+  data-conversation-state="<%= preview.fetch(:state) %>"
+  data-collection-segment="<%= segment.fetch(:key) %>"
+>
+  <td class="app-customer-card__identity" data-label="Customer">
+    <%= link_to customer.name, customer_path(customer), class: "app-data-link" %>
+  </td>
+
+  <td class="app-customer-card__segment" data-label="Segment">
+    <span class="app-customer-card__segment-label"><%= segment.fetch(:name) %></span>
+  </td>
+
+  <td class="app-customer-card__collection" data-label="Receivable">
+    <strong class="app-customer-card__amount">
+      <%= customer.outstanding_invoices.any? ? receivable_totals(customer.outstanding_totals) : "Paid in full" %>
+    </strong>
+    <div class="app-table-note app-customer-card__collection-context">
+      <% if customer.oldest_overdue_days %>
+        <%= pluralize(customer.oldest_overdue_days, "day") %> overdue
+      <% elsif customer.outstanding_invoices.any? %>
+        <%= customer_invoice_due_context(customer.next_expected_invoice, as_of: customer.as_of) %>
+      <% else %>
+        No collection due
+      <% end %>
+    </div>
+  </td>
+
+  <td class="app-customer-card__conversation" data-label="Conversation">
+    <div class="app-customer-card__conversation-meta">
+      <strong class="app-customer-card__conversation-state app-customer-card__conversation-state--<%= preview.fetch(:tone) %>"><%= preview.fetch(:status) %></strong>
+      <% if preview.fetch(:timestamp).present? %>
+        <span class="app-customer-card__conversation-time"><%= preview.fetch(:timestamp) %></span>
+      <% end %>
+    </div>
+    <div class="app-customer-card__conversation-copy">
+      <p class="app-table-note"><%= preview.fetch(:snippet) %></p>
+    </div>
+  </td>
+
+  <td class="app-customer-card__next-step" data-label="Next move">
+    <strong class="app-customer-card__next-move"><%= preview.fetch(:next_step) %></strong>
+    <%= link_to customer_path(customer), class: "app-customer-card__action", aria: { label: "Review #{customer.name}: #{preview.fetch(:next_step)}" } do %>
+      Review account
+      <span aria-hidden="true">&rarr;</span>
+    <% end %>
+  </td>
+</tr>

@@ -1,7 +1,7 @@
 class ApplicationController < ActionController::Base
   include Authentication
   include Authorization
-  include CurrentRequest, CurrentTimezone, SetPlatform
+  include CurrentRequest, CurrentTimezone
   include RequestForgeryProtection
 
   etag { "v1" }

@@ -7,7 +7,7 @@ module MagicLink::Code
     def sanitize(code)
       if code.present?
         normalize_code(code)
-          .then { remove_invalid_characters(it) }
+          .then { |normalized_code| remove_invalid_characters(normalized_code) }
       end
     end
 

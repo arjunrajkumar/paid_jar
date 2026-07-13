@@ -3,10 +3,15 @@ require "cgi"
 module InvoiceSources
   class Stripe
     class Configuration
+      DEFAULT_HOST = "http://localhost:3000"
       DEFAULT_SCOPE = "read_write"
 
+      def initialize(host: ENV["HOST"])
+        @host = host.presence || DEFAULT_HOST
+      end
+
       def configured?
-        client_id.present? && secret_key.present? && redirect_uri.present?
+        client_id.present? && secret_key.present?
       end
 
       def client_id
@@ -30,7 +35,7 @@ module InvoiceSources
       end
 
       def redirect_uri
-        credentials[:redirect_uri]
+        "#{host.chomp("/")}/stripe/callback"
       end
 
       def authorization_uri
@@ -50,6 +55,8 @@ module InvoiceSources
       end
 
       private
+        attr_reader :host
+
         def credentials
           Rails.application.credentials.stripe || {}
         end

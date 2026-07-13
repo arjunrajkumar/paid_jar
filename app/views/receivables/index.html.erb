@@ -3,70 +3,84 @@
 
 <%= render "receivables/nav", active: :home %>
 
-<%
-  aging_buckets = [
-    { label: "Current", value: "$8,400" },
-    { label: "30-60 days", value: "$2,900" },
-    { label: "60-90 days", value: "$950" },
-    { label: "90+ days", value: "$250" }
-  ]
-
-  invoice_rows = [
-    { customer: "Acme Corp.", amount: "$122,300", due: "Oct 15", status: "Overdue", tone: "red" },
-    { customer: "Tech Solutions", amount: "$10,000", due: "Oct 28", status: "Reminded", tone: "orange" },
-    { customer: "Global Inc.", amount: "$16,000", due: "Nov 02", status: "Awaiting reply", tone: "slate" },
-    { customer: "Vertex Ltd.", amount: "$12,000", due: "Nov 13", status: "Escalated", tone: "amber" },
-    { customer: "Spark Industries", amount: "$20,000", due: "Oct 22", status: "Reminded", tone: "orange" }
-  ]
-%>
-
-<h1 class="app-page-title">Accounts Receivable Dashboard</h1>
-
-<div class="app-stat-grid">
-  <article class="app-card app-stat-card">
-    <div class="app-card__headline">
-      <span>Outstanding Invoices</span>
-      <span class="app-pill app-pill--green">on track</span>
-    </div>
-    <div class="app-metric-value">$122,300</div>
-  </article>
-
-  <article class="app-card app-stat-card">
-    <h2 class="app-card__title">Aging Buckets</h2>
-    <div class="app-breakdown-grid">
-      <% aging_buckets.each do |bucket| %>
-        <div>
-          <div class="app-breakdown-grid__label"><%= bucket[:label] %></div>
-          <div class="app-breakdown-grid__value"><%= bucket[:value] %></div>
-        </div>
-      <% end %>
-    </div>
-  </article>
-</div>
-
-<div class="app-card app-table-card">
-  <div class="app-table-wrap">
-    <table class="app-data-table">
-      <thead>
-        <tr>
-          <th scope="col">Customer</th>
-          <th scope="col">Amount Overdue</th>
-          <th scope="col">Due Date</th>
-          <th scope="col">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        <% invoice_rows.each do |invoice| %>
-          <tr>
-            <td><%= invoice[:customer] %></td>
-            <td><%= invoice[:amount] %></td>
-            <td class="app-data-table__muted"><%= invoice[:due] %></td>
-            <td>
-              <span class="app-pill app-pill--<%= invoice[:tone] %>"><%= invoice[:status] %></span>
-            </td>
-          </tr>
-        <% end %>
-      </tbody>
-    </table>
+<header class="app-page-header app-receivables-header app-receivables-header--compact">
+  <div class="app-page-header__content">
+    <h1 class="app-page-title">Receivables</h1>
+    <% if @invoice_sources.any? %>
+      <p class="app-page-subtitle app-receivables-header__sync">
+        <%= @invoice_sources.map { |source| source.external_account_name.presence || source.provider.titleize }.to_sentence %>
+        <span aria-hidden="true">·</span>
+        <%= link_to receivables_sync_status(@invoice_sources), account_settings_path, class: "app-status-link" %>
+      </p>
+    <% end %>
   </div>
-</div>
+
+  <time class="app-period-label" datetime="<%= @dashboard.as_of.iso8601 %>">As of <%= @dashboard.as_of.strftime("%b %-d, %Y") %></time>
+</header>
+
+<% if @invoice_sources.none? %>
+  <section class="app-empty-state" data-testid="no-invoice-source">
+    <div class="app-empty-state__icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 5v14"></path>
+        <path d="M5 12h14"></path>
+      </svg>
+    </div>
+    <h2>Connect an invoice source</h2>
+    <p>Bring your Xero or Stripe invoices into PaymentReminder to see what is current, overdue, and paid.</p>
+    <%= link_to "Connect invoice source", account_settings_path(script_name: Current.account.slug), class: "app-primary-button" %>
+  </section>
+<% elsif !@has_synced_invoices %>
+  <section class="app-empty-state" data-testid="no-synced-invoices">
+    <div class="app-empty-state__icon" aria-hidden="true">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path>
+        <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path>
+      </svg>
+    </div>
+    <h2>No invoices synced yet</h2>
+    <p>Open Settings to resync invoices from your connected source.</p>
+    <%= link_to "Open Settings", account_settings_path(script_name: Current.account.slug), class: "app-primary-button" %>
+  </section>
+<% elsif @dashboard.issued_invoices.none? %>
+  <section class="app-empty-state" data-testid="no-issued-invoices">
+    <h2>No issued invoices yet</h2>
+    <p>Draft, awaiting approval, deleted, and voided invoices are not included. Approve an invoice with your provider, then refresh.</p>
+  </section>
+<% else %>
+  <% inbox_customers = customer_inbox_customers(@inbox_customers) %>
+  <% needs_attention_count = inbox_customers.count { |customer| communication_preview_for(customer).fetch(:needs_attention) } %>
+
+  <p class="app-home-summary-line" aria-label="Customer inbox summary">
+    <strong data-testid="attention-today-count"><%= pluralize(needs_attention_count, "account") %></strong>
+    <%= needs_attention_count == 1 ? "needs" : "need" %> you now
+    <span aria-hidden="true">·</span>
+    <span><%= pluralize(inbox_customers.size, "customer") %> in the inbox</span>
+  </p>
+
+  <section class="app-invoice-section app-customer-portfolio app-customer-inbox" id="collection-priorities" aria-labelledby="customer-inbox-title">
+    <header class="app-section-header">
+      <h2 id="customer-inbox-title">Customer inbox</h2>
+      <span aria-label="<%= pluralize(inbox_customers.size, "customer") %>"><%= inbox_customers.size %></span>
+    </header>
+
+    <div class="app-card app-table-card">
+      <div class="app-table-wrap">
+        <table class="app-data-table app-customer-table app-customer-inbox__table">
+          <thead>
+            <tr>
+              <th scope="col">Customer</th>
+              <th scope="col">Segment</th>
+              <th scope="col">Receivable</th>
+              <th scope="col">Conversation</th>
+              <th scope="col">Next move</th>
+            </tr>
+          </thead>
+          <tbody class="app-customer-list">
+            <%= render partial: "customers/inbox_row", collection: inbox_customers, as: :customer %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+<% end %>

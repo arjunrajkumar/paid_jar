@@ -2,13 +2,22 @@
 <html lang="en">
   <%= render "layouts/shared/head" %>
 
-  <body class="<%= body_classes %>" data-controller="timezone-cookie" data-platform="<%= platform.type %>">
+  <body class="<%= body_classes %>" data-controller="timezone-cookie">
+    <a class="app-skip-link" href="#main">Skip to main content</a>
+
     <div id="global-container">
-      <nav id="nav" class="app-nav" aria-label="Application navigation" data-controller="toggle-class" data-toggle-class-toggle-class="open">
+      <nav
+        id="nav"
+        class="app-nav"
+        aria-label="Application navigation"
+        data-controller="toggle-class"
+        data-toggle-class-toggle-class="open"
+        data-action="keydown.esc@window->toggle-class#close"
+      >
         <%= yield :nav %>
       </nav>
 
-      <main id="main" class="app-main">
+      <main id="main" class="app-main" tabindex="-1">
         <%= render "layouts/shared/flash" %>
         <%= render "layouts/shared/time_zone" if Current.user %>
         <%= yield :header %>

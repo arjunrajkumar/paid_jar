@@ -49,6 +49,7 @@ module InvoiceSources
             total: money_from_cents(payload["total"]),
             issued_on: date_from_timestamp(payload["created"]),
             due_on: date_from_timestamp(payload["due_date"]),
+            paid_on: date_from_timestamp(payload.dig("status_transitions", "paid_at")),
             contact_external_id: customer_id(payload),
             contact_name: contact_name(payload),
             provider_data: {
