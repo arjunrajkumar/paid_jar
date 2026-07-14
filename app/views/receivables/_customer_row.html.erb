@@ -7,7 +7,7 @@
 <tr data-testid="customer-inbox-row">
   <td class="app-customer-card__identity" data-label="Customer">
     <div class="app-customer-card__identity-copy">
-      <%= link_to customer.name, customer_path(customer), class: "app-data-link" %>
+      <strong class="app-customer-card__name"><%= customer.name %></strong>
       <span class="app-customer-card__payer-profile"><%= payer_profile.fetch(:name) %></span>
     </div>
   </td>

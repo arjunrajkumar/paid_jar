@@ -26,43 +26,7 @@ module Customer::PaymentHistory
     "Low"
   end
 
-  def invoice_timing_events
-    issued_invoices
-      .select(&:due_on)
-      .sort_by(&:due_on)
-      .reverse
-      .map { |invoice| invoice_timing_event(invoice) }
-  end
-
-  def last_payment_on
-    paid_invoices.filter_map(&:paid_on).max
-  end
-
   private
-    def invoice_timing_event(invoice)
-      paid = invoice.paid?
-      uncollectible = invoice.uncollectible?
-      no_balance_due = invoice.open? && !invoice.outstanding?
-      timing_date = if uncollectible || no_balance_due
-        nil
-      elsif paid
-        invoice.paid_on
-      else
-        as_of
-      end
-      delay = (timing_date - invoice.due_on).to_i if timing_date
-      position = 50 + ((delay.clamp(-30, 30) / 60.0) * 100) if delay
-
-      {
-        invoice: invoice,
-        delay: delay,
-        paid: paid,
-        uncollectible: uncollectible,
-        no_balance_due: no_balance_due,
-        position: position
-      }
-    end
-
     def paid_invoices_with_dates
       @paid_invoices_with_dates ||= paid_invoices.select { |invoice| invoice.paid_on && invoice.due_on }
     end

@@ -391,13 +391,6 @@ body.public {
   gap: 1rem;
 }
 
-.app-page-subtitle {
-  margin: 0.375rem 0 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
 .app-row__actions form,
 .app-empty-state form {
   margin: 0;
@@ -464,16 +457,6 @@ body.public {
   margin-top: 1.5rem;
   overflow: hidden;
   padding: 0;
-}
-
-.app-empty-inline {
-  margin-top: 0.75rem;
-  border-top: 1px solid var(--color-row-border);
-  border-bottom: 1px solid var(--color-row-border);
-  color: var(--color-text-muted);
-  font-size: 0.9375rem;
-  line-height: 1.5rem;
-  padding: 1.25rem 0;
 }
 
 .app-empty-state {
@@ -705,46 +688,11 @@ body.public {
   }
 }
 
-.app-data-link {
-  color: var(--color-text-soft);
-  font-weight: 600;
-  text-decoration-color: transparent;
-  text-underline-offset: 0.2em;
-}
-
-.app-data-link:hover {
-  color: var(--color-accent);
-  text-decoration-color: currentColor;
-}
-
 .app-table-note {
   margin-top: 0.125rem;
   color: var(--color-text-muted);
   font-size: 0.75rem;
   line-height: 1rem;
-}
-
-.app-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
-}
-
-.app-breadcrumb a {
-  color: var(--color-accent);
-  text-decoration: none;
-}
-
-.app-customer-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
 }
 
 .app-period-label {
@@ -756,133 +704,6 @@ body.public {
   font-weight: 600;
   line-height: 1.25rem;
   padding: 0.5rem 0.75rem;
-}
-
-.app-payment-scale {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin: 1.5rem 0 0;
-  color: var(--color-text-muted);
-  font-size: 0.6875rem;
-  line-height: 1rem;
-}
-
-.app-payment-scale span:nth-child(2) {
-  text-align: center;
-}
-
-.app-payment-scale span:last-child {
-  text-align: right;
-}
-
-.app-payment-events {
-  border-top: 1px solid var(--color-row-border);
-}
-
-.app-payment-event {
-  display: grid;
-  grid-template-areas:
-    "invoice timing"
-    "track track";
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.75rem 1rem;
-  border-bottom: 1px solid var(--color-row-border);
-  padding: 0.875rem 0;
-}
-
-.app-payment-event:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-.app-payment-event__invoice {
-  min-width: 0;
-  grid-area: invoice;
-}
-
-.app-payment-event__invoice strong,
-.app-payment-event__invoice span,
-.app-payment-event__timing strong,
-.app-payment-event__timing span {
-  display: block;
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-.app-payment-event__invoice strong,
-.app-payment-event__timing strong {
-  color: var(--color-text-soft);
-  font-weight: 600;
-}
-
-.app-payment-event__invoice span,
-.app-payment-event__timing span {
-  margin-top: 0.125rem;
-  color: var(--color-text-muted);
-}
-
-.app-payment-event__track {
-  position: relative;
-  height: 0.5rem;
-  grid-area: track;
-  border-radius: 0.25rem;
-  background: #e9eeeb;
-}
-
-.app-payment-event__due-line {
-  position: absolute;
-  top: -0.25rem;
-  bottom: -0.25rem;
-  left: 50%;
-  width: 1px;
-  background: var(--color-text-muted);
-}
-
-.app-payment-event__marker {
-  position: absolute;
-  top: 50%;
-  left: var(--payment-position);
-  width: 0.75rem;
-  height: 0.75rem;
-  border: 2px solid var(--color-surface);
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px rgba(17, 24, 39, 0.14);
-  transform: translate(-50%, -50%);
-}
-
-.app-payment-event__marker--green {
-  background: #4c9b69;
-}
-
-.app-payment-event__marker--amber {
-  background: #cf9f2c;
-}
-
-.app-payment-event__marker--red {
-  background: #c84f55;
-}
-
-.app-payment-event__marker--slate {
-  background: var(--color-surface);
-  box-shadow: 0 0 0 2px #667085;
-}
-
-.app-payment-event__marker--red-open {
-  background: var(--color-surface);
-  box-shadow: 0 0 0 2px #c84f55;
-}
-
-.app-payment-event__timing {
-  grid-area: timing;
-  text-align: right;
-}
-
-@media (min-width: 64rem) {
-  .app-payment-event {
-    grid-template-areas: "invoice track timing";
-    grid-template-columns: 10rem minmax(12rem, 1fr) 8rem;
-  }
 }
 
 /* Product workspace presentation. */
@@ -1006,11 +827,6 @@ body.app-workspace {
   font-weight: 720;
   letter-spacing: -0.04em;
   line-height: 1.08;
-}
-
-.app-workspace .app-page-subtitle {
-  margin-top: 0.35rem;
-  font-size: 0.8125rem;
 }
 
 .app-workspace .app-period-label {
@@ -1144,7 +960,7 @@ body.app-workspace {
   width: 22%;
 }
 
-.app-workspace .app-customer-card__identity .app-data-link {
+.app-workspace .app-customer-card__name {
   font-size: 0.875rem;
   font-weight: 650;
   line-height: 1.25rem;
@@ -1155,80 +971,13 @@ body.app-workspace {
   gap: 0.15rem;
 }
 
-/* Customer detail. */
-.app-workspace .app-customer-breadcrumb span[aria-current="page"] {
-  color: #344054;
-  font-weight: 600;
-}
-
-.app-workspace .app-customer-header {
-  align-items: center;
-  margin-bottom: 0;
-}
-
-.app-workspace .app-customer-header > .app-invoice-status {
-  align-self: flex-start;
-  margin-left: auto;
-}
-
-.app-workspace .app-customer-summary .app-card__title,
-.app-workspace .app-payment-history .app-card__title {
-  font-family: inherit;
-  font-size: 0.8125rem;
-  font-weight: 650;
-  line-height: 1.25rem;
-}
-
-.app-workspace .app-customer-summary {
-  margin-top: 1rem;
-  padding: 1.25rem;
-}
-
-.app-workspace .app-customer-summary__receivable {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 0.45rem;
-  align-items: baseline;
-  margin-top: 1rem;
-  border-top: 1px solid var(--color-row-border);
-  color: var(--color-text-muted);
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
-  padding-top: 0.875rem;
-}
-
-.app-workspace .app-customer-summary__receivable strong {
-  color: var(--color-text-soft);
-  font-weight: 700;
-}
-
-.app-workspace .app-payment-history__empty {
-  margin-top: 1rem;
-}
-
-/* Minimal operating workspace shared by Home and customer detail. */
-.app-workspace .app-receivables-header,
-.app-workspace .app-customer-breadcrumb,
-.app-workspace .app-customer-header,
-.app-workspace .app-customer-summary,
-.app-workspace .app-payment-history {
+/* Minimal operating workspace. */
+.app-workspace .app-receivables-header {
   max-width: 72rem;
 }
 
 .app-workspace .app-receivables-header--compact {
   margin-bottom: 0.5rem;
-}
-
-.app-workspace .app-payment-history {
-  margin-top: 1rem;
-  border-top: 0;
-  padding: 1.25rem;
-}
-
-.app-workspace .app-payment-history .app-payment-event__invoice strong,
-.app-workspace .app-payment-history .app-payment-event__timing strong {
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
 }
 
 .app-workspace .app-customer-card__amount {
@@ -1424,10 +1173,6 @@ body.app-workspace {
 
   .app-workspace .app-period-label {
     width: fit-content;
-  }
-
-  .app-workspace .app-customer-header {
-    align-items: flex-start;
   }
 
 }

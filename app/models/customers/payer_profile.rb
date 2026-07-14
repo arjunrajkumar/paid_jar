@@ -9,24 +9,19 @@ class Customers::PayerProfile
   # due dates and payment dates.
   CATEGORIES = {
     new: {
-      name: "New",
-      rule: "Fewer than #{MINIMUM_PAYMENT_HISTORY} paid invoices with usable due and payment dates"
+      name: "New"
     },
     pays_on_time: {
-      name: "Pays on time",
-      rule: "At least #{MINIMUM_PAYMENT_HISTORY} recorded payments with #{PAYS_ON_TIME_RATE}% or more paid on time"
+      name: "Pays on time"
     },
     sometimes_late: {
-      name: "Sometimes late",
-      rule: "Enough payment history to judge, but neither consistently on time nor typically more than #{SLOW_PAYER_DAYS} days late"
+      name: "Sometimes late"
     },
     slow_payer: {
-      name: "Slow payer",
-      rule: "The typical recorded payment arrives more than #{SLOW_PAYER_DAYS} days after its due date"
+      name: "Slow payer"
     },
     unreliable_payer: {
-      name: "Unreliable payer",
-      rule: "At least #{MINIMUM_UNRELIABLE_HISTORY} recorded payments, fewer than #{UNRELIABLE_ON_TIME_RATE}% paid on time, typically more than #{SLOW_PAYER_DAYS} days late, with inconsistent timing"
+      name: "Unreliable payer"
     }
   }.freeze
 

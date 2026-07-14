@@ -142,7 +142,6 @@ class CustomerTest < ActiveSupport::TestCase
       assert_equal 4, @customer.forecast_days_from_due
       assert_equal "Low", @customer.forecast_confidence
       assert_equal 11, @customer.oldest_overdue_days
-      assert_equal Date.new(2026, 4, 10), @customer.last_payment_on
     end
   end
 
@@ -155,25 +154,7 @@ class CustomerTest < ActiveSupport::TestCase
     assert_equal "Low", @customer.forecast_confidence
   end
 
-  test "builds invoice timing events around the due date" do
-    paid = invoice(due_on: Date.new(2026, 7, 1), paid_on: Date.new(2026, 6, 28), status: "paid", amount_due: 0, amount_paid: 100)
-    paid_without_date = invoice(due_on: Date.new(2026, 6, 30), status: "paid", amount_due: 0, amount_paid: 100)
-    outstanding = invoice(due_on: Date.new(2026, 7, 6), amount_due: 100)
-    invoice(due_on: nil, amount_due: 100)
-
-    travel_to Time.zone.local(2026, 7, 11, 12) do
-      events = @customer.invoice_timing_events
-
-      assert_equal [ outstanding, paid, paid_without_date ], events.map { |event| event.fetch(:invoice) }
-      assert_equal [ 5, -3, nil ], events.map { |event| event.fetch(:delay) }
-      assert_equal [ false, true, true ], events.map { |event| event.fetch(:paid) }
-      assert_in_delta 58.3, events.first.fetch(:position), 0.1
-      assert_in_delta 45.0, events.second.fetch(:position), 0.1
-      assert_nil events.third.fetch(:position)
-    end
-  end
-
-  test "keeps an uncollectible invoice out of collection and payment timing" do
+  test "keeps an uncollectible invoice separate from collectible and paid invoices" do
     uncollectible = invoice(
       due_on: Date.new(2026, 6, 1),
       status: "uncollectible",
@@ -181,20 +162,15 @@ class CustomerTest < ActiveSupport::TestCase
     )
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
-      event = @customer.invoice_timing_events.first
-
       assert_empty @customer.outstanding_invoices
       assert_empty @customer.overdue_invoices
       assert_empty @customer.paid_invoices
       assert_equal [ uncollectible ], @customer.uncollectible_invoices
       assert_equal({ "INR" => 100.to_d }, @customer.uncollectible_totals)
-      assert event.fetch(:uncollectible)
-      assert_nil event.fetch(:delay)
-      assert_nil event.fetch(:position)
     end
   end
 
-  test "keeps an open invoice with no balance out of paid and overdue timing" do
+  test "keeps an open invoice with no balance out of paid and overdue invoices" do
     open_without_balance = invoice(
       due_on: Date.new(2026, 6, 1),
       status: "open",
@@ -204,15 +180,10 @@ class CustomerTest < ActiveSupport::TestCase
     )
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
-      event = @customer.invoice_timing_events.first
-
       assert_equal [ open_without_balance ], @customer.open_invoices
       assert_empty @customer.outstanding_invoices
       assert_empty @customer.overdue_invoices
       assert_empty @customer.paid_invoices
-      assert event.fetch(:no_balance_due)
-      assert_nil event.fetch(:delay)
-      assert_nil event.fetch(:position)
     end
   end
 

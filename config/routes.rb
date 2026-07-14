@@ -25,9 +25,6 @@ Rails.application.routes.draw do
     end
   end
 
-  get "/customers", to: redirect { |_params, request| "#{request.script_name}/home" }, as: :customers
-  resources :customers, only: :show
-
   resource :signup, only: %i[new create] do
     collection do
       scope module: :signups, as: :signup do

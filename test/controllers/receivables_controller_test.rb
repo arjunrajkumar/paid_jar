@@ -10,7 +10,6 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
   test "index shows receivables ordered alphabetically with invoice-derived statuses" do
     account = sign_up_and_complete
     source = create_invoice_source(account, provider: :xero)
-    harbor = nil
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
       create_invoice(source, external_id: "current-1", number: "INV-0001", customer: "Nat Dogre", amount_due: 500, due_on: Date.new(2026, 7, 18))
@@ -19,7 +18,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
       create_invoice(source, external_id: "overdue-2", number: "INV-0007", customer: "Brightside Studio", amount_due: 10_000, amount_paid: 6_000, total: 16_000, due_on: Date.new(2026, 6, 25))
       create_invoice(source, external_id: "overdue-3", number: "INV-0004", customer: "Northstar Consulting", amount_due: 8_400, due_on: Date.new(2026, 6, 1))
       create_invoice(source, external_id: "overdue-4", number: "INV-0005", customer: "Greenline Foods", amount_due: 2_900, due_on: Date.new(2026, 5, 1))
-      harbor = create_invoice(source, external_id: "overdue-5", number: "INV-0006", customer: "Harbor & Co", amount_due: 950, due_on: Date.new(2026, 3, 31))
+      create_invoice(source, external_id: "overdue-5", number: "INV-0006", customer: "Harbor & Co", amount_due: 950, due_on: Date.new(2026, 3, 31))
       create_invoice(source, external_id: "paid", number: "INV-0008", customer: "Cedar Works", status: "paid", amount_due: 0, amount_paid: 3_200, total: 3_200, due_on: Date.new(2026, 4, 30), paid_on: Date.new(2026, 7, 10))
       create_invoice(source, external_id: "draft", number: "INV-0009", customer: "Draft Test Customer", status: "pending", amount_due: 1_100, due_on: Date.new(2026, 7, 31))
 
@@ -40,13 +39,13 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     )
 
     customer_rows = css_select("#customer-inbox tbody tr")
-    customer_names = customer_rows.map { |row| row.at_css("td[data-label='Customer'] a").text.squish }
+    customer_names = customer_rows.map { |row| row.at_css(".app-customer-card__name").text.squish }
     assert_equal(
       [ "Brightside Studio", "Cedar Works", "Greenline Foods", "Harbor & Co", "Nat Dogre", "Northstar Consulting", "PixelCraft Labs" ],
       customer_names
     )
 
-    rows_by_name = customer_rows.index_by { |row| row.at_css("td[data-label='Customer'] a").text.squish }
+    rows_by_name = customer_rows.index_by { |row| row.at_css(".app-customer-card__name").text.squish }
     nat_row = rows_by_name.fetch("Nat Dogre")
     brightside_row = rows_by_name.fetch("Brightside Studio")
     harbor_row = rows_by_name.fetch("Harbor & Co")
@@ -54,17 +53,14 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     cedar_row = rows_by_name.fetch("Cedar Works")
     pixelcraft_row = rows_by_name.fetch("PixelCraft Labs")
 
-    assert_nil nat_row["data-conversation-state"]
     assert_includes nat_row.text, "New"
     assert_includes nat_row.text, "INR 50,500"
     assert_includes nat_row.text, "for 2 invoices"
     assert_equal "Overdue", nat_row.at_css("td[data-label='Status']").text.squish
 
-    assert_nil brightside_row["data-conversation-state"]
     assert_includes brightside_row.text, "INR 10,000"
     assert_equal "Overdue", brightside_row.at_css("td[data-label='Status']").text.squish
 
-    assert_nil harbor_row["data-conversation-state"]
     assert_includes harbor_row.text, "INR 950"
     assert_equal "Overdue", harbor_row.at_css("td[data-label='Status']").text.squish
 
@@ -78,16 +74,11 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_includes cedar_row.text, "No collection due"
     assert_equal "Paid", cedar_row.at_css("td[data-label='Status']").text.squish
 
-    assert_select "#customer-inbox tbody td[data-label='Payment summary']", count: 0
-    assert_select "#customer-inbox", { text: /reminder|reply|escalate/i, count: 0 }
-
-    assert_select "#customer-inbox tbody .app-pill", count: 0
     assert_select "#customer-inbox tbody .app-invoice-status", count: 7
 
-    assert_select "a[href=?]", customer_path(harbor.customer), "Harbor & Co"
+    assert_select "#customer-inbox td[data-label='Customer'] a", count: 0
     assert_select "body", { text: "Draft Test Customer", count: 0 }
     assert_select "form[action=?]", invoice_source_refresh_path(source), count: 0
-    assert_select ".app-aging-card", count: 0
   end
 
   test "index shows an empty state when no invoice source is connected" do
@@ -145,13 +136,11 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     mixed_row = rows.find { |row| row.text.include?("Mixed Customer") }
     zero_balance_row = rows.find { |row| row.text.include?("Zero Balance Customer") }
 
-    assert_nil closed_row["data-conversation-state"]
     assert_includes closed_row.text, "INR 400 uncollectible"
     assert_includes closed_row.text, "1 invoice marked uncollectible"
     assert_equal "Uncollectible", closed_row.at_css("td[data-label='Status']").text.squish
     assert_not_includes closed_row.text, "Paid in full"
 
-    assert_nil mixed_row["data-conversation-state"]
     assert_includes mixed_row.text, "INR 100"
     assert_includes mixed_row.text, "1 invoice marked uncollectible"
     assert_equal "Outstanding", mixed_row.at_css("td[data-label='Status']").text.squish
@@ -161,7 +150,6 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_includes zero_balance_row.text, "1 invoice marked uncollectible"
     assert_equal "Uncollectible", zero_balance_row.at_css("td[data-label='Status']").text.squish
     assert_not_includes zero_balance_row.text, "Paid in full"
-    assert_select "#customer-inbox", { text: /collection follow-up|reminder|reply/i, count: 0 }
   end
 
   test "index does not call an open invoice paid when no balance is due" do
@@ -181,11 +169,9 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :success
     row = css_select("#customer-inbox tbody tr").sole
-    assert_nil row["data-conversation-state"]
     assert_includes row.text, "No balance due"
     assert_equal "Open", row.at_css("td[data-label='Status']").text.squish
     assert_not_includes row.text, "Paid in full"
-    assert_not_includes row.text, "collection follow-up"
   end
 
   private

@@ -1,7 +1,7 @@
 require "test_helper"
 
-class CustomersHelperTest < ActionView::TestCase
-  include CustomersHelper
+class ReceivablesHelperTest < ActionView::TestCase
+  include ReceivablesHelper
 
   test "derives display status from persisted invoice state in precedence order" do
     assert_equal status(:overdue), customer_invoice_status(customer(overdue: 1, outstanding: 1, uncollectible: 1, open: 1))
@@ -22,6 +22,6 @@ class CustomersHelperTest < ActionView::TestCase
     end
 
     def status(key)
-      CustomersHelper::CUSTOMER_INVOICE_STATUSES.fetch(key)
+      ReceivablesHelper::CUSTOMER_INVOICE_STATUSES.fetch(key)
     end
 end

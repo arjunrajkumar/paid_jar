@@ -9,17 +9,12 @@ class CoreFlowsTest < ApplicationSystemTestCase
     click_link "Receivables"
 
     assert_text "Receivables"
-    assert_text "Harbor & Co"
-    assert_no_text "No reply after three reminders. Escalate to a person."
-    assert_selector ".app-invoice-status", text: "Overdue"
-
-    click_link "Harbor & Co", match: :first
-
-    assert_text "Customer segment: New"
-    assert_text "Payment summary"
-    assert_text "Invoice timing"
-    assert_no_text "Conversation"
-    assert_selector ".app-customer-summary__receivable", text: "USD 50,000 outstanding"
+    within "[data-testid='customer-inbox-row']" do
+      assert_text "Harbor & Co"
+      assert_text "USD 50,000"
+      assert_selector ".app-invoice-status", text: "Overdue"
+      assert_no_link "Harbor & Co"
+    end
 
     click_link "Settings"
 
