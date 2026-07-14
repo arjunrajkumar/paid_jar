@@ -22,9 +22,10 @@ class Invoice < ApplicationRecord
 
   scope :recent, -> { order(issued_on: :desc, due_on: :desc, created_at: :desc) }
   scope :issued, -> { where(status: ISSUED_STATUSES) }
-  scope :outstanding, -> { where(status: STATUSES.fetch(:open)).where("amount_due > 0") }
-  scope :paid, -> { where(status: STATUSES.fetch(:paid)) }
-  scope :uncollectible, -> { where(status: STATUSES.fetch(:uncollectible)) }
+  scope :open, -> { where(status: :open) }
+  scope :outstanding, -> { where(status: :open).where("amount_due > 0") }
+  scope :paid, -> { where(status: :paid) }
+  scope :uncollectible, -> { where(status: :uncollectible) }
   scope :overdue, ->(as_of:) { outstanding.where(due_on: ...as_of) }
 
   def issued?

@@ -7,7 +7,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to new_session_url(script_name: nil)
   end
 
-  test "index shows receivables ordered alphabetically with invoice-derived statuses" do
+  test "index orders receivables by invoice status and then customer name" do
     account = sign_up_and_complete
     source = create_invoice_source(account, provider: :xero)
 
@@ -20,9 +20,14 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
       create_invoice(source, external_id: "overdue-4", number: "INV-0005", customer: "Greenline Foods", amount_due: 2_900, due_on: Date.new(2026, 5, 1))
       create_invoice(source, external_id: "overdue-5", number: "INV-0006", customer: "Harbor & Co", amount_due: 950, due_on: Date.new(2026, 3, 31))
       create_invoice(source, external_id: "paid", number: "INV-0008", customer: "Cedar Works", status: "paid", amount_due: 0, amount_paid: 3_200, total: 3_200, due_on: Date.new(2026, 4, 30), paid_on: Date.new(2026, 7, 10))
+      create_invoice(source, external_id: "uncollectible", number: "INV-0010", customer: "Zeta Uncollectible", status: "uncollectible", amount_due: 900, due_on: Date.new(2026, 4, 15))
       create_invoice(source, external_id: "draft", number: "INV-0009", customer: "Draft Test Customer", status: "pending", amount_due: 1_100, due_on: Date.new(2026, 7, 31))
+      refresh_receivables(source)
+      source.customers.find_by!(name: "Nat Dogre").receivable.update!(payer_segment: :slow_payer)
 
-      get home_url
+      assert_queries_match(/FROM [`"]invoices[`"]/, count: 1) do
+        get home_url
+      end
     end
 
     assert_response :success
@@ -41,7 +46,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     customer_rows = css_select("#customer-inbox tbody tr")
     customer_names = customer_rows.map { |row| row.at_css(".app-customer-card__name").text.squish }
     assert_equal(
-      [ "Brightside Studio", "Cedar Works", "Greenline Foods", "Harbor & Co", "Nat Dogre", "Northstar Consulting", "PixelCraft Labs" ],
+      [ "Zeta Uncollectible", "Brightside Studio", "Greenline Foods", "Harbor & Co", "Nat Dogre", "Northstar Consulting", "PixelCraft Labs", "Cedar Works" ],
       customer_names
     )
 
@@ -53,7 +58,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     cedar_row = rows_by_name.fetch("Cedar Works")
     pixelcraft_row = rows_by_name.fetch("PixelCraft Labs")
 
-    assert_includes nat_row.text, "New"
+    assert_includes nat_row.text, "Slow payer"
     assert_includes nat_row.text, "INR 50,500"
     assert_includes nat_row.text, "for 2 invoices"
     assert_equal "Overdue", nat_row.at_css("td[data-label='Status']").text.squish
@@ -74,7 +79,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_includes cedar_row.text, "No collection due"
     assert_equal "Paid", cedar_row.at_css("td[data-label='Status']").text.squish
 
-    assert_select "#customer-inbox tbody .app-invoice-status", count: 7
+    assert_select "#customer-inbox tbody .app-invoice-status", count: 8
 
     assert_select "#customer-inbox td[data-label='Customer'] a", count: 0
     assert_select "body", { text: "Draft Test Customer", count: 0 }
@@ -107,6 +112,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     account = sign_up_and_complete(email_address: "owner-receivables-drafts@example.com")
     source = create_invoice_source(account, provider: :xero)
     create_invoice(source, external_id: "draft-only", number: "DRAFT-1", customer: "Draft Customer", status: "pending", amount_due: 1_100)
+    refresh_receivables(source)
 
     get home_url
 
@@ -125,6 +131,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     create_invoice(source, external_id: "mixed-uncollectible", number: "MIXED-BAD", customer: "Mixed Customer", status: "uncollectible", amount_due: 75)
     create_invoice(source, external_id: "zero-open", number: "ZERO-OPEN", customer: "Zero Balance Customer", amount_due: 0)
     create_invoice(source, external_id: "zero-uncollectible", number: "ZERO-BAD", customer: "Zero Balance Customer", status: "uncollectible", amount_due: 50)
+    refresh_receivables(source)
 
     travel_to Time.zone.local(2026, 7, 11, 12) do
       get home_url
@@ -164,6 +171,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
       amount_due: 0,
       total: 100
     )
+    refresh_receivables(source)
 
     get home_url
 
@@ -175,6 +183,10 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
   end
 
   private
+    def refresh_receivables(source)
+      source.customers.find_each { |customer| Receivable.refresh_for!(customer) }
+    end
+
     def create_invoice_source(account, provider:)
       account.invoice_sources.create!(
         provider: provider,

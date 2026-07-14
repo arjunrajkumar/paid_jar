@@ -10,7 +10,9 @@ Until communication is persisted, the inbox should show only:
 
 - customer identity;
 - outstanding, overdue, open, paid, and uncollectible invoice facts;
-- payer segments inferred from persisted due dates and payment dates.
+- payer segments persisted after a full invoice sync and calculated from the
+  latest 12 paid or uncollectible outcomes. Paid outcomes require both due and
+  payment dates; any uncollectible outcome in the window is unreliable.
 
 Customer status follows this precedence: overdue, outstanding, uncollectible,
 open with no balance due, then paid.

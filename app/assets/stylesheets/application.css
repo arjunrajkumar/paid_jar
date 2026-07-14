@@ -988,7 +988,7 @@ body.app-workspace {
   line-height: 1.25rem;
 }
 
-.app-workspace .app-customer-card__payer-profile {
+.app-workspace .app-customer-card__payer-segment {
   display: block;
   color: var(--color-text-muted);
   font-size: 0.75rem;

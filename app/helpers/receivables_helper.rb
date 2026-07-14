@@ -1,5 +1,5 @@
 module ReceivablesHelper
-  CUSTOMER_INVOICE_STATUSES = {
+  RECEIVABLE_STATUSES = {
     overdue: { label: "Overdue", tone: "overdue" },
     outstanding: { label: "Outstanding", tone: "outstanding" },
     uncollectible: { label: "Uncollectible", tone: "uncollectible" },
@@ -28,31 +28,17 @@ module ReceivablesHelper
     )
   end
 
-  def customer_invoice_status(customer)
-    CUSTOMER_INVOICE_STATUSES.fetch(customer_invoice_status_key(customer))
+  def receivable_status(receivable, as_of: Date.current)
+    RECEIVABLE_STATUSES.fetch(receivable.display_status(as_of: as_of))
   end
 
-  def customer_payer_profile(customer)
-    Customers::PayerProfile.new(customer).to_h
-  end
+  def receivable_due_context(receivable, as_of: Date.current)
+    return "No due date" unless receivable.due_on
 
-  def customer_invoice_due_context(invoice, as_of: Date.current)
-    return "No due date" unless invoice&.due_on
-
-    difference = (invoice.due_on - as_of).to_i
+    difference = (receivable.due_on - as_of).to_i
     return "Due today" if difference.zero?
     return "Due in #{pluralize(difference, "day")}" if difference.positive?
 
     "#{pluralize(difference.abs, "day")} overdue"
   end
-
-  private
-    def customer_invoice_status_key(customer)
-      return :overdue if customer.overdue_invoices.any?
-      return :outstanding if customer.outstanding_invoices.any?
-      return :uncollectible if customer.uncollectible_invoices.any?
-      return :open if customer.open_invoices.any?
-
-      :paid
-    end
 end

@@ -125,13 +125,39 @@ class InvoiceSourceTest < ActiveSupport::TestCase
   test "delegates connection and invoice sync to provider adapter" do
     source = invoice_sources(:xero)
     adapter = mock
+    sync_sequence = sequence("full invoice sync")
 
     InvoiceSources::Xero.expects(:new).twice.with(source).returns(adapter)
     adapter.expects(:connect!).with(code: "auth-code")
-    adapter.expects(:sync_invoices!)
+    adapter.expects(:sync_invoices!).in_sequence(sync_sequence)
+    Receivable.expects(:refresh_for!).with(customers(:xero_customer)).in_sequence(sync_sequence)
 
     source.connect!(code: "auth-code")
     source.sync_invoices!
+  end
+
+  test "does not refresh receivables when a full invoice sync fails" do
+    source = invoice_sources(:xero)
+    adapter = mock
+
+    InvoiceSources::Xero.expects(:new).with(source).returns(adapter)
+    adapter.expects(:sync_invoices!).raises(InvoiceSources::Xero::OauthClient::Error, "provider unavailable")
+    Receivable.expects(:refresh_for!).never
+
+    assert_raises(InvoiceSources::Xero::OauthClient::Error) do
+      source.sync_invoices!
+    end
+  end
+
+  test "does not refresh receivables during an individual invoice sync" do
+    source = invoice_sources(:xero)
+    adapter = mock
+
+    InvoiceSources::Xero.expects(:new).with(source).returns(adapter)
+    adapter.expects(:sync_invoice!).with(external_id: "invoice-123")
+    Receivable.expects(:refresh_for!).never
+
+    source.sync_invoice!(external_id: "invoice-123")
   end
 
   test "does not allow the same provider twice for an account" do

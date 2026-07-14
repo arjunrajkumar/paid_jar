@@ -73,7 +73,7 @@ class InvoiceTest < ActiveSupport::TestCase
     source = invoice_sources(:xero)
     as_of = Date.new(2026, 7, 11)
     open = create_invoice(source, "open", amount_due: 100, due_on: as_of - 1.day)
-    paid = create_invoice(source, "paid", amount_due: 0, amount_paid: 100, due_on: as_of - 2.days)
+    paid = create_invoice(source, "paid", amount_due: 0, amount_paid: 100, due_on: as_of - 2.days, paid_on: as_of - 1.day)
     uncollectible = create_invoice(source, "uncollectible", amount_due: 75, due_on: as_of - 3.days)
     pending = create_invoice(source, "pending", amount_due: 50, due_on: as_of - 4.days)
     void = create_invoice(source, "void", amount_due: 25, due_on: as_of - 5.days)
@@ -81,6 +81,7 @@ class InvoiceTest < ActiveSupport::TestCase
     invoices = source.invoices.where(id: [ open, paid, uncollectible, pending, void, unknown ])
 
     assert_equal [ open, paid, uncollectible ].to_set, invoices.issued.to_set
+    assert_equal [ open ], invoices.open
     assert_equal [ open ], invoices.outstanding
     assert_equal [ paid ], invoices.paid
     assert_equal [ uncollectible ], invoices.uncollectible
@@ -88,7 +89,7 @@ class InvoiceTest < ActiveSupport::TestCase
   end
 
   private
-    def create_invoice(source, status, amount_due:, due_on:, amount_paid: 0)
+    def create_invoice(source, status, amount_due:, due_on:, amount_paid: 0, paid_on: nil)
       source.invoices.create!(
         account: source.account,
         customer: customers(:xero_customer),
@@ -100,7 +101,8 @@ class InvoiceTest < ActiveSupport::TestCase
         amount_due: amount_due,
         amount_paid: amount_paid,
         total: amount_due + amount_paid,
-        due_on: due_on
+        due_on: due_on,
+        paid_on: paid_on
       )
     end
 end

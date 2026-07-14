@@ -35,7 +35,7 @@
     <p>Open Settings to resync invoices from your connected source.</p>
     <%= link_to "Open Settings", account_settings_path(script_name: Current.account.slug), class: "app-primary-button" %>
   </section>
-<% elsif @inbox_customers.none? %>
+<% elsif @receivables.none? %>
   <section class="app-empty-state" data-testid="no-issued-invoices">
     <h2>No issued invoices yet</h2>
     <p>Draft, awaiting approval, deleted, and voided invoices are not included. Approve an invoice with your provider, then refresh.</p>
@@ -53,7 +53,7 @@
             </tr>
           </thead>
           <tbody>
-            <%= render partial: "receivables/customer_row", collection: @inbox_customers, as: :customer %>
+            <%= render partial: "receivables/receivable", collection: @receivables %>
           </tbody>
         </table>
       </div>

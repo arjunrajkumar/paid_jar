@@ -17,7 +17,7 @@ module Customer::ProviderSync
         )
         return unless customer.new_record? || details_are_current
 
-        customer.name = name.presence || customer.name.presence || email.presence || customer.external_id || "Unknown customer"
+        customer.name = name.presence || customer.name.presence || email.presence || customer.external_id
         customer.email = email if email.present?
         customer.details_observed_at = observed_at if observed_at.present?
       end

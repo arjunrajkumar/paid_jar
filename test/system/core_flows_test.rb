@@ -99,5 +99,7 @@ class CoreFlowsTest < ApplicationSystemTestCase
         contact_name: "Harbor & Co",
         synced_at: Time.current
       )
+
+      Receivable.refresh_for!(customer)
     end
 end
