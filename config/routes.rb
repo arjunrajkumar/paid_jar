@@ -5,14 +5,14 @@ Rails.application.routes.draw do
   scope module: :invoice_sources do
     get "xero/connect", to: "xero_connections#new", as: :new_xero_connection
     get "xero/callback", to: "xero_connections#create", as: :xero_callback
-    resource :xero_connection, controller: :xero_connections, only: %i[show destroy]
+    resource :xero_connection, controller: :xero_connections, only: :destroy
 
     get "stripe/connect", to: "stripe_connections#new", as: :new_stripe_connection
     get "stripe/callback", to: "stripe_connections#create", as: :stripe_callback
-    resource :stripe_connection, controller: :stripe_connections, only: %i[show destroy]
+    resource :stripe_connection, controller: :stripe_connections, only: :destroy
   end
 
-  resources :invoice_sources, only: :index do
+  resources :invoice_sources, only: [] do
     scope module: :invoice_sources do
       resource :refresh, only: :create
     end
@@ -24,14 +24,6 @@ Rails.application.routes.draw do
       post :xero, to: "xero#create"
     end
   end
-
-  resources :invoices, only: :index do
-    scope module: :invoices do
-      resource :refresh, only: :create
-    end
-  end
-
-  resources :receivables, only: :index
 
   resource :signup, only: %i[new create] do
     collection do
@@ -48,25 +40,8 @@ Rails.application.routes.draw do
   end
 
   namespace :account do
-    resource :settings, only: %i[show update]
+    resource :settings, only: :show
   end
 
-  resources :users, only: %i[show destroy] do
-    scope module: :users do
-      resource :role, only: :update
-    end
-  end
-
-  # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
-
-  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
-  # Can be used by load balancers and uptime monitors to verify that the app is live.
   get "up" => "rails/health#show", as: :rails_health_check
-
-  # Render dynamic PWA files from app/views/pwa/* (remember to link manifest in application.html.erb)
-  # get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
-  # get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
-
-  # Defines the root path route ("/")
-  # root "posts#index"
 end

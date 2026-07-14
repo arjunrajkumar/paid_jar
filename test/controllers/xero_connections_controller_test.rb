@@ -111,7 +111,7 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
 
     delete xero_connection_url
 
-    assert_redirected_to root_url
+    assert_redirected_to account_settings_url
     assert_predicate source.reload, :disconnected?
     assert_nil source.access_token
     assert_nil source.refresh_token
@@ -121,15 +121,6 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     sign_up_and_complete
 
     delete xero_connection_url
-
-    assert_redirected_to new_xero_connection_url
-    assert_equal "Connect Xero first.", flash[:alert]
-  end
-
-  test "show redirects when xero is not connected" do
-    sign_up_and_complete
-
-    get xero_connection_url
 
     assert_redirected_to new_xero_connection_url
     assert_equal "Connect Xero first.", flash[:alert]
@@ -201,9 +192,10 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
         }
       end
 
-      def invoices(access_token:, tenant_id:)
+      def invoices(access_token:, tenant_id:, where:)
         raise "unexpected access token" unless access_token == "access-token"
         raise "unexpected tenant id" unless tenant_id == "tenant-123"
+        raise "unexpected invoice filter" unless where == 'Type=="ACCREC"'
 
         {
           "Invoices" => [

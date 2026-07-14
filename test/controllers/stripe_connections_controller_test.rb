@@ -109,7 +109,7 @@ class StripeConnectionsControllerTest < ActionDispatch::IntegrationTest
 
     delete stripe_connection_url
 
-    assert_redirected_to root_url
+    assert_redirected_to account_settings_url
     assert_predicate source.reload, :disconnected?
     assert_nil source.access_token
     assert_nil source.refresh_token
@@ -119,15 +119,6 @@ class StripeConnectionsControllerTest < ActionDispatch::IntegrationTest
     sign_up_and_complete
 
     delete stripe_connection_url
-
-    assert_redirected_to new_stripe_connection_url
-    assert_equal "Connect Stripe first.", flash[:alert]
-  end
-
-  test "show redirects when stripe is not connected" do
-    sign_up_and_complete
-
-    get stripe_connection_url
 
     assert_redirected_to new_stripe_connection_url
     assert_equal "Connect Stripe first.", flash[:alert]

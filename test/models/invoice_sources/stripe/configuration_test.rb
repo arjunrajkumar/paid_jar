@@ -11,24 +11,25 @@ module InvoiceSources
         end
       end
 
-      test "redirect uri can be configured from credentials" do
-        with_stripe_credentials(redirect_uri: "https://example.com/stripe/callback") do
-          config = Configuration.new
+      test "redirect uri defaults to localhost" do
+        assert_equal "http://localhost:3000/stripe/callback", Configuration.new.redirect_uri
+      end
 
-          assert_equal "https://example.com/stripe/callback", config.redirect_uri
-        end
+      test "redirect uri uses the configured host" do
+        config = Configuration.new(host: "https://app.example.com/")
+
+        assert_equal "https://app.example.com/stripe/callback", config.redirect_uri
       end
 
       test "credentials determine whether Stripe is configured" do
         with_stripe_credentials(
           client_id: "ca_123",
-          secret_key: "sk_test_123",
-          redirect_uri: "https://example.com/stripe/callback"
+          secret_key: "sk_test_123"
         ) do
           assert_predicate Configuration.new, :configured?
         end
 
-        with_stripe_credentials(client_id: "ca_123", secret_key: "sk_test_123") do
+        with_stripe_credentials(client_id: "ca_123") do
           assert_not_predicate Configuration.new, :configured?
         end
       end

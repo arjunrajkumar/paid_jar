@@ -26,22 +26,14 @@ class UserTest < ActiveSupport::TestCase
     assert_predicate user, :admin?
   end
 
-  test "verifies a user" do
+  test "deactivates a user and releases their identity" do
     user = users(:arjun)
+    identity = Identity.create!(email_address: "former-user@example.com")
+    user.update!(identity: identity, active: true)
 
-    assert_not user.verified?
-    user.verify
-    assert_predicate user, :verified?
-  end
+    user.deactivate
 
-  test "returns initials" do
-    assert_equal "AR", users(:arjun).initials
-  end
-
-  test "returns title" do
-    identity = Identity.create!(email_address: "arjun@example.com")
-    users(:arjun).update!(identity: identity)
-
-    assert_equal "Arjun Rajkumar - arjun@example.com", users(:arjun).title
+    assert_not_predicate user, :active?
+    assert_nil user.identity
   end
 end

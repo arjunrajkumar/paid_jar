@@ -9,22 +9,9 @@ module Authorization
     def allow_unauthorized_access(**options)
       skip_before_action :ensure_can_access_account, **options
     end
-
-    def require_access_without_a_user(**options)
-      skip_before_action :ensure_can_access_account, **options
-      before_action :redirect_existing_user, **options
-    end
   end
 
   private
-    def ensure_admin
-      head :forbidden unless Current.user&.respond_to?(:admin?) && Current.user.admin?
-    end
-
-    def ensure_staff
-      head :forbidden unless Current.identity&.respond_to?(:staff?) && Current.identity.staff?
-    end
-
     def authenticated_account_access?
       Current.account.present? && authenticated?
     end
@@ -36,9 +23,5 @@ module Authorization
           format.json { head :forbidden }
         end
       end
-    end
-
-    def redirect_existing_user
-      redirect_to root_path if Current.user
     end
 end

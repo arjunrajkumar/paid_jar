@@ -14,16 +14,6 @@
         <div class="app-row__label">Company name</div>
         <div class="app-field"><%= @account.name %></div>
       </div>
-
-      <div class="app-row">
-        <div class="app-row__label">Billing email</div>
-        <div class="app-field"><%= @billing_email || "Not set" %></div>
-      </div>
-
-      <div class="app-row">
-        <div class="app-row__label">Currency</div>
-        <div class="app-field"><%= @currency %></div>
-      </div>
     </div>
   </section>
 
@@ -46,7 +36,16 @@
           </div>
 
           <% if connected_source %>
-            <span class="app-pill app-pill--green">Connected</span>
+            <div class="app-row__actions">
+              <span class="app-pill app-pill--green">Connected</span>
+              <%= button_to invoice_source_refresh_path(connected_source), class: "app-inline-button", title: "Resync #{source.name} invoices" do %>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path>
+                  <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path>
+                </svg>
+                <span>Resync</span>
+              <% end %>
+            </div>
           <% else %>
             <%= link_to "Connect", public_send(source.connect_path_name), class: "app-pill app-pill--slate" %>
           <% end %>
@@ -55,70 +54,8 @@
     </div>
   </section>
 
-  <section class="app-card">
-    <h2 class="app-card__title">Reminder cadence</h2>
+</div>
 
-    <div class="app-list">
-      <div class="app-row">
-        <div class="app-row__text">
-          <div class="app-row__label">First reminder</div>
-          <div class="app-row__note">Days after due date</div>
-        </div>
-        <div class="app-field">3 days</div>
-      </div>
-
-      <div class="app-row">
-        <div class="app-row__text">
-          <div class="app-row__label">Second reminder</div>
-          <div class="app-row__note">Days after due date</div>
-        </div>
-        <div class="app-field">10 days</div>
-      </div>
-
-      <div class="app-row">
-        <div class="app-row__text">
-          <div class="app-row__label">Final notice</div>
-          <div class="app-row__note">Days after due date</div>
-        </div>
-        <div class="app-field">21 days</div>
-      </div>
-
-      <div class="app-row">
-        <div class="app-row__text">
-          <div class="app-row__label">Auto-escalate exceptions</div>
-          <div class="app-row__note">Hand off to a human on reply</div>
-        </div>
-        <span class="app-toggle app-toggle--on" aria-hidden="true"></span>
-      </div>
-    </div>
-  </section>
-
-  <section class="app-card">
-    <h2 class="app-card__title">Notifications</h2>
-
-    <div class="app-list">
-      <div class="app-row">
-        <div class="app-row__text">
-          <div class="app-row__label">Weekly AR summary</div>
-          <div class="app-row__note">Emailed every Monday</div>
-        </div>
-        <span class="app-toggle app-toggle--on" aria-hidden="true"></span>
-      </div>
-
-      <div class="app-row">
-        <div class="app-row__label">Payment received alerts</div>
-        <span class="app-toggle app-toggle--on" aria-hidden="true"></span>
-      </div>
-
-      <div class="app-row">
-        <div class="app-row__label">Reminder reply alerts</div>
-        <span class="app-toggle app-toggle--on" aria-hidden="true"></span>
-      </div>
-
-      <div class="app-row">
-        <div class="app-row__label">Product updates</div>
-        <span class="app-toggle" aria-hidden="true"></span>
-      </div>
-    </div>
-  </section>
+<div class="app-settings-actions">
+  <%= button_to "Sign out", session_path(script_name: nil), method: :delete, class: "app-secondary-button" %>
 </div>

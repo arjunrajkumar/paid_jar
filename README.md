@@ -6,7 +6,7 @@ AI accounts-receivable inbox that gets freelancers and small teams paid faster â
 
 - Ruby 3.4.5
 - Rails 8.1.3
-- SQLite
+- MySQL 8
 - Hotwire: Turbo and Stimulus
 - Importmap for JavaScript
 - Propshaft for assets
@@ -41,7 +41,6 @@ Please set up PaymentReminder locally.
    xero:
      client_id: my-xero-client-id
      client_secret: my-xero-client-secret
-     redirect_uri: http://localhost:3000/xero/callback
      webhook_signing_key: my-xero-webhook-signing-key
 
    If I want Stripe connected, help me configure Rails credentials with:
@@ -49,7 +48,6 @@ Please set up PaymentReminder locally.
    stripe:
      client_id: my-stripe-connect-client-id
      secret_key: my-stripe-secret-key
-     redirect_uri: http://localhost:3000/stripe/callback
      webhook_signing_secret: whsec_my-stripe-webhook-secret
 
    Do not ask me to paste secrets into chat. Open the credentials editor and wait while I type them locally.
@@ -78,8 +76,13 @@ Add:
 xero:
   client_id: your-client-id
   client_secret: your-client-secret
-  redirect_uri: http://localhost:3000/xero/callback
   webhook_signing_key: your-webhook-signing-key
+```
+
+OAuth callback URLs are derived from `HOST`, which defaults to `http://localhost:3000` in development. Register `<HOST>/xero/callback` in Xero. For example, start a second local server with:
+
+```bash
+HOST=http://localhost:3001 bin/rails server -p 3001 -P tmp/pids/server-3001.pid
 ```
 
 For local webhook testing, expose your local app with a tunnel and configure the Xero webhook delivery URL to:
@@ -108,9 +111,10 @@ Add:
 stripe:
   client_id: your-connect-client-id
   secret_key: your-stripe-secret-key
-  redirect_uri: http://localhost:3000/stripe/callback
   webhook_signing_secret: whsec_your-webhook-secret
 ```
+
+Register `<HOST>/stripe/callback` as the Stripe Connect redirect URI.
 
 PaymentReminder uses the connected Stripe account id returned by OAuth to read invoices through the Stripe API.
 
@@ -120,7 +124,7 @@ For local webhook testing with the Stripe CLI:
 stripe listen --forward-to localhost:3000/invoice_sources/webhooks/stripe
 ```
 
-After credentials are configured, sign in and open `/invoice_sources` to connect Xero or Stripe.
+After credentials are configured, sign in and open `/account/settings` to connect Xero or Stripe.
 
 ## License
 

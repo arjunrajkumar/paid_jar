@@ -11,24 +11,25 @@ module InvoiceSources
         end
       end
 
-      test "redirect uri can be configured from credentials" do
-        with_xero_credentials(redirect_uri: "https://example.com/xero/callback") do
-          config = Configuration.new
+      test "redirect uri defaults to localhost" do
+        assert_equal "http://localhost:3000/xero/callback", Configuration.new.redirect_uri
+      end
 
-          assert_equal "https://example.com/xero/callback", config.redirect_uri
-        end
+      test "redirect uri uses the configured host" do
+        config = Configuration.new(host: "https://app.example.com/")
+
+        assert_equal "https://app.example.com/xero/callback", config.redirect_uri
       end
 
       test "credentials determine whether Xero is configured" do
         with_xero_credentials(
           client_id: "client-123",
-          client_secret: "secret-123",
-          redirect_uri: "https://example.com/xero/callback"
+          client_secret: "secret-123"
         ) do
           assert_predicate Configuration.new, :configured?
         end
 
-        with_xero_credentials(client_id: "client-123", client_secret: "secret-123") do
+        with_xero_credentials(client_id: "client-123") do
           assert_not_predicate Configuration.new, :configured?
         end
       end

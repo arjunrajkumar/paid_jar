@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_07_110000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_14_120000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -25,30 +25,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_110000) do
     t.index ["name"], name: "index_accounts_on_name"
   end
 
+  create_table "customers", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "details_observed_at"
+    t.string "email"
+    t.string "external_id", null: false
+    t.bigint "invoice_source_id", null: false
+    t.string "name", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "name"], name: "index_customers_on_account_id_and_name"
+    t.index ["invoice_source_id", "external_id"], name: "index_customers_on_invoice_source_id_and_external_id", unique: true
+  end
+
   create_table "identities", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.string "email_address", null: false
     t.datetime "updated_at", null: false
     t.index ["email_address"], name: "index_identities_on_email_address", unique: true
-  end
-
-  create_table "invoice_events", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
-    t.datetime "asked_at", null: false
-    t.datetime "created_at", null: false
-    t.text "highlight"
-    t.bigint "invoice_id", null: false
-    t.json "metadata", null: false
-    t.datetime "responded_at"
-    t.string "response"
-    t.string "situation", null: false
-    t.string "source"
-    t.string "source_message_id"
-    t.text "summary"
-    t.datetime "updated_at", null: false
-    t.index ["invoice_id", "asked_at"], name: "index_invoice_events_on_invoice_id_and_asked_at"
-    t.index ["invoice_id", "situation"], name: "index_invoice_events_on_invoice_id_and_situation"
-    t.index ["invoice_id"], name: "index_invoice_events_on_invoice_id"
-    t.index ["source_message_id"], name: "index_invoice_events_on_source_message_id"
   end
 
   create_table "invoice_source_webhook_events", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -92,22 +86,6 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_110000) do
     t.index ["provider", "status"], name: "index_invoice_sources_on_provider_and_status"
   end
 
-  create_table "invoice_states", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.string "customer_situation", null: false
-    t.datetime "customer_situation_at", null: false
-    t.text "highlight"
-    t.bigint "invoice_id", null: false
-    t.bigint "latest_invoice_event_id"
-    t.string "latest_response"
-    t.datetime "latest_response_at"
-    t.string "next_step"
-    t.datetime "next_step_at"
-    t.datetime "updated_at", null: false
-    t.index ["invoice_id"], name: "index_invoice_states_on_invoice_id", unique: true
-    t.index ["latest_invoice_event_id"], name: "index_invoice_states_on_latest_invoice_event_id"
-  end
-
   create_table "invoices", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.decimal "amount_due", precision: 12, scale: 2
@@ -116,23 +94,28 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_110000) do
     t.string "contact_name"
     t.datetime "created_at", null: false
     t.string "currency"
+    t.bigint "customer_id"
     t.date "due_on"
     t.string "external_id", null: false
     t.bigint "invoice_source_id", null: false
     t.string "invoice_type"
     t.date "issued_on"
     t.string "number"
+    t.date "paid_on"
     t.json "provider_data", null: false
+    t.string "provider_status"
     t.json "raw_data", null: false
-    t.string "status"
+    t.string "status", default: "unknown", null: false
     t.datetime "synced_at"
     t.decimal "total", precision: 12, scale: 2
     t.datetime "updated_at", null: false
     t.index ["account_id", "status"], name: "index_invoices_on_account_id_and_status"
     t.index ["account_id"], name: "index_invoices_on_account_id"
+    t.index ["customer_id"], name: "index_invoices_on_customer_id"
     t.index ["due_on"], name: "index_invoices_on_due_on"
     t.index ["invoice_source_id", "external_id"], name: "index_invoices_on_invoice_source_id_and_external_id", unique: true
     t.index ["invoice_source_id"], name: "index_invoices_on_invoice_source_id"
+    t.index ["paid_on"], name: "index_invoices_on_paid_on"
   end
 
   create_table "magic_links", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -145,6 +128,25 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_110000) do
     t.index ["code"], name: "index_magic_links_on_code", unique: true
     t.index ["expires_at"], name: "index_magic_links_on_expires_at"
     t.index ["identity_id"], name: "index_magic_links_on_identity_id"
+  end
+
+  create_table "receivables", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.datetime "calculated_at", null: false
+    t.datetime "created_at", null: false
+    t.bigint "customer_id", null: false
+    t.date "due_on"
+    t.integer "open_invoice_count", default: 0, null: false
+    t.integer "outstanding_invoice_count", default: 0, null: false
+    t.json "outstanding_totals", null: false
+    t.string "payer_segment", default: "new", null: false
+    t.string "status", default: "none", null: false
+    t.integer "uncollectible_invoice_count", default: 0, null: false
+    t.json "uncollectible_totals", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "status"], name: "index_receivables_on_account_id_and_status"
+    t.index ["account_id"], name: "index_receivables_on_account_id"
+    t.index ["customer_id"], name: "index_receivables_on_customer_id", unique: true
   end
 
   create_table "sessions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -171,14 +173,16 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_07_110000) do
     t.index ["identity_id"], name: "index_users_on_identity_id"
   end
 
-  add_foreign_key "invoice_events", "invoices"
+  add_foreign_key "customers", "accounts"
+  add_foreign_key "customers", "invoice_sources"
   add_foreign_key "invoice_source_webhook_events", "invoice_sources"
   add_foreign_key "invoice_sources", "accounts"
-  add_foreign_key "invoice_states", "invoice_events", column: "latest_invoice_event_id"
-  add_foreign_key "invoice_states", "invoices"
   add_foreign_key "invoices", "accounts"
+  add_foreign_key "invoices", "customers"
   add_foreign_key "invoices", "invoice_sources"
   add_foreign_key "magic_links", "identities"
+  add_foreign_key "receivables", "accounts"
+  add_foreign_key "receivables", "customers"
   add_foreign_key "sessions", "identities"
   add_foreign_key "users", "accounts"
   add_foreign_key "users", "identities"

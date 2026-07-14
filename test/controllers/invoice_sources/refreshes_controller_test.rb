@@ -22,8 +22,8 @@ class InvoiceSources::RefreshesControllerTest < ActionDispatch::IntegrationTest
       post invoice_source_refresh_url(source)
     end
 
-    assert_redirected_to home_url
-    assert_equal "PaymentReminder Xero invoice refresh started.", flash[:notice]
+    assert_redirected_to account_settings_url(script_name: account.slug)
+    assert_equal "PaymentReminder Xero invoice resync started.", flash[:notice]
   end
 
   test "create skips disconnected invoice source" do
@@ -39,7 +39,7 @@ class InvoiceSources::RefreshesControllerTest < ActionDispatch::IntegrationTest
       post invoice_source_refresh_url(source)
     end
 
-    assert_redirected_to invoice_sources_url
+    assert_redirected_to account_settings_url(script_name: account.slug)
     assert_equal "Connect an invoice source first.", flash[:alert]
   end
 

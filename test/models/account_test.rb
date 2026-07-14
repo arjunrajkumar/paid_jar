@@ -13,6 +13,10 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes accounts(:paid_jar).invoices, invoices(:xero_invoice)
   end
 
+  test "has many customers" do
+    assert_includes accounts(:paid_jar).customers, customers(:xero_customer)
+  end
+
   test "creates account with owner and system user" do
     identity = Identity.create!(email_address: "owner@example.com")
     account = Account.create_with_owner(
@@ -20,8 +24,21 @@ class AccountTest < ActiveSupport::TestCase
       owner: { name: "Owner User", identity: identity }
     )
 
-    assert_predicate account.system_user, :system?
+    assert_predicate account.users.find_by!(role: :system), :system?
     assert_predicate account.users.find_by!(identity: identity), :owner?
+  end
+
+  test "rolls back account when owner creation fails" do
+    identity = Identity.create!(email_address: "invalid-owner@example.com")
+
+    assert_no_difference [ -> { Account.count }, -> { User.count } ] do
+      assert_raises ActiveRecord::RecordInvalid do
+        Account.create_with_owner(
+          account: { name: "Invalid Owner Account" },
+          owner: { name: "", identity: identity }
+        )
+      end
+    end
   end
 
   test "slug" do
@@ -39,12 +56,13 @@ class AccountTest < ActiveSupport::TestCase
 
   test "external account id can be overridden" do
     custom_id = 999999
-    sequence_value_before = Account::ExternalIdSequence.first_or_create!(value: 0).value
+    sequence = Account::ExternalIdSequence.first_or_create!(value: 0)
+    sequence_value_before = sequence.value
 
     account = Account.create!(name: "Custom ID Account", external_account_id: custom_id)
 
     assert_equal custom_id, account.external_account_id
-    assert_equal sequence_value_before, Account::ExternalIdSequence.value
+    assert_equal sequence_value_before, sequence.reload.value
   end
 
   test "requires a name" do

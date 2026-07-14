@@ -3,6 +3,8 @@ require "cgi"
 module InvoiceSources
   class Xero
     class Configuration
+      DEFAULT_HOST = "http://localhost:3000"
+
       DEFAULT_SCOPES = %w[
         openid
         profile
@@ -12,8 +14,12 @@ module InvoiceSources
         offline_access
       ].freeze
 
+      def initialize(host: ENV["HOST"])
+        @host = host.presence || DEFAULT_HOST
+      end
+
       def configured?
-        client_id.present? && client_secret.present? && redirect_uri.present?
+        client_id.present? && client_secret.present?
       end
 
       def client_id
@@ -33,7 +39,7 @@ module InvoiceSources
       end
 
       def redirect_uri
-        credentials[:redirect_uri]
+        "#{host.chomp("/")}/xero/callback"
       end
 
       def authorization_uri
@@ -61,6 +67,8 @@ module InvoiceSources
       end
 
       private
+        attr_reader :host
+
         def credentials
           Rails.application.credentials.xero || {}
         end

@@ -1,8 +1,9 @@
 class InvoiceSource < ApplicationRecord
+  SENSITIVE_TOKEN_KEYS = %w[access_token refresh_token id_token client_secret].freeze
+
   AvailableSource = Struct.new(
     :provider,
     :name,
-    :description,
     :connect_path_name,
     :connected_source,
     keyword_init: true
@@ -12,24 +13,25 @@ class InvoiceSource < ApplicationRecord
     {
       provider: :xero,
       name: "Xero",
-      description: "Read invoices and customer details from your Xero organisation.",
       connect_path_name: :new_xero_connection_path
     },
     {
       provider: :stripe,
       name: "Stripe",
-      description: "Read invoices and customer details from your connected Stripe account.",
       connect_path_name: :new_stripe_connection_path
     }
   ].freeze
 
   belongs_to :account, inverse_of: :invoice_sources
+  has_many :customers, dependent: :destroy
   has_many :invoices, dependent: :destroy
   has_many :webhook_events, class_name: "InvoiceSources::Webhooks::Event", dependent: :destroy
 
   attribute :scopes, default: -> { [] }
   attribute :provider_data, default: -> { {} }
   attribute :raw_token_data, default: -> { {} }
+
+  encrypts :access_token, :refresh_token
 
   enum :provider, {
     xero: "xero",
@@ -64,12 +66,17 @@ class InvoiceSource < ApplicationRecord
     account.invoice_sources.public_send(provider).detect(&:connected?)
   end
 
+  def self.sanitized_token_data(token_data)
+    token_data.to_h.stringify_keys.except(*SENSITIVE_TOKEN_KEYS)
+  end
+
   def connect!(...)
     provider_adapter.connect!(...)
   end
 
   def sync_invoices!
     provider_adapter.sync_invoices!
+    customers.find_each { |customer| Receivable.refresh_for!(customer) }
   end
 
   def sync_invoice!(...)
@@ -78,10 +85,6 @@ class InvoiceSource < ApplicationRecord
 
   def connected?
     provider_adapter.connected?
-  end
-
-  def requires_reauthorization?
-    provider_adapter.requires_reauthorization?
   end
 
   def expired?
@@ -93,7 +96,8 @@ class InvoiceSource < ApplicationRecord
       status: :disconnected,
       access_token: nil,
       refresh_token: nil,
-      expires_at: nil
+      expires_at: nil,
+      raw_token_data: {}
     )
   end
 
