@@ -13,6 +13,6 @@
     <div class="app-table-note app-invoice-card__summary"><span class="app-invoice-card__number"><%= invoice_identifier(invoice) %></span><%= " #{due_timing}" if due_timing %></div>
   </td>
   <td class="app-invoice-card__status" data-label="Status">
-    <span class="app-invoice-status app-invoice-status--<%= invoice_status_tone(invoice, as_of: as_of) %>"><%= invoice.status.humanize %></span>
+    <span class="app-invoice-status app-invoice-status--<%= invoice_status_tone(invoice, as_of: as_of) %>"><%= invoice_status_label(invoice, as_of: as_of) %></span>
   </td>
 </tr>

@@ -69,6 +69,19 @@ class InvoiceTest < ActiveSupport::TestCase
     assert_not Invoice.new(status: "uncollectible", amount_due: 100, due_on: as_of - 1.day).overdue?(as_of: as_of)
   end
 
+  test "reports its effective status as of a date" do
+    as_of = Date.new(2026, 7, 11)
+    overdue = Invoice.new(status: "open", amount_due: 100, due_on: as_of - 1.day)
+
+    assert_equal "overdue", overdue.status_as_of(as_of: as_of)
+    assert_equal "open", overdue.status
+    assert_equal "outstanding", Invoice.new(status: "open", amount_due: 100, due_on: as_of).status_as_of(as_of: as_of)
+    assert_equal "outstanding", Invoice.new(status: "open", amount_due: 100, due_on: as_of + 1.day).status_as_of(as_of: as_of)
+    assert_equal "outstanding", Invoice.new(status: "open", amount_due: 100, due_on: nil).status_as_of(as_of: as_of)
+    assert_equal "open", Invoice.new(status: "open", amount_due: 0, due_on: as_of + 1.day).status_as_of(as_of: as_of)
+    assert_equal "paid", Invoice.new(status: "paid", amount_due: 0, due_on: as_of - 1.day).status_as_of(as_of: as_of)
+  end
+
   test "queries canonical invoice states" do
     source = invoice_sources(:xero)
     as_of = Date.new(2026, 7, 11)
@@ -94,6 +107,7 @@ class InvoiceTest < ActiveSupport::TestCase
 
     paid = create_index_invoice(source, "paid", company: "Acme Paid", status: "paid", amount_due: 0, due_on: as_of - 1.month)
     current_beta = create_index_invoice(source, "current-beta", company: "Beta Current", status: "open", amount_due: 100, due_on: as_of + 1.week)
+    open_zero = create_index_invoice(source, "open-zero", company: "Zero Open", status: "open", amount_due: 0, due_on: as_of + 1.week)
     pending = create_index_invoice(source, "pending", company: "Acme Pending", status: "pending", amount_due: 100, due_on: as_of + 2.weeks)
     overdue = create_index_invoice(source, "overdue", company: "Zeta Overdue", status: "open", amount_due: 100, due_on: as_of - 1.day)
     void = create_index_invoice(source, "void", company: "Acme Void", status: "void", amount_due: 0, due_on: as_of - 2.months)
@@ -101,11 +115,11 @@ class InvoiceTest < ActiveSupport::TestCase
     current_alpha = create_index_invoice(source, "current-alpha", company: "Alpha Current", status: "open", amount_due: 100, due_on: as_of + 1.week)
     unknown = create_index_invoice(source, "unknown", company: "Zeta Unknown", status: "unknown", amount_due: 100, due_on: as_of)
 
-    invoices = source.invoices.where(id: [ paid, current_beta, pending, overdue, void, uncollectible, current_alpha, unknown ])
+    invoices = source.invoices.where(id: [ paid, current_beta, open_zero, pending, overdue, void, uncollectible, current_alpha, unknown ])
 
     assert_kind_of ActiveRecord::Relation, invoices.for_index(as_of: as_of)
     assert_equal(
-      [ overdue, uncollectible, unknown, current_alpha, current_beta, pending, paid, void ],
+      [ overdue, uncollectible, unknown, current_alpha, current_beta, open_zero, pending, paid, void ],
       invoices.for_index(as_of: as_of).to_a
     )
   end

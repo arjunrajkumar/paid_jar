@@ -25,15 +25,25 @@ class InvoicesHelperTest < ActionView::TestCase
     assert_nil invoice_due_timing(Invoice.new(status: "open", amount_due: 100, due_on: nil), as_of: as_of)
   end
 
-  test "uses the Receivables status tones for invoice states" do
+  test "labels the effective invoice status" do
     as_of = Date.new(2026, 7, 15)
 
-    assert_equal "needs-attention", invoice_status_tone(Invoice.new(status: "open", amount_due: 100, due_on: as_of - 1.day), as_of: as_of)
-    assert_equal "in-progress", invoice_status_tone(Invoice.new(status: "open", amount_due: 100, due_on: as_of + 1.day), as_of: as_of)
-    assert_equal "unpaid", invoice_status_tone(Invoice.new(status: "uncollectible"), as_of: as_of)
+    assert_equal "Overdue", invoice_status_label(Invoice.new(status: "open", amount_due: 100, due_on: as_of - 1.day), as_of: as_of)
+    assert_equal "Outstanding", invoice_status_label(Invoice.new(status: "open", amount_due: 100, due_on: as_of + 1.day), as_of: as_of)
+    assert_equal "Open", invoice_status_label(Invoice.new(status: "open", amount_due: 0, due_on: as_of + 1.day), as_of: as_of)
+    assert_equal "Paid", invoice_status_label(Invoice.new(status: "paid", amount_due: 0, due_on: as_of - 1.day), as_of: as_of)
+  end
+
+  test "uses the effective invoice status tone" do
+    as_of = Date.new(2026, 7, 15)
+
+    assert_equal "overdue", invoice_status_tone(Invoice.new(status: "open", amount_due: 100, due_on: as_of - 1.day), as_of: as_of)
+    assert_equal "outstanding", invoice_status_tone(Invoice.new(status: "open", amount_due: 100, due_on: as_of + 1.day), as_of: as_of)
+    assert_equal "open", invoice_status_tone(Invoice.new(status: "open", amount_due: 0, due_on: as_of + 1.day), as_of: as_of)
+    assert_equal "uncollectible", invoice_status_tone(Invoice.new(status: "uncollectible"), as_of: as_of)
     assert_equal "paid", invoice_status_tone(Invoice.new(status: "paid"), as_of: as_of)
-    assert_equal "in-progress", invoice_status_tone(Invoice.new(status: "pending"), as_of: as_of)
-    assert_equal "in-progress", invoice_status_tone(Invoice.new(status: "void"), as_of: as_of)
-    assert_equal "needs-attention", invoice_status_tone(Invoice.new(status: "unknown"), as_of: as_of)
+    assert_equal "pending", invoice_status_tone(Invoice.new(status: "pending"), as_of: as_of)
+    assert_equal "void", invoice_status_tone(Invoice.new(status: "void"), as_of: as_of)
+    assert_equal "unknown", invoice_status_tone(Invoice.new(status: "unknown"), as_of: as_of)
   end
 end

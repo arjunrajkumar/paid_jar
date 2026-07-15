@@ -15,7 +15,7 @@ class CoreFlowsTest < ApplicationSystemTestCase
       assert_text "Slow payer"
       assert_text "USD 50,000"
       assert_text "INV-SYSTEM-OVERDUE 40 days overdue"
-      assert_selector ".app-invoice-status", text: "Open"
+      assert_selector ".app-invoice-status", text: "Overdue"
     end
 
     click_link "Settings"

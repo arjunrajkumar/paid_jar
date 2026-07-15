@@ -52,14 +52,15 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     assert_select overdue_row, "td[data-label='Invoice due'] time", count: 0
     assert_select overdue_row, "td[data-label='Invoice due'] .app-invoice-card__amount", "USD 7,250"
     assert_select overdue_row, "td[data-label='Invoice due'] .app-table-note.app-invoice-card__summary:last-child", "INV-001 4 days overdue"
-    assert_select overdue_row, "td[data-label='Status'] .app-invoice-status.app-invoice-status--needs-attention", "Open"
+    assert_select overdue_row, "td[data-label='Status'] .app-invoice-status.app-invoice-status--overdue", "Overdue"
 
     current_row = rows.find { |row| row.text.include?("INV-004") }
     assert_select current_row, "td[data-label='Invoice due'] .app-invoice-card__summary", "INV-004 due in 5 days"
+    assert_select current_row, "td[data-label='Status'] .app-invoice-status.app-invoice-status--outstanding", "Outstanding"
 
     paid_row = rows.find { |row| row.text.include?("INV-008") }
     assert_select paid_row, "td[data-label='Invoice due'] .app-invoice-card__amount", "USD 0"
-    assert_equal "Paid", paid_row.at_css("td[data-label='Status']").text.squish
+    assert_select paid_row, "td[data-label='Status'] .app-invoice-status.app-invoice-status--paid", "Paid"
     assert_select paid_row, "td[data-label='Invoice due'] .app-invoice-card__summary", "INV-008"
     assert_not_includes paid_row.text, "overdue"
   end

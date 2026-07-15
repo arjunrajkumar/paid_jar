@@ -1,11 +1,13 @@
 module InvoicesHelper
   INVOICE_STATUS_TONES = {
-    pending: "in-progress",
-    open: "in-progress",
+    pending: "pending",
+    open: "open",
+    outstanding: "outstanding",
+    overdue: "overdue",
     paid: "paid",
-    uncollectible: "unpaid",
-    void: "in-progress",
-    unknown: "needs-attention"
+    uncollectible: "uncollectible",
+    void: "void",
+    unknown: "unknown"
   }.freeze
 
   def invoice_identifier(invoice)
@@ -37,8 +39,10 @@ module InvoicesHelper
   end
 
   def invoice_status_tone(invoice, as_of: Date.current)
-    return "needs-attention" if invoice.overdue?(as_of: as_of)
+    INVOICE_STATUS_TONES.fetch(invoice.status_as_of(as_of: as_of).to_sym)
+  end
 
-    INVOICE_STATUS_TONES.fetch(invoice.status.to_sym)
+  def invoice_status_label(invoice, as_of: Date.current)
+    invoice.status_as_of(as_of: as_of).humanize
   end
 end

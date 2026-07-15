@@ -1119,10 +1119,6 @@ body.app-workspace {
   justify-content: center;
   border: 1px solid transparent;
   border-radius: 999px;
-  background-blend-mode: screen, normal;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.6),
-    inset 0 -1px 1px rgba(0, 0, 0, 0.025);
   font-size: 0.875rem;
   font-weight: 650;
   line-height: 1.25rem;
@@ -1130,36 +1126,32 @@ body.app-workspace {
   white-space: nowrap;
 }
 
-.app-workspace .app-invoice-status--unpaid {
-  border-color: #d34f55;
-  background:
-    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
-    linear-gradient(180deg, #f8bfbd 0%, #f1a6a6 52%, #e99296 100%);
-  color: #912b31;
+.app-workspace .app-invoice-status--overdue {
+  border-color: #f0b9bd;
+  background: #fff0f1;
+  color: #9b3039;
 }
 
-.app-workspace .app-invoice-status--needs-attention {
-  border-color: #dda05f;
-  background:
-    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
-    linear-gradient(180deg, #ffdfb9 0%, #ffd09c 52%, #f5bd80 100%);
-  color: #925122;
+.app-workspace .app-invoice-status--outstanding {
+  border-color: #c7d5ff;
+  background: #eef3ff;
+  color: #2447c6;
 }
 
 .app-workspace .app-invoice-status--paid {
-  border-color: #8bc997;
-  background:
-    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
-    linear-gradient(180deg, #d0edd6 0%, #bee6c7 52%, #adddb9 100%);
-  color: #2f7040;
+  border-color: #b7e2c3;
+  background: #ecf9ef;
+  color: #23693b;
 }
 
-.app-workspace .app-invoice-status--in-progress {
-  border-color: #687b91;
-  background:
-    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
-    linear-gradient(180deg, #c8d5de 0%, #b7c6d1 52%, #a7b8c6 100%);
-  color: #273447;
+.app-workspace .app-invoice-status--open,
+.app-workspace .app-invoice-status--uncollectible,
+.app-workspace .app-invoice-status--pending,
+.app-workspace .app-invoice-status--void,
+.app-workspace .app-invoice-status--unknown {
+  border-color: #d0d5dd;
+  background: #f2f4f7;
+  color: #475467;
 }
 
 .app-workspace .app-invoice-card__status {

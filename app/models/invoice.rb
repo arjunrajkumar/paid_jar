@@ -37,11 +37,12 @@ class Invoice < ApplicationRecord
       ).then(0)
       .when(arel_table[:status].eq("uncollectible")).then(1)
       .when(arel_table[:status].eq("unknown")).then(2)
-      .when(arel_table[:status].eq("open")).then(3)
-      .when(arel_table[:status].eq("pending")).then(4)
-      .when(arel_table[:status].eq("paid")).then(5)
-      .when(arel_table[:status].eq("void")).then(6)
-      .else(7)
+      .when(arel_table[:status].eq("open").and(arel_table[:amount_due].gt(0))).then(3)
+      .when(arel_table[:status].eq("open")).then(4)
+      .when(arel_table[:status].eq("pending")).then(5)
+      .when(arel_table[:status].eq("paid")).then(6)
+      .when(arel_table[:status].eq("void")).then(7)
+      .else(8)
 
     eager_load(:customer)
       .order(priority.asc, Customer.arel_table[:name].asc, arel_table[:id].asc)
@@ -69,5 +70,12 @@ class Invoice < ApplicationRecord
 
   def overdue?(as_of:)
     outstanding? && due_on.present? && due_on < as_of
+  end
+
+  def status_as_of(as_of:)
+    return "overdue" if overdue?(as_of: as_of)
+    return "outstanding" if outstanding?
+
+    status
   end
 end
