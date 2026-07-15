@@ -3,11 +3,6 @@ class Receivable < ApplicationRecord
   PAYER_SEGMENTS = %w[ new pays_on_time sometimes_late slow_payer unreliable_payer ].index_by(&:itself).freeze
 
   PAYMENT_HISTORY_LIMIT = 12
-  MINIMUM_PAYMENT_HISTORY = 3
-  MINIMUM_UNRELIABLE_HISTORY = 5
-  PAYS_ON_TIME_RATE = 80
-  UNRELIABLE_ON_TIME_RATE = 50
-  SLOW_PAYER_DAYS = 7
 
   belongs_to :account, inverse_of: :receivables
   belongs_to :customer, inverse_of: :receivable
@@ -32,11 +27,15 @@ class Receivable < ApplicationRecord
         receivable.update!(
           account: customer.account,
           **summary_attributes(invoices),
-          payer_segment: payer_segment_for(invoices),
+          payer_segment: payer_segment_for(invoices, account: customer.account),
           calculated_at: Time.current
         )
         receivable
       end
+    end
+
+    def refresh_for_account!(account)
+      account.customers.find_each { |customer| refresh_for!(customer) }
     end
 
     private
@@ -73,7 +72,7 @@ class Receivable < ApplicationRecord
         totals.transform_values { |amount| format("%.2f", amount) }
       end
 
-      def payer_segment_for(invoices)
+      def payer_segment_for(invoices, account:)
         outcomes = invoices
           .select { |invoice| invoice.uncollectible? || eligible_payment?(invoice) }
           .first(PAYMENT_HISTORY_LIMIT)
@@ -81,12 +80,12 @@ class Receivable < ApplicationRecord
         return :unreliable_payer if outcomes.any?(&:uncollectible?)
 
         payments = outcomes.select(&:paid?)
-        return :new if payments.size < MINIMUM_PAYMENT_HISTORY
+        return :new if payments.size < account.payer_segment_minimum_payment_history
 
         delays = payment_delays(payments)
-        return :unreliable_payer if unreliable_payment_pattern?(payments, delays)
-        return :pays_on_time if on_time_rate(payments) >= PAYS_ON_TIME_RATE
-        return :slow_payer if typical_payment_delay(delays).to_i > SLOW_PAYER_DAYS
+        return :unreliable_payer if unreliable_payment_pattern?(payments, delays, account:)
+        return :pays_on_time if on_time_rate(payments) >= account.payer_segment_pays_on_time_rate
+        return :slow_payer if typical_payment_delay(delays, account:).to_i > account.payer_segment_slow_payer_days
 
         :sometimes_late
       end
@@ -95,11 +94,11 @@ class Receivable < ApplicationRecord
         invoice.paid? && invoice.due_on.present? && invoice.paid_on.present?
       end
 
-      def unreliable_payment_pattern?(payments, delays)
-        payments.size >= MINIMUM_UNRELIABLE_HISTORY &&
-          on_time_rate(payments) < UNRELIABLE_ON_TIME_RATE &&
-          typical_payment_delay(delays).to_i > SLOW_PAYER_DAYS &&
-          inconsistent_payment_timing?(delays)
+      def unreliable_payment_pattern?(payments, delays, account:)
+        payments.size >= account.payer_segment_minimum_unreliable_history &&
+          on_time_rate(payments) < account.payer_segment_unreliable_on_time_rate &&
+          typical_payment_delay(delays, account:).to_i > account.payer_segment_slow_payer_days &&
+          inconsistent_payment_timing?(delays, account:)
       end
 
       def on_time_rate(payments)
@@ -111,17 +110,17 @@ class Receivable < ApplicationRecord
         payments.map { |invoice| (invoice.paid_on - invoice.due_on).to_i }
       end
 
-      def typical_payment_delay(delays)
-        median(forecast_payment_delays(delays))
+      def typical_payment_delay(delays, account:)
+        median(forecast_payment_delays(delays, account:))
       end
 
-      def inconsistent_payment_timing?(delays)
-        forecast_delays = forecast_payment_delays(delays)
+      def inconsistent_payment_timing?(delays, account:)
+        forecast_delays = forecast_payment_delays(delays, account:)
         forecast_delays.size < 3 || forecast_delays.max - forecast_delays.min > 14
       end
 
-      def forecast_payment_delays(delays)
-        return delays if delays.size < MINIMUM_PAYMENT_HISTORY
+      def forecast_payment_delays(delays, account:)
+        return delays if delays.size < account.payer_segment_minimum_payment_history
 
         typical_delay = median(delays)
         deviations = delays.map { |delay| (delay - typical_delay).abs }

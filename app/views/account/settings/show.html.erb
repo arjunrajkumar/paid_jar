@@ -56,6 +56,112 @@
 
 </div>
 
+<section class="app-table-card app-segment-rules-card">
+  <div class="app-segment-rules-card__header">
+    <div>
+      <h2 class="app-card__title">Customer segments</h2>
+      <p class="app-segment-rules-card__description">Choose how PaymentReminder labels customers from their recent payment history.</p>
+    </div>
+
+    <%= button_to "Refresh segments",
+      account_customer_segment_refresh_path(script_name: @account.slug),
+      class: "app-secondary-button" %>
+  </div>
+
+  <%= form_with model: @account,
+    url: account_settings_path(script_name: @account.slug),
+    method: :patch,
+    class: "app-segment-rules-form" do |form| %>
+    <div class="app-table-wrap">
+      <table class="app-data-table app-segment-rules-table">
+        <thead>
+          <tr>
+            <th scope="col">Segment</th>
+            <th scope="col">Current rule</th>
+            <th scope="col">Adjust rule</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>New</strong></td>
+            <td>Fewer than <%= pluralize(@account.payer_segment_minimum_payment_history, "eligible payment") %>.</td>
+            <td>
+              <div class="app-segment-rule-control">
+                <%= form.label :payer_segment_minimum_payment_history, "Minimum history" %>
+                <%= form.select :payer_segment_minimum_payment_history,
+                  Account::PAYER_SEGMENT_HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
+                  {},
+                  class: "app-select" %>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Pays on time</strong></td>
+            <td>At least <%= @account.payer_segment_pays_on_time_rate %>% paid by the due date.</td>
+            <td>
+              <div class="app-segment-rule-control">
+                <%= form.label :payer_segment_pays_on_time_rate, "On-time rate" %>
+                <%= form.select :payer_segment_pays_on_time_rate,
+                  Account::PAYER_SEGMENT_PAYS_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}% or more", rate ] },
+                  {},
+                  class: "app-select" %>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Sometimes late</strong></td>
+            <td>Payment timing does not match another segment.</td>
+            <td><span class="app-segment-rule-automatic">Automatic fallback</span></td>
+          </tr>
+          <tr>
+            <td><strong>Slow payer</strong></td>
+            <td>Typical payment is more than <%= pluralize(@account.payer_segment_slow_payer_days, "day") %> late.</td>
+            <td>
+              <div class="app-segment-rule-control">
+                <%= form.label :payer_segment_slow_payer_days, "Typical delay" %>
+                <%= form.select :payer_segment_slow_payer_days,
+                  Account::PAYER_SEGMENT_SLOW_PAYER_DAYS_OPTIONS.map { |days| [ pluralize(days, "day"), days ] },
+                  {},
+                  class: "app-select" %>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><strong>Unreliable payer</strong></td>
+            <td>
+              Any recent uncollectible invoice, or at least <%= pluralize(@account.payer_segment_minimum_unreliable_history, "eligible payment") %>
+              with under <%= @account.payer_segment_unreliable_on_time_rate %>% paid on time, a typical delay over
+              <%= pluralize(@account.payer_segment_slow_payer_days, "day") %>, and inconsistent timing.
+            </td>
+            <td>
+              <div class="app-segment-rule-controls">
+                <div class="app-segment-rule-control">
+                  <%= form.label :payer_segment_minimum_unreliable_history, "Minimum history" %>
+                  <%= form.select :payer_segment_minimum_unreliable_history,
+                    Account::PAYER_SEGMENT_HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
+                    {},
+                    class: "app-select" %>
+                </div>
+                <div class="app-segment-rule-control">
+                  <%= form.label :payer_segment_unreliable_on_time_rate, "On-time rate below" %>
+                  <%= form.select :payer_segment_unreliable_on_time_rate,
+                    Account::PAYER_SEGMENT_UNRELIABLE_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}%", rate ] },
+                    {},
+                    class: "app-select" %>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="app-segment-rules-form__actions">
+      <%= form.submit "Save rules", class: "app-primary-button" %>
+    </div>
+  <% end %>
+</section>
+
 <div class="app-settings-actions">
   <%= button_to "Sign out", session_path(script_name: nil), method: :delete, class: "app-secondary-button" %>
 </div>

@@ -71,4 +71,45 @@ class AccountTest < ActiveSupport::TestCase
     assert_not account.valid?
     assert_includes account.errors[:name], "can't be blank"
   end
+
+  test "uses the current payer segment rule defaults" do
+    account = Account.new(name: "Segment Defaults")
+
+    assert_equal 3, account.payer_segment_minimum_payment_history
+    assert_equal 5, account.payer_segment_minimum_unreliable_history
+    assert_equal 80, account.payer_segment_pays_on_time_rate
+    assert_equal 50, account.payer_segment_unreliable_on_time_rate
+    assert_equal 7, account.payer_segment_slow_payer_days
+  end
+
+  test "requires supported payer segment rule values" do
+    invalid_rules = {
+      payer_segment_minimum_payment_history: 0,
+      payer_segment_minimum_unreliable_history: 13,
+      payer_segment_pays_on_time_rate: 81,
+      payer_segment_unreliable_on_time_rate: 76,
+      payer_segment_slow_payer_days: 2
+    }
+
+    invalid_rules.each do |attribute, value|
+      account = Account.new(name: "Invalid Segment Rules", attribute => value)
+
+      assert_not account.valid?, "expected #{attribute}=#{value} to be invalid"
+      assert_predicate account.errors[attribute], :any?
+    end
+  end
+
+  test "keeps unreliable payer thresholds below the broader rules" do
+    account = Account.new(
+      name: "Overlapping Segment Rules",
+      payer_segment_minimum_payment_history: 6,
+      payer_segment_minimum_unreliable_history: 5,
+      payer_segment_pays_on_time_rate: 50,
+      payer_segment_unreliable_on_time_rate: 50
+    )
+
+    assert_not account.valid?
+    assert_includes account.errors[:payer_segment_minimum_unreliable_history], "must be at least the minimum payment history"
+    assert_includes account.errors[:payer_segment_unreliable_on_time_rate], "must be lower than the pays-on-time rate"
+  end
 end

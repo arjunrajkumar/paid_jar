@@ -40,7 +40,8 @@ Rails.application.routes.draw do
   end
 
   namespace :account do
-    resource :settings, only: :show
+    resource :settings, only: %i[show update]
+    resource :customer_segment_refresh, only: :create
   end
 
   get "up" => "rails/health#show", as: :rails_health_check

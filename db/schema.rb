@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_14_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_15_010000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -20,6 +20,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_14_120000) do
     t.datetime "created_at", null: false
     t.bigint "external_account_id"
     t.string "name", null: false
+    t.integer "payer_segment_minimum_payment_history", default: 3, null: false
+    t.integer "payer_segment_minimum_unreliable_history", default: 5, null: false
+    t.integer "payer_segment_pays_on_time_rate", default: 80, null: false
+    t.integer "payer_segment_slow_payer_days", default: 7, null: false
+    t.integer "payer_segment_unreliable_on_time_rate", default: 50, null: false
     t.datetime "updated_at", null: false
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
     t.index ["name"], name: "index_accounts_on_name"

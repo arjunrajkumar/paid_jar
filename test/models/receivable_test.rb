@@ -161,6 +161,54 @@ class ReceivableTest < ActiveSupport::TestCase
     assert_equal "pays_on_time", refreshed_segment
   end
 
+  test "uses the account minimum payment history" do
+    @customer.account.update!(payer_segment_minimum_payment_history: 4)
+
+    assert_equal "new", segment_after_payments(0, 0, 0)
+  end
+
+  test "uses the account pays-on-time rate" do
+    @customer.account.update!(payer_segment_pays_on_time_rate: 65)
+
+    assert_equal "pays_on_time", segment_after_payments(0, 0, 5)
+  end
+
+  test "uses the account slow-payer delay" do
+    @customer.account.update!(payer_segment_slow_payer_days: 10)
+
+    assert_equal "sometimes_late", segment_after_payments(8, 9, 10)
+  end
+
+  test "uses the account minimum unreliable history" do
+    @customer.account.update!(payer_segment_minimum_unreliable_history: 6)
+
+    assert_equal "slow_payer", segment_after_payments(0, 8, 10, 20, 25)
+  end
+
+  test "uses the account unreliable on-time rate" do
+    @customer.account.update!(payer_segment_unreliable_on_time_rate: 40)
+
+    assert_equal "slow_payer", segment_after_payments(0, 0, 10, 20, 25)
+  end
+
+  test "refreshes every customer for one account" do
+    account = Account.create!(name: "Segment Refresh Account")
+    source = account.invoice_sources.create!(
+      provider: :xero,
+      status: :active,
+      external_account_id: "segment-refresh-source"
+    )
+    customer = source.customers.create!(
+      account: account,
+      external_id: "segment-refresh-customer",
+      name: "Segment Refresh Customer"
+    )
+
+    Receivable.expects(:refresh_for!).with(customer)
+
+    Receivable.refresh_for_account!(account)
+  end
+
   private
     def segment_after_payments(*payment_delays)
       payment_delays.each { |delay| paid_invoice(delay:) }
