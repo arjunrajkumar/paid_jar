@@ -1,5 +1,5 @@
 class Receivable < ApplicationRecord
-  STATUSES = %w[ none outstanding uncollectible open paid ].index_by(&:itself).freeze
+  STATUSES = %w[ none needs_attention in_progress unpaid paid ].index_by(&:itself).freeze
   PAYER_SEGMENTS = %w[ new pays_on_time sometimes_late slow_payer unreliable_payer ].index_by(&:itself).freeze
 
   PAYMENT_HISTORY_LIMIT = 12
@@ -19,10 +19,12 @@ class Receivable < ApplicationRecord
   scope :active, -> { where.not(status: :none) }
   scope :for_inbox, ->(as_of: Date.current) do
     status_order = Arel::Nodes::Case.new
-      .when(arel_table[:status].eq("outstanding").and(arel_table[:due_on].lt(as_of))).then(0)
-      .when(arel_table[:status].eq("outstanding")).then(1)
-      .when(arel_table[:status].eq("paid")).then(2)
-      .else(3)
+      .when(arel_table[:status].eq("needs_attention")).then(0)
+      .when(arel_table[:status].eq("unpaid")).then(1)
+      .when(arel_table[:status].eq("in_progress").and(arel_table[:due_on].lt(as_of))).then(2)
+      .when(arel_table[:status].eq("in_progress")).then(3)
+      .when(arel_table[:status].eq("paid")).then(4)
+      .else(5)
 
     active
       .eager_load(:customer)
@@ -67,9 +69,9 @@ class Receivable < ApplicationRecord
       end
 
       def status_for(invoices, open_invoices, outstanding_invoices, uncollectible_invoices)
-        return :outstanding if outstanding_invoices.any?
-        return :uncollectible if uncollectible_invoices.any?
-        return :open if open_invoices.any?
+        return :unpaid if uncollectible_invoices.any?
+        return :needs_attention if outstanding_invoices.any? { |invoice| invoice.overdue?(as_of: Date.current) }
+        return :in_progress if open_invoices.any?
         return :paid if invoices.any?
 
         :none
@@ -152,11 +154,7 @@ class Receivable < ApplicationRecord
   end
 
   def overdue?(as_of: Date.current)
-    status_outstanding? && due_on.present? && due_on < as_of
-  end
-
-  def display_status(as_of: Date.current)
-    overdue?(as_of:) ? :overdue : status.to_sym
+    outstanding_invoice_count.positive? && due_on.present? && due_on < as_of
   end
 
   private

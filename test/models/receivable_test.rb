@@ -59,7 +59,7 @@ class ReceivableTest < ActiveSupport::TestCase
 
     receivable = Receivable.refresh_for!(@customer)
 
-    assert_predicate receivable, :status_outstanding?
+    assert_predicate receivable, :status_unpaid?
     assert_equal Date.new(2026, 7, 10), receivable.due_on
     assert_equal({ "INR" => "100.00", "USD" => "25.50" }, receivable.outstanding_totals)
     assert_equal({ "INR" => "75.00" }, receivable.uncollectible_totals)
@@ -69,36 +69,63 @@ class ReceivableTest < ActiveSupport::TestCase
     assert_includes Receivable.active, receivable
   end
 
-  test "uses outstanding uncollectible open paid and none precedence" do
+  test "uses unpaid in progress paid and none precedence" do
     paid = invoice(status: "paid", amount_due: 0, amount_paid: 100, paid_on: Date.new(2026, 7, 1))
     receivable = Receivable.refresh_for!(@customer)
     assert_predicate receivable, :status_paid?
 
     open_without_balance = invoice(status: "open", amount_due: 0)
     receivable = Receivable.refresh_for!(@customer)
-    assert_predicate receivable, :status_open?
+    assert_predicate receivable, :status_in_progress?
 
     uncollectible = invoice(status: "uncollectible", amount_due: 100)
     receivable = Receivable.refresh_for!(@customer)
-    assert_predicate receivable, :status_uncollectible?
+    assert_predicate receivable, :status_unpaid?
 
     outstanding = invoice(status: "open", amount_due: 50)
     receivable = Receivable.refresh_for!(@customer)
-    assert_predicate receivable, :status_outstanding?
+    assert_predicate receivable, :status_unpaid?
 
     [ paid, open_without_balance, uncollectible, outstanding ].each { |record| record.update!(status: :void) }
     receivable = Receivable.refresh_for!(@customer)
     assert_predicate receivable, :status_none?
   end
 
-  test "derives overdue display status from the requested date" do
+  test "an in-progress receivable needs attention after its due date" do
     invoice(status: "open", amount_due: 100, due_on: Date.new(2026, 7, 10))
-    receivable = Receivable.refresh_for!(@customer)
+    receivable = travel_to Time.zone.local(2026, 7, 10, 12) do
+      Receivable.refresh_for!(@customer)
+    end
 
     assert_not receivable.overdue?(as_of: Date.new(2026, 7, 10))
-    assert_equal :outstanding, receivable.display_status(as_of: Date.new(2026, 7, 10))
-    assert receivable.overdue?(as_of: Date.new(2026, 7, 11))
-    assert_equal :overdue, receivable.display_status(as_of: Date.new(2026, 7, 11))
+    assert_predicate receivable, :status_in_progress?
+
+    travel_to Time.zone.local(2026, 7, 11, 12) do
+      Receivable.refresh_for!(@customer)
+    end
+    assert_predicate receivable.reload, :status_needs_attention?
+  end
+
+  test "a full refresh moves unpaid and needs-attention receivables to paid" do
+    as_of = Date.new(2026, 7, 15)
+    invoice = invoice(status: "uncollectible", amount_due: 100, due_on: as_of - 10.days)
+
+    travel_to Time.zone.local(2026, 7, 15, 12) do
+      receivable = Receivable.refresh_for!(@customer)
+      assert_predicate receivable, :status_unpaid?
+
+      invoice.update!(status: :paid, amount_due: 0, amount_paid: 100, paid_on: as_of)
+      Receivable.refresh_for!(@customer)
+      assert_predicate receivable.reload, :status_paid?
+
+      invoice.update!(status: :open, amount_due: 100, amount_paid: 0, paid_on: nil)
+      Receivable.refresh_for!(@customer)
+      assert_predicate receivable.reload, :status_needs_attention?
+
+      invoice.update!(status: :paid, amount_due: 0, amount_paid: 100, paid_on: as_of)
+      Receivable.refresh_for!(@customer)
+      assert_predicate receivable.reload, :status_paid?
+    end
   end
 
   test "classifies customers with limited payment history as new" do

@@ -1116,7 +1116,7 @@ body.app-workspace {
   margin-top: 0.35rem;
 }
 
-.app-workspace .app-invoice-status {
+.app-workspace .app-receivable-status {
   display: inline-flex;
   min-height: 2.25rem;
   align-items: center;
@@ -1134,7 +1134,7 @@ body.app-workspace {
   white-space: nowrap;
 }
 
-.app-workspace .app-invoice-status--overdue {
+.app-workspace .app-receivable-status--unpaid {
   border-color: #d34f55;
   background:
     radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
@@ -1142,7 +1142,7 @@ body.app-workspace {
   color: #912b31;
 }
 
-.app-workspace .app-invoice-status--outstanding {
+.app-workspace .app-receivable-status--needs-attention {
   border-color: #dda05f;
   background:
     radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
@@ -1150,7 +1150,7 @@ body.app-workspace {
   color: #925122;
 }
 
-.app-workspace .app-invoice-status--paid {
+.app-workspace .app-receivable-status--paid {
   border-color: #8bc997;
   background:
     radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
@@ -1158,20 +1158,12 @@ body.app-workspace {
   color: #2f7040;
 }
 
-.app-workspace .app-invoice-status--open {
+.app-workspace .app-receivable-status--in-progress {
   border-color: #687b91;
   background:
     radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.12) 0 16%, rgba(255, 255, 255, 0) 54%),
     linear-gradient(180deg, #c8d5de 0%, #b7c6d1 52%, #a7b8c6 100%);
   color: #273447;
-}
-
-.app-workspace .app-invoice-status--uncollectible {
-  border-color: #d3ad2c;
-  background:
-    radial-gradient(circle at 50% 14%, rgba(255, 255, 255, 0.14) 0 16%, rgba(255, 255, 255, 0) 54%),
-    linear-gradient(180deg, #ffe77a 0%, #f5d64e 52%, #ebc832 100%);
-  color: #785e16;
 }
 
 .app-workspace .app-customer-inbox .app-table-note {
@@ -1198,7 +1190,7 @@ body.app-workspace {
     vertical-align: top;
   }
 
-  .app-workspace .app-customer-inbox .app-invoice-status {
+  .app-workspace .app-customer-inbox .app-receivable-status {
     min-height: 2rem;
     font-size: 0.75rem;
     line-height: 1rem;

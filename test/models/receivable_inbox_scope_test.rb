@@ -6,11 +6,12 @@ class ReceivableInboxScopeTest < ActiveSupport::TestCase
     @source = invoice_sources(:xero)
     @as_of = Date.new(2026, 7, 15)
 
-    @overdue = create_receivable(name: "Overdue", status: :outstanding, due_on: @as_of - 1.day)
-    @outstanding = create_receivable(name: "Outstanding", status: :outstanding, due_on: @as_of)
-    @undated = create_receivable(name: "Undated", status: :outstanding, due_on: nil)
+    @needs_attention = create_receivable(name: "Needs attention", status: :needs_attention, due_on: @as_of - 1.month)
+    @unpaid = create_receivable(name: "Unpaid", status: :unpaid, due_on: @as_of - 1.week)
+    @overdue = create_receivable(name: "Overdue", status: :needs_attention, due_on: @as_of - 1.day)
+    @in_progress = create_receivable(name: "In progress", status: :in_progress, due_on: @as_of)
+    @undated = create_receivable(name: "Undated", status: :in_progress, due_on: nil)
     @paid = create_receivable(name: "Paid", status: :paid, due_on: @as_of - 1.month)
-    @uncollectible = create_receivable(name: "Uncollectible", status: :uncollectible, due_on: @as_of - 1.month)
     create_receivable(name: "Inactive", status: :none, due_on: nil)
   end
 
@@ -18,7 +19,7 @@ class ReceivableInboxScopeTest < ActiveSupport::TestCase
     receivables = @account.receivables.for_inbox(as_of: @as_of)
 
     assert_kind_of ActiveRecord::Relation, receivables
-    assert_equal [ @overdue, @outstanding, @undated, @paid, @uncollectible ], receivables.to_a
+    assert_equal [ @needs_attention, @overdue, @unpaid, @in_progress, @undated, @paid ], receivables.to_a
   end
 
   private

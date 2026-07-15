@@ -1,4 +1,4 @@
-<% status = receivable_status(receivable, as_of: as_of) %>
+<% status = receivable_status(receivable) %>
 
 <tr data-testid="customer-inbox-row">
   <td class="app-customer-card__identity" data-label="Customer">
@@ -39,6 +39,6 @@
   </td>
 
   <td class="app-customer-card__status" data-label="Status">
-    <span class="app-invoice-status app-invoice-status--<%= status.fetch(:tone) %>"><%= status.fetch(:label) %></span>
+    <span class="app-receivable-status app-receivable-status--<%= status.fetch(:tone) %>"><%= status.fetch(:label) %></span>
   </td>
 </tr>

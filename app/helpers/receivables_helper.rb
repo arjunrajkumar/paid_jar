@@ -1,9 +1,8 @@
 module ReceivablesHelper
   RECEIVABLE_STATUSES = {
-    overdue: { label: "Overdue", tone: "overdue" },
-    outstanding: { label: "Outstanding", tone: "outstanding" },
-    uncollectible: { label: "Uncollectible", tone: "uncollectible" },
-    open: { label: "Open", tone: "open" },
+    needs_attention: { label: "Needs attention", tone: "needs-attention" },
+    in_progress: { label: "In progress", tone: "in-progress" },
+    unpaid: { label: "Unpaid", tone: "unpaid" },
     paid: { label: "Paid", tone: "paid" }
   }.freeze
 
@@ -28,8 +27,8 @@ module ReceivablesHelper
     )
   end
 
-  def receivable_status(receivable, as_of: Date.current)
-    RECEIVABLE_STATUSES.fetch(receivable.display_status(as_of: as_of))
+  def receivable_status(receivable)
+    RECEIVABLE_STATUSES.fetch(receivable.status.to_sym)
   end
 
   def receivable_due_context(receivable, as_of: Date.current)

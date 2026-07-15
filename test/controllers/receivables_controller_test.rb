@@ -47,7 +47,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     customer_rows = css_select("#customer-inbox tbody tr")
     customer_names = customer_rows.map { |row| row.at_css(".app-customer-card__name").text.squish }
     assert_equal(
-      [ "Brightside Studio", "Greenline Foods", "Harbor & Co", "Nat Dogre", "Northstar Consulting", "PixelCraft Labs", "Cedar Works", "Zeta Uncollectible" ],
+      [ "Brightside Studio", "Greenline Foods", "Harbor & Co", "Nat Dogre", "Northstar Consulting", "Zeta Uncollectible", "PixelCraft Labs", "Cedar Works" ],
       customer_names
     )
 
@@ -62,25 +62,25 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_includes nat_row.text, "Slow payer"
     assert_includes nat_row.text, "INR 50,500"
     assert_includes nat_row.text, "for 2 invoices"
-    assert_equal "Overdue", nat_row.at_css("td[data-label='Status']").text.squish
+    assert_equal "Needs attention", nat_row.at_css("td[data-label='Status']").text.squish
 
     assert_includes brightside_row.text, "INR 10,000"
-    assert_equal "Overdue", brightside_row.at_css("td[data-label='Status']").text.squish
+    assert_equal "Needs attention", brightside_row.at_css("td[data-label='Status']").text.squish
 
     assert_includes harbor_row.text, "INR 950"
-    assert_equal "Overdue", harbor_row.at_css("td[data-label='Status']").text.squish
+    assert_equal "Needs attention", harbor_row.at_css("td[data-label='Status']").text.squish
 
     assert_includes greenline_row.text, "INR 2,900"
-    assert_equal "Overdue", greenline_row.at_css("td[data-label='Status']").text.squish
+    assert_equal "Needs attention", greenline_row.at_css("td[data-label='Status']").text.squish
 
     assert_includes pixelcraft_row.text, "INR 12,500"
-    assert_equal "Outstanding", pixelcraft_row.at_css("td[data-label='Status']").text.squish
+    assert_equal "In progress", pixelcraft_row.at_css("td[data-label='Status']").text.squish
 
     assert_includes cedar_row.text, "Paid in full"
     assert_includes cedar_row.text, "No collection due"
     assert_equal "Paid", cedar_row.at_css("td[data-label='Status']").text.squish
 
-    assert_select "#customer-inbox tbody .app-invoice-status", count: 8
+    assert_select "#customer-inbox tbody .app-receivable-status", count: 8
 
     assert_select "#customer-inbox td[data-label='Customer'] a", count: 0
     assert_select "body", { text: "Draft Test Customer", count: 0 }
@@ -146,17 +146,17 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
 
     assert_includes closed_row.text, "INR 400 uncollectible"
     assert_includes closed_row.text, "1 invoice marked uncollectible"
-    assert_equal "Uncollectible", closed_row.at_css("td[data-label='Status']").text.squish
+    assert_equal "Unpaid", closed_row.at_css("td[data-label='Status']").text.squish
     assert_not_includes closed_row.text, "Paid in full"
 
     assert_includes mixed_row.text, "INR 100"
     assert_includes mixed_row.text, "1 invoice marked uncollectible"
-    assert_equal "Outstanding", mixed_row.at_css("td[data-label='Status']").text.squish
+    assert_equal "Unpaid", mixed_row.at_css("td[data-label='Status']").text.squish
     assert_not_includes mixed_row.text, "Paid in full"
 
     assert_includes zero_balance_row.text, "1 open invoice with no balance due"
     assert_includes zero_balance_row.text, "1 invoice marked uncollectible"
-    assert_equal "Uncollectible", zero_balance_row.at_css("td[data-label='Status']").text.squish
+    assert_equal "Unpaid", zero_balance_row.at_css("td[data-label='Status']").text.squish
     assert_not_includes zero_balance_row.text, "Paid in full"
   end
 
@@ -179,7 +179,7 @@ class ReceivablesControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     row = css_select("#customer-inbox tbody tr").sole
     assert_includes row.text, "No balance due"
-    assert_equal "Open", row.at_css("td[data-label='Status']").text.squish
+    assert_equal "In progress", row.at_css("td[data-label='Status']").text.squish
     assert_not_includes row.text, "Paid in full"
   end
 

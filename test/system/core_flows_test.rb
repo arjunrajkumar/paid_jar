@@ -12,7 +12,7 @@ class CoreFlowsTest < ApplicationSystemTestCase
     within "[data-testid='customer-inbox-row']" do
       assert_text "Harbor & Co"
       assert_text "USD 50,000"
-      assert_selector ".app-invoice-status", text: "Overdue"
+      assert_selector ".app-receivable-status", text: "Needs attention"
       assert_no_link "Harbor & Co"
     end
 

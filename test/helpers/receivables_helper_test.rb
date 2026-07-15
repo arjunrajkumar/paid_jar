@@ -5,7 +5,7 @@ class ReceivablesHelperTest < ActionView::TestCase
 
   test "maps each persisted receivable display status" do
     ReceivablesHelper::RECEIVABLE_STATUSES.each_key do |key|
-      receivable = mock(display_status: key)
+      receivable = mock(status: key.to_s)
 
       assert_equal status(key), receivable_status(receivable)
     end

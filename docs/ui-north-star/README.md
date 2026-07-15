@@ -14,8 +14,15 @@ Until communication is persisted, the inbox should show only:
   latest 12 paid or uncollectible outcomes. Paid outcomes require both due and
   payment dates; any uncollectible outcome in the window is unreliable.
 
-Customer status follows this precedence: overdue, outstanding, uncollectible,
-open with no balance due, then paid.
+Customer inbox status is operational rather than a restatement of invoice
+status. It currently follows this precedence: an overdue invoice needs
+attention, an uncollectible invoice is unpaid, a current open invoice is in
+progress, and a customer with issued invoices but no open or uncollectible
+invoices is paid. Overdue and other invoice facts remain visible in the
+Receivables column. Every six hours, a recurring job queues a full refresh for
+each connected invoice source. Each successful provider sync first persists the
+latest invoices and then recalculates every customer status in any direction
+from those invoice facts.
 
 Do not add reminder, reply, schedule, dispute, or conversation claims to the
 inbox until the corresponding records and workflow exist.
