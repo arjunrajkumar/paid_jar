@@ -71,7 +71,8 @@
   <%= form_with model: @account,
     url: account_settings_path(script_name: @account.slug),
     method: :patch,
-    class: "app-segment-rules-form" do |form| %>
+    class: "app-segment-rules-form",
+    data: { controller: "segment-rules" } do |form| %>
     <div class="app-table-wrap">
       <table class="app-data-table app-segment-rules-table">
         <thead>
@@ -91,7 +92,12 @@
                 <%= form.select :payer_segment_minimum_payment_history,
                   Account::PayerSegment::HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
                   {},
-                  class: "app-select" %>
+                  class: "app-select",
+                  data: {
+                    segment_rules_target: "minimumHistory",
+                    action: "segment-rules#updateOptionAvailability"
+                  } %>
+                <small class="app-segment-rule-hint">Cannot exceed the unreliable payer minimum history</small>
               </div>
             </td>
           </tr>
@@ -104,7 +110,12 @@
                 <%= form.select :payer_segment_pays_on_time_rate,
                   Account::PayerSegment::PAYS_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}% or more", rate ] },
                   {},
-                  class: "app-select" %>
+                  class: "app-select",
+                  data: {
+                    segment_rules_target: "paysOnTimeRate",
+                    action: "segment-rules#updateOptionAvailability"
+                  } %>
+                <small class="app-segment-rule-hint">Must stay above the unreliable payer on-time rate.</small>
               </div>
             </td>
           </tr>
@@ -135,14 +146,24 @@
                   <%= form.select :payer_segment_minimum_unreliable_history,
                     Account::PayerSegment::HISTORY_OPTIONS.map { |count| [ pluralize(count, "payment"), count ] },
                     {},
-                    class: "app-select" %>
+                    class: "app-select",
+                    data: {
+                      segment_rules_target: "unreliableHistory",
+                      action: "segment-rules#updateOptionAvailability"
+                    } %>
+                  <small class="app-segment-rule-hint">Must be at least the New minimum history</small>
                 </div>
                 <div class="app-segment-rule-control">
                   <%= form.label :payer_segment_unreliable_on_time_rate, "On-time rate below" %>
                   <%= form.select :payer_segment_unreliable_on_time_rate,
                     Account::PayerSegment::UNRELIABLE_ON_TIME_RATE_OPTIONS.map { |rate| [ "#{rate}%", rate ] },
                     {},
-                    class: "app-select" %>
+                    class: "app-select",
+                    data: {
+                      segment_rules_target: "unreliableOnTimeRate",
+                      action: "segment-rules#updateOptionAvailability"
+                    } %>
+                  <small class="app-segment-rule-hint">Must stay below the pays-on-time rate.</small>
                 </div>
               </div>
             </td>

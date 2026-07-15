@@ -585,6 +585,13 @@ body.public {
   line-height: 1rem;
 }
 
+.app-segment-rule-hint {
+  max-width: 14rem;
+  color: var(--color-text-muted);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+}
+
 .app-select {
   min-height: 2.5rem;
   border: 1px solid var(--color-border-strong);
