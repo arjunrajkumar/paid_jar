@@ -53,6 +53,56 @@ class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
     assert_equal Date.new(2026, 8, 14), stages.fetch("overdue_14").date_for(due_on:)
   end
 
+  test "returns the next stage after a current stage" do
+    stage = InvoiceReminder::Policy.get_next_stage(
+      customer_segment: customer_segments(:normal_debtor_segment),
+      current_reminder: reminder_for(category: :pre_due, day_offset: 7),
+      due_on: Date.new(2026, 11, 1)
+    )
+
+    assert_equal "pre_due_1", stage.key
+  end
+
+  test "returns the next stage when the current rating does not contain the old stage" do
+    stage = InvoiceReminder::Policy.get_next_stage(
+      customer_segment: customer_segments(:good_debtor_segment),
+      current_reminder: reminder_for(category: :pre_due, day_offset: 7),
+      due_on: Date.new(2026, 11, 1)
+    )
+
+    assert_equal "pre_due_3", stage.key
+  end
+
+  test "returns nil after the final stage" do
+    assert_nil InvoiceReminder::Policy.get_next_stage(
+      customer_segment: customer_segments(:good_debtor_segment),
+      current_reminder: reminder_for(category: :overdue, day_offset: 10),
+      due_on: Date.new(2026, 11, 1)
+    )
+  end
+
+  test "returns the first upcoming stage without a current reminder" do
+    travel_to Time.zone.local(2026, 11, 8, 12) do
+      stage = InvoiceReminder::Policy.get_next_stage(
+        customer_segment: customer_segments(:good_debtor_segment),
+        current_reminder: nil,
+        due_on: Date.new(2026, 11, 1)
+      )
+
+      assert_equal "overdue_10", stage.key
+    end
+  end
+
+  test "returns nil without a current reminder when the schedule has passed" do
+    travel_to Time.zone.local(2026, 11, 20, 12) do
+      assert_nil InvoiceReminder::Policy.get_next_stage(
+        customer_segment: customer_segments(:good_debtor_segment),
+        current_reminder: nil,
+        due_on: Date.new(2026, 11, 1)
+      )
+    end
+  end
+
   test "returns an immutable schedule" do
     stages = InvoiceReminder::Policy.stages_for(payer_segment: :good_debtor)
 
@@ -67,6 +117,10 @@ class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
   end
 
   private
+    def reminder_for(category:, day_offset:)
+      Struct.new(:category, :day_offset).new(category.to_s, day_offset)
+    end
+
     def schedule_for(payer_segment)
       InvoiceReminder::Policy.stages_for(payer_segment:).map do |stage|
         [ stage.key, stage.category, stage.day_offset, stage.tone ]

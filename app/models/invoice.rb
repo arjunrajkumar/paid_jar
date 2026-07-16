@@ -1,4 +1,6 @@
 class Invoice < ApplicationRecord
+  include Remindable
+
   STATUSES = {
     pending: "pending",
     open: "open",
