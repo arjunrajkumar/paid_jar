@@ -17,5 +17,5 @@ production:
     class: InvoiceSources::RefreshAllJob
     schedule: every 6 hours
   schedule_invoice_reminders:
-    class: InvoiceReminders::ScheduleJob
+    class: Account::InvoiceReminders::ScheduleJob
     schedule: every hour

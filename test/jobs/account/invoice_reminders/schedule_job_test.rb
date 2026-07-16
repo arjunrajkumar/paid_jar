@@ -1,9 +1,20 @@
 require "test_helper"
 
-class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
+class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
   setup do
     @account = accounts(:paid_jar)
     @invoice_source = invoice_sources(:xero)
+  end
+
+  test "asks every account to enqueue its invoice reminders" do
+    first_account = mock
+    second_account = mock
+
+    Account.expects(:find_each).multiple_yields([ first_account ], [ second_account ])
+    first_account.expects(:enqueue_invoice_reminders)
+    second_account.expects(:enqueue_invoice_reminders)
+
+    Account::InvoiceReminders::ScheduleJob.perform_now
   end
 
   test "queues every policy stage due today for every debtor rating" do
@@ -29,7 +40,7 @@ class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       end
 
       assert_enqueued_jobs expected_jobs.size, only: InvoiceReminders::SendJob do
-        InvoiceReminders::ScheduleJob.perform_now
+        Account::InvoiceReminders::ScheduleJob.perform_now
       end
     end
 
@@ -51,8 +62,39 @@ class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       create_invoice(customer: normal_customer, due_on: reminder_on + 8.days)
 
       assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
-        InvoiceReminders::ScheduleJob.perform_now
+        Account::InvoiceReminders::ScheduleJob.perform_now
       end
+    end
+  end
+
+  test "scopes reminder selection to each account being processed" do
+    reminder_on = Date.new(2026, 11, 17)
+    other_account = Account.create!(name: "Other Reminder Account")
+    other_invoice_source = other_account.invoice_sources.create!(
+      provider: :stripe,
+      status: :active,
+      external_account_id: "schedule-other-account"
+    )
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      current_customer = create_customer(payer_segment: :good_debtor)
+      other_customer = create_customer(
+        payer_segment: :good_debtor,
+        account: other_account,
+        invoice_source: other_invoice_source
+      )
+      current_invoice = create_invoice(customer: current_customer, due_on: reminder_on + 3.days)
+      create_invoice(customer: other_customer, due_on: reminder_on + 3.days)
+
+      Account.expects(:find_each).yields(@account)
+
+      assert_enqueued_jobs 1, only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+      assert_enqueued_with(
+        job: InvoiceReminders::SendJob,
+        args: [ current_invoice.id, "pre_due", 3, "friendly" ]
+      )
     end
   end
 
@@ -67,7 +109,7 @@ class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
         job: InvoiceReminders::SendJob,
         args: [ normal_invoice.id, "overdue", 7, "firm" ]
       ) do
-        InvoiceReminders::ScheduleJob.perform_now
+        Account::InvoiceReminders::ScheduleJob.perform_now
       end
 
       clear_enqueued_jobs
@@ -75,7 +117,7 @@ class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       bad_invoice = create_invoice(customer:, due_on: reminder_on + 3.days)
 
       assert_enqueued_jobs 1, only: InvoiceReminders::SendJob do
-        InvoiceReminders::ScheduleJob.perform_now
+        Account::InvoiceReminders::ScheduleJob.perform_now
       end
       assert_enqueued_with(
         job: InvoiceReminders::SendJob,
@@ -96,7 +138,7 @@ class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       create_invoice(customer:, due_on:, status: :open, amount_due: 0)
 
       assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
-        InvoiceReminders::ScheduleJob.perform_now
+        Account::InvoiceReminders::ScheduleJob.perform_now
       end
     end
   end
@@ -123,7 +165,7 @@ class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       create_receipt(invoice: failed_invoice, stage: normal_stage, status: :failed)
 
       assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
-        InvoiceReminders::ScheduleJob.perform_now
+        Account::InvoiceReminders::ScheduleJob.perform_now
       end
     end
   end
@@ -145,17 +187,17 @@ class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
         job: InvoiceReminders::SendJob,
         args: [ invoice.id, "pre_due", 3, "friendly" ]
       ) do
-        InvoiceReminders::ScheduleJob.perform_now
+        Account::InvoiceReminders::ScheduleJob.perform_now
       end
     end
   end
 
   private
-    def create_customer(payer_segment:)
+    def create_customer(payer_segment:, account: @account, invoice_source: @invoice_source)
       Customer.create!(
-        account: @account,
-        invoice_source: @invoice_source,
-        customer_segment: customer_segments("#{payer_segment}_segment"),
+        account:,
+        invoice_source:,
+        customer_segment: account.customer_segment(payer_segment),
         external_id: "schedule-customer-#{SecureRandom.uuid}",
         name: "Schedule Customer",
         email: "schedule@example.com"
@@ -164,6 +206,8 @@ class InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
 
     def create_invoice(customer:, due_on:, status: :open, amount_due: 125)
       invoice = invoices(:xero_invoice).dup
+      invoice.account = customer.account
+      invoice.invoice_source = customer.invoice_source
       invoice.customer = customer
       invoice.external_id = "schedule-invoice-#{SecureRandom.uuid}"
       invoice.due_on = due_on

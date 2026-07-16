@@ -1,7 +1,7 @@
-class InvoiceReminders::ScheduleJob < ApplicationJob
-  queue_as :default
+module Account::Remindable
+  extend ActiveSupport::Concern
 
-  def perform
+  def enqueue_invoice_reminders
     InvoiceReminder::Policy::SCHEDULES.each do |payer_segment, stages|
       stages.each do |stage|
         enqueue_reminders(payer_segment:, stage:)
@@ -22,7 +22,8 @@ class InvoiceReminders::ScheduleJob < ApplicationJob
     end
 
     def invoices_needing_reminder(payer_segment:, stage:)
-      Invoice.outstanding
+      invoices
+        .outstanding
         .joins(customer: :customer_segment)
         .where(customer_segments: { payer_segment: })
         .where(due_on: stage.invoice_due_on_for(reminder_on: Date.current))
