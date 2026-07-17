@@ -12,7 +12,10 @@ class Invoice < ApplicationRecord
   belongs_to :account, inverse_of: :invoices
   belongs_to :invoice_source, inverse_of: :invoices
   belongs_to :customer, inverse_of: :invoices
-  has_many :invoice_reminders, dependent: :destroy, inverse_of: :invoice
+  has_many :invoice_reminders,
+    -> { order(created_at: :desc, id: :desc) },
+    dependent: :destroy,
+    inverse_of: :invoice
   attribute :provider_data, default: -> { {} }
   attribute :raw_data, default: -> { {} }
 
@@ -51,6 +54,7 @@ class Invoice < ApplicationRecord
       .else(8)
 
     eager_load(:customer)
+      .preload(:invoice_reminders)
       .order(priority.asc, Customer.arel_table[:name].asc, arel_table[:id].asc)
   end
 

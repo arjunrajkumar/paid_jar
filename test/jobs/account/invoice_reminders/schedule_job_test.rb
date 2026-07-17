@@ -3,6 +3,7 @@ require "test_helper"
 class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
   setup do
     @account = accounts(:paid_jar)
+    @account.update!(automatic_invoice_reminders_enabled: true)
     @invoice_source = invoice_sources(:xero)
   end
 
@@ -60,6 +61,20 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
 
       create_invoice(customer: good_customer, due_on: reminder_on + 7.days)
       create_invoice(customer: normal_customer, due_on: reminder_on + 8.days)
+
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
+  test "does not queue reminders when the account has disabled them" do
+    reminder_on = Date.new(2026, 11, 17)
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      customer = create_customer(payer_segment: :good_debtor)
+      create_invoice(customer:, due_on: reminder_on + 3.days)
+      @account.update!(automatic_invoice_reminders_enabled: false)
 
       assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
         Account::InvoiceReminders::ScheduleJob.perform_now

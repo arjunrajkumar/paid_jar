@@ -3,6 +3,7 @@ require "test_helper"
 class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   setup do
     @invoice = invoices(:xero_invoice)
+    @invoice.account.update!(automatic_invoice_reminders_enabled: true)
   end
 
   test "creates a sent receipt after sending the email" do
@@ -48,6 +49,23 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     assert_predicate reminder, :status_failed?
     assert_equal "delivery failed", reminder.failure_reason
     assert_nil reminder.sent_at
+  end
+
+  test "logs notification placeholders after the final reminder" do
+    Rails.logger.stubs(:info)
+    Rails.logger.expects(:info).with("Create notifications").once
+    Rails.logger.expects(:info).with("Create final-stage escalation notification").once
+
+    InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 14, "final")
+  end
+
+  test "does not send a queued reminder after the account disables reminders" do
+    @invoice.account.update!(automatic_invoice_reminders_enabled: false)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    assert_no_difference -> { @invoice.invoice_reminders.count } do
+      InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+    end
   end
 
   test "does not send or create a duplicate receipt" do

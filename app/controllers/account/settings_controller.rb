@@ -6,9 +6,11 @@ class Account::SettingsController < ApplicationController
   def show; end
 
   def update
-    if @account.update(account_params)
+    attributes = account_params
+
+    if @account.update(attributes)
       redirect_to account_settings_path(script_name: @account.slug),
-        notice: "Debtor rating rules saved. Refresh ratings to apply them."
+        notice: update_notice(attributes)
     else
       flash.delete(:notice)
       flash.now[:alert] = @account.errors.full_messages.to_sentence
@@ -31,10 +33,19 @@ class Account::SettingsController < ApplicationController
 
     def account_params
       params.expect(account: [
+        :automatic_invoice_reminders_enabled,
         customer_segments_attributes: {
           good_debtor: %i[id on_time_rate],
           bad_debtor: %i[id on_time_rate]
         }
       ])
+    end
+
+    def update_notice(attributes)
+      if attributes.key?(:automatic_invoice_reminders_enabled)
+        "Invoice reminder settings saved."
+      else
+        "Debtor rating rules saved. Refresh ratings to apply them."
+      end
     end
 end

@@ -53,4 +53,25 @@ class InvoicesHelperTest < ActionView::TestCase
     assert_equal "void", invoice_status_tone(Invoice.new(status: "void"), as_of: as_of)
     assert_equal "unknown", invoice_status_tone(Invoice.new(status: "unknown"), as_of: as_of)
   end
+
+  test "describes reminder stages" do
+    assert_equal "1 day before due", invoice_reminder_stage_label(
+      InvoiceReminder.new(category: :pre_due, day_offset: 1)
+    )
+    assert_equal "7 days overdue", invoice_reminder_stage_label(
+      InvoiceReminder.new(category: :overdue, day_offset: 7)
+    )
+  end
+
+  test "describes sent and failed reminder attempts" do
+    sent_at = Time.zone.local(2026, 7, 15, 9)
+    failed_at = Time.zone.local(2026, 7, 16, 9)
+
+    assert_equal "Sent Jul 15, 2026", invoice_reminder_attempt_label(
+      InvoiceReminder.new(status: :sent, sent_at:)
+    )
+    assert_equal "Failed Jul 16, 2026", invoice_reminder_attempt_label(
+      InvoiceReminder.new(status: :failed, created_at: failed_at)
+    )
+  end
 end

@@ -18,7 +18,11 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".app-card__title", "Accounting integration"
     assert_select "a[href=?]", new_xero_connection_path, "Connect"
     assert_select "a[href=?]", new_stripe_connection_path, "Connect"
-    assert_select ".app-card", count: 2
+    assert_select ".app-card", count: 3
+    assert_select ".app-card", text: /Invoice reminders/ do
+      assert_select "input[name='account[automatic_invoice_reminders_enabled]'][type='checkbox']:not([checked])"
+      assert_select "input[type='submit'][value='Save reminder settings']"
+    end
     assert_select "section", { text: "Reminder cadence", count: 0 }
     assert_select "section", { text: "Notifications", count: 0 }
     assert_select "form[action=?]", session_path(script_name: nil) do
@@ -84,6 +88,20 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 45, account.customer_segment(:bad_debtor).reload.on_time_rate
     assert_equal 80, other_account.customer_segment(:good_debtor).on_time_rate
     assert_equal 50, other_account.customer_segment(:bad_debtor).on_time_rate
+  end
+
+  test "update enables automatic invoice reminders for the current account" do
+    account = sign_up_and_complete(email_address: "owner-reminder-settings@example.com")
+    other_account = Account.create!(name: "Other Reminder Settings Account")
+
+    patch account_settings_url(script_name: account.slug), params: {
+      account: { automatic_invoice_reminders_enabled: "1" }
+    }
+
+    assert_redirected_to account_settings_url(script_name: account.slug)
+    assert_equal "Invoice reminder settings saved.", flash[:notice]
+    assert_predicate account.reload, :automatic_invoice_reminders_enabled?
+    assert_not_predicate other_account.reload, :automatic_invoice_reminders_enabled?
   end
 
   test "update renders invalid debtor rating rules" do

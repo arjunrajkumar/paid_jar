@@ -32,13 +32,13 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     assert_select "#nav a[aria-current='page']", "Invoices"
     assert_select "#invoice-index .app-card.app-table-card", count: 1
     assert_equal(
-      [ "Company", "Invoice due", "Status" ],
+      [ "Company", "Invoice due", "Status", "Reminders" ],
       css_select("#invoice-index thead th").map { |heading| heading.text.squish }
     )
 
     rows = css_select("#invoice-index tbody tr")
     assert_equal 9, rows.size
-    assert rows.all? { |row| row.css("td").size == 3 }
+    assert rows.all? { |row| row.css("td").size == 4 }
     assert_equal(
       [ "INV-001", "INV-002", "INV-003", "INV-004", "INV-005", "INV-006", "no-number", "INV-008", "INV-009" ],
       rows.map { |row| row.at_css(".app-invoice-card__number").text.squish }
@@ -63,6 +63,67 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     assert_select paid_row, "td[data-label='Status'] .app-invoice-status.app-invoice-status--paid", "Paid"
     assert_select paid_row, "td[data-label='Invoice due'] .app-invoice-card__summary", "INV-008"
     assert_not_includes paid_row.text, "overdue"
+  end
+
+  test "index shows reminder history newest first" do
+    account = sign_up_and_complete(email_address: "invoice-reminder-history@example.com")
+    source = create_invoice_source(account)
+    invoice = create_invoice(
+      source,
+      external_id: "reminder-history",
+      number: "INV-REMINDERS",
+      company: "Reminder History Company",
+      status: "open",
+      amount_due: 100,
+      due_on: Date.new(2026, 7, 20)
+    )
+
+    invoice.invoice_reminders.create!(
+      account:,
+      category: :pre_due,
+      day_offset: 7,
+      stage_key: "pre_due_7",
+      status: :sent,
+      sent_at: Time.zone.local(2026, 7, 13, 9),
+      created_at: Time.zone.local(2026, 7, 13, 9)
+    )
+    invoice.invoice_reminders.create!(
+      account:,
+      category: :pre_due,
+      day_offset: 1,
+      stage_key: "pre_due_1",
+      status: :failed,
+      failure_reason: "Mailbox unavailable",
+      created_at: Time.zone.local(2026, 7, 19, 9)
+    )
+
+    get invoices_url
+
+    row = css_select("#invoice-index tbody tr").find { |candidate| candidate.text.include?("INV-REMINDERS") }
+    history = row.css("td[data-label='Reminders'] [data-testid='invoice-reminder']")
+
+    assert_equal 2, history.size
+    assert_includes history.first.text.squish, "1 day before due Failed Jul 19, 2026 Delivery failed"
+    assert_includes history[1].text.squish, "7 days before due Sent Jul 13, 2026"
+  end
+
+  test "index shows when an invoice has no reminder history" do
+    account = sign_up_and_complete(email_address: "invoice-no-reminder-history@example.com")
+    source = create_invoice_source(account)
+    create_invoice(
+      source,
+      external_id: "no-reminder-history",
+      number: "INV-NO-REMINDERS",
+      company: "No Reminder History Company",
+      status: "open",
+      amount_due: 100,
+      due_on: Date.new(2026, 7, 20)
+    )
+
+    get invoices_url
+
+    row = css_select("#invoice-index tbody tr").find { |candidate| candidate.text.include?("INV-NO-REMINDERS") }
+    assert_select row, "td[data-label='Reminders']", "No reminders"
   end
 
   test "index prompts the account to connect an invoice source" do

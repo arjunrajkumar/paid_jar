@@ -47,4 +47,21 @@ module InvoicesHelper
   def invoice_status_label(invoice, as_of: Date.current)
     invoice.status_as_of(as_of: as_of).humanize
   end
+
+  def invoice_reminder_stage_label(reminder)
+    days = pluralize(reminder.day_offset, "day")
+
+    if reminder.category_pre_due?
+      "#{days} before due"
+    else
+      "#{days} overdue"
+    end
+  end
+
+  def invoice_reminder_attempt_label(reminder)
+    attempted_at = reminder.sent_at || reminder.created_at
+    return reminder.status.humanize unless attempted_at
+
+    "#{reminder.status.humanize} #{attempted_at.strftime('%b %-d, %Y')}"
+  end
 end

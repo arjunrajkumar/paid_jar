@@ -1,6 +1,12 @@
 require "test_helper"
 
 class AccountTest < ActiveSupport::TestCase
+  test "automatic invoice reminders are disabled by default" do
+    account = Account.create!(name: "Disabled Reminder Account")
+
+    assert_not_predicate account, :automatic_invoice_reminders_enabled?
+  end
+
   test "has many users" do
     assert_includes accounts(:paid_jar).users, users(:arjun)
   end

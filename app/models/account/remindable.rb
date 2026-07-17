@@ -2,6 +2,8 @@ module Account::Remindable
   extend ActiveSupport::Concern
 
   def enqueue_invoice_reminders
+    return unless automatic_invoice_reminders_enabled?
+
     InvoiceReminder::Policy::SCHEDULES.each do |payer_segment, stages|
       stages.each do |stage|
         enqueue_reminders(payer_segment:, stage:)

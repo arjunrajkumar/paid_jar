@@ -1,0 +1,17 @@
+<% if invoice.invoice_reminders.any? %>
+  <ol class="app-reminder-history" aria-label="Reminder history">
+    <% invoice.invoice_reminders.each do |reminder| %>
+      <li class="app-reminder-history__item" data-testid="invoice-reminder">
+        <span class="app-reminder-history__stage"><%= invoice_reminder_stage_label(reminder) %></span>
+        <span class="app-reminder-history__status app-reminder-history__status--<%= reminder.status %>">
+          <%= invoice_reminder_attempt_label(reminder) %>
+        </span>
+        <% if reminder.status_failed? %>
+          <span class="app-reminder-history__failure">Delivery failed</span>
+        <% end %>
+      </li>
+    <% end %>
+  </ol>
+<% else %>
+  <span class="app-table-note">No reminders</span>
+<% end %>

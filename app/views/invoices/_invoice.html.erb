@@ -15,4 +15,7 @@
   <td class="app-invoice-card__status" data-label="Status">
     <span class="app-invoice-status app-invoice-status--<%= invoice_status_tone(invoice, as_of: as_of) %>"><%= invoice_status_label(invoice, as_of: as_of) %></span>
   </td>
+  <td data-label="Reminders">
+    <%= render "invoices/reminder_history", invoice: %>
+  </td>
 </tr>

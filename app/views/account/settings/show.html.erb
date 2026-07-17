@@ -54,6 +54,26 @@
     </div>
   </section>
 
+  <section class="app-card">
+    <h2 class="app-card__title">Invoice reminders</h2>
+
+    <%= form_with model: @account,
+      url: account_settings_path(script_name: @account.slug),
+      method: :patch,
+      class: "app-reminder-settings-form" do |form| %>
+      <label class="app-reminder-setting">
+        <span class="app-row__text">
+          <span class="app-row__label">Automatic invoice reminders</span>
+          <span class="app-row__note">Send reminders using each customer's current debtor rating.</span>
+        </span>
+        <%= form.check_box :automatic_invoice_reminders_enabled,
+          class: "app-reminder-setting__checkbox" %>
+      </label>
+
+      <%= form.submit "Save reminder settings", class: "app-primary-button" %>
+    <% end %>
+  </section>
+
 </div>
 
 <section class="app-table-card app-segment-rules-card">

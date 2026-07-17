@@ -517,6 +517,25 @@ body.public {
   margin: 0;
 }
 
+.app-reminder-settings-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.app-reminder-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+}
+
+.app-reminder-setting__checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--color-accent);
+}
+
 .app-segment-rules-card {
   border: 1px solid var(--color-card-border);
   border-radius: var(--radius-card);
@@ -1068,17 +1087,22 @@ body.app-workspace {
 
 .app-workspace .app-invoice-table th:nth-child(1),
 .app-workspace .app-invoice-table td:nth-child(1) {
-  width: 38%;
+  width: 28%;
 }
 
 .app-workspace .app-invoice-table th:nth-child(2),
 .app-workspace .app-invoice-table td:nth-child(2) {
-  width: 40%;
+  width: 29%;
 }
 
 .app-workspace .app-invoice-table th:nth-child(3),
 .app-workspace .app-invoice-table td:nth-child(3) {
-  width: 22%;
+  width: 17%;
+}
+
+.app-workspace .app-invoice-table th:nth-child(4),
+.app-workspace .app-invoice-table td:nth-child(4) {
+  width: 26%;
 }
 
 .app-workspace .app-invoice-card__amount,
@@ -1158,10 +1182,42 @@ body.app-workspace {
   vertical-align: middle;
 }
 
+.app-workspace .app-reminder-history {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-workspace .app-reminder-history__item {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.app-workspace .app-reminder-history__stage {
+  color: var(--color-text-soft);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+}
+
+.app-workspace .app-reminder-history__status,
+.app-workspace .app-reminder-history__failure {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.app-workspace .app-reminder-history__status--failed,
+.app-workspace .app-reminder-history__failure {
+  color: #9b3039;
+}
+
 /* Keep the index as one scrollable table on narrow screens. */
 @media (max-width: 69.99rem) {
   .app-workspace .app-invoice-index .app-invoice-table {
-    min-width: 40rem;
+    min-width: 52rem;
   }
 
   .app-workspace .app-invoice-index .app-invoice-table th,

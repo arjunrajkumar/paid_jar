@@ -4,6 +4,7 @@ class InvoiceReminders::SendJob < ApplicationJob
   def perform(invoice_id, category, day_offset, tone)
     invoice = Invoice.find_by(id: invoice_id)
     return unless invoice
+    return unless invoice.account.automatic_invoice_reminders_enabled?
 
     stage_key = "#{category}_#{day_offset}"
     return if invoice.invoice_reminders.exists?(stage_key:)
@@ -19,6 +20,11 @@ class InvoiceReminders::SendJob < ApplicationJob
       sent_at: email_sent ? Time.current : nil,
       failure_reason:
     )
+
+    return unless email_sent
+
+    Rails.logger.info "Create notifications"
+    Rails.logger.info "Create final-stage escalation notification" if tone == "final"
   end
 
   private
