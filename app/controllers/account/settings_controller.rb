@@ -40,6 +40,7 @@ class Account::SettingsController < ApplicationController
     def account_params
       params.expect(account: [
         :automatic_invoice_reminders_enabled,
+        :invoice_reminder_from_email,
         customer_segments_attributes: {
           good_debtor: %i[id on_time_rate],
           bad_debtor: %i[id on_time_rate]
@@ -48,7 +49,7 @@ class Account::SettingsController < ApplicationController
     end
 
     def update_notice(attributes)
-      if attributes.key?(:automatic_invoice_reminders_enabled)
+      if attributes.key?(:automatic_invoice_reminders_enabled) || attributes.key?(:invoice_reminder_from_email)
         "Invoice reminder settings saved."
       else
         "Debtor rating rules saved. Refresh ratings to apply them."

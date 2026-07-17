@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_17_122000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_17_124000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -20,17 +20,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_122000) do
     t.boolean "automatic_invoice_reminders_enabled", default: false, null: false
     t.datetime "created_at", null: false
     t.bigint "external_account_id"
+    t.string "invoice_reminder_from_email"
     t.string "name", null: false
     t.datetime "updated_at", null: false
     t.index ["external_account_id"], name: "index_accounts_on_external_account_id", unique: true
     t.index ["name"], name: "index_accounts_on_name"
   end
 
+  create_table "customer_email_addresses", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.bigint "customer_id", null: false
+    t.string "email", null: false
+    t.datetime "updated_at", null: false
+    t.index ["customer_id", "email"], name: "index_customer_email_addresses_on_customer_id_and_email", unique: true
+    t.index ["customer_id"], name: "index_customer_email_addresses_on_customer_id"
+  end
+
   create_table "customer_segments", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.datetime "created_at", null: false
+    t.integer "minimum_payment_history"
     t.integer "on_time_rate"
     t.string "payer_segment", null: false
+    t.integer "typical_delay_days"
     t.datetime "updated_at", null: false
     t.index ["account_id", "payer_segment"], name: "index_customer_segments_on_account_id_and_payer_segment", unique: true
     t.index ["account_id"], name: "index_customer_segments_on_account_id"
@@ -213,6 +225,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_17_122000) do
     t.index ["identity_id"], name: "index_users_on_identity_id"
   end
 
+  add_foreign_key "customer_email_addresses", "customers", on_delete: :cascade
   add_foreign_key "customer_segments", "accounts"
   add_foreign_key "customers", "accounts"
   add_foreign_key "customers", "customer_segments"

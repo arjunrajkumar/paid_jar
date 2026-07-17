@@ -1,0 +1,90 @@
+<% @page_title = "Reminder recipients" %>
+<% @body_class = "app-workspace" %>
+
+<%= render "layouts/shared/application_nav", active: :invoices %>
+
+<header class="app-page-header">
+  <div class="app-page-header__content">
+    <h1 class="app-page-title">Reminder recipients</h1>
+    <p class="app-page-description" data-testid="recipient-customer-name"><%= @customer.name %></p>
+  </div>
+
+  <%= link_to "Back to invoices", invoices_path, class: "app-secondary-button" %>
+</header>
+
+<div class="app-section-grid app-recipient-grid">
+  <section class="app-card">
+    <h2 class="app-card__title">Synced email</h2>
+    <p class="app-card__description" data-testid="synced-email-source">
+      Updated automatically from <%= @customer.invoice_source.provider.humanize %>.
+    </p>
+
+    <div class="app-list">
+      <div class="app-row">
+        <div class="app-row__text">
+          <% if @customer.email.blank? %>
+            <div class="app-row__label" data-testid="synced-email-address">No email synced</div>
+            <div class="app-row__note">Add an email below so this customer can receive reminders.</div>
+          <% elsif @customer.synced_reminder_email_address.present? %>
+            <div class="app-row__label" data-testid="synced-email-address"><%= @customer.synced_reminder_email_address %></div>
+            <div class="app-row__note" data-testid="synced-email-included">Included in every invoice reminder.</div>
+          <% else %>
+            <div class="app-row__label" data-testid="invalid-synced-email-address"><%= @customer.email %></div>
+            <div class="app-row__note app-row__note--warning" data-testid="invalid-synced-email-warning">
+              This synced email is invalid and will not receive reminders. Add a valid email below.
+            </div>
+          <% end %>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="app-card">
+    <h2 class="app-card__title">Additional emails</h2>
+    <p class="app-card__description">
+      Each reminder is sent once to the synced email and every additional email.
+    </p>
+
+    <% if @email_addresses.any? %>
+      <div class="app-list">
+        <% @email_addresses.each do |email_address| %>
+          <div class="app-row">
+            <div class="app-row__text">
+              <div class="app-row__label" data-testid="additional-email-address"><%= email_address.email %></div>
+            </div>
+            <div class="app-row__actions">
+              <%= button_to "Remove",
+                customer_email_address_path(@customer, email_address),
+                method: :delete,
+                class: "app-inline-button app-inline-button--danger",
+                form: { data: { turbo_confirm: "Remove #{email_address.email}?" } } %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <p class="app-recipient-empty" data-testid="no-additional-email-addresses">No additional emails yet.</p>
+    <% end %>
+
+    <%= form_with model: @email_address,
+      url: customer_email_addresses_path(@customer),
+      class: "app-recipient-form" do |form| %>
+      <% if @email_address.errors.any? %>
+        <div class="app-form-errors" role="alert">
+          <%= @email_address.errors.full_messages.to_sentence %>
+        </div>
+      <% end %>
+
+      <div class="app-recipient-form__field">
+        <%= form.label :email, "Email address" %>
+        <%= form.email_field :email,
+          required: true,
+          autocomplete: "email",
+          maxlength: 254,
+          placeholder: "accounts@example.com" %>
+      </div>
+
+      <%= form.submit "Add email", class: "app-primary-button" %>
+    <% end %>
+  </section>
+</div>

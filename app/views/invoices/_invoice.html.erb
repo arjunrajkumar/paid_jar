@@ -4,6 +4,10 @@
       <strong class="app-customer-card__name"><%= invoice.customer&.name || invoice.contact_name.presence || "Unknown company" %></strong>
       <% if invoice.customer %>
         <span class="app-customer-card__payer-segment"><%= invoice.customer.payer_segment.humanize %></span>
+        <%= link_to "Manage recipients",
+          customer_email_addresses_path(invoice.customer),
+          class: "app-customer-card__recipient-link",
+          aria: { label: "Manage reminder recipients for #{invoice.customer.name}" } %>
       <% end %>
     </div>
   </td>

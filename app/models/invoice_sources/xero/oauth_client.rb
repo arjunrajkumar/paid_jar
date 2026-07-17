@@ -1,5 +1,6 @@
 require "json"
 require "net/http"
+require "openssl"
 require "uri"
 
 module InvoiceSources
@@ -61,6 +62,10 @@ module InvoiceSources
         get_json(config.invoice_uri(invoice_id), access_token: access_token, tenant_id: tenant_id)
       end
 
+      def online_invoice(access_token:, tenant_id:, invoice_id:)
+        get_json(config.online_invoice_uri(invoice_id), access_token: access_token, tenant_id: tenant_id)
+      end
+
       private
         def post_token(form)
           request = Net::HTTP::Post.new(config.token_uri)
@@ -94,6 +99,8 @@ module InvoiceSources
           raise Error, message
         rescue JSON::ParserError
           raise Error, "Xero returned an invalid response."
+        rescue Timeout::Error, SocketError, SystemCallError, IOError, OpenSSL::SSL::SSLError => error
+          raise Error, "Xero request failed: #{error.message}"
         end
     end
   end

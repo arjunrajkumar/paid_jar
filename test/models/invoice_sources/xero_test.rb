@@ -47,11 +47,13 @@ module InvoiceSources
       assert_equal "open", invoice.status
       assert_equal BigDecimal("250.50"), invoice.total
       assert_equal Date.new(2026, 7, 11), invoice.paid_on
+      assert_equal "https://in.xero.com/invoice-456", invoice.provider_data["online_invoice_url"]
       assert_equal customer, invoice.customer
       assert_equal "Example Customer", customer.name
       assert_equal "billing@example.com", customer.email
       assert_equal Date.new(2026, 7, 1), customer.details_observed_at.to_date
       assert fake_client.invoices_called
+      assert_equal 1, fake_client.online_invoice_calls
     end
 
     test "sync_invoices reuses the Xero customer for the same contact" do
@@ -65,6 +67,53 @@ module InvoiceSources
       assert_no_difference [ -> { source.customers.count }, -> { source.invoices.count } ] do
         InvoiceSources::Xero.new(source).sync_invoices!
       end
+
+      assert_equal 1, fake_client.online_invoice_calls
+    end
+
+    test "sync_invoices does not request an online URL for an invoice that is not outstanding" do
+      source = invoice_sources(:xero)
+      fake_client = FakeXeroClient.new(status: "PAID", amount_due: "0.00")
+
+      InvoiceSources::Xero::InvoiceSync.new(source, client: fake_client).sync!
+
+      invoice = source.invoices.find_by!(external_id: "invoice-456")
+      assert_predicate invoice, :status_paid?
+      assert_nil invoice.online_invoice_url
+      assert_equal 0, fake_client.online_invoice_calls
+    end
+
+    test "sync_invoices keeps syncing after online invoice enrichment fails" do
+      source = invoice_sources(:xero)
+      error = InvoiceSources::Xero::OauthClient::Error.new("rate limited")
+      fake_client = FakeXeroClient.new(
+        additional_invoice_count: 1,
+        online_invoice_error: error
+      )
+      Rails.logger.expects(:warn).with(
+        "xero.online_invoice_url_unavailable " \
+          "invoice_source_id=#{source.id} invoice_id=invoice-456 error=rate limited"
+      )
+
+      InvoiceSources::Xero::InvoiceSync.new(source, client: fake_client).sync!
+
+      assert source.invoices.exists?(external_id: "invoice-456")
+      assert source.invoices.exists?(external_id: "invoice-extra-1")
+      assert_equal 1, fake_client.online_invoice_calls
+      assert_predicate source.reload, :active?
+      assert_nil source.last_error
+    end
+
+    test "sync_invoices caps online invoice enrichment requests" do
+      source = invoice_sources(:xero)
+      enrichment_limit = InvoiceSources::Xero::InvoiceSync::ONLINE_INVOICE_ENRICHMENT_LIMIT
+      fake_client = FakeXeroClient.new(additional_invoice_count: enrichment_limit)
+
+      InvoiceSources::Xero::InvoiceSync.new(source, client: fake_client).sync!
+
+      assert_equal enrichment_limit, fake_client.online_invoice_calls
+      assert_predicate source.reload, :active?
+      assert_nil source.invoices.find_by!(external_id: "invoice-extra-#{enrichment_limit}").online_invoice_url
     end
 
     test "sync_invoices uses an invoice identity when Xero omits the contact id" do
@@ -128,13 +177,27 @@ module InvoiceSources
 
     class FakeXeroClient
       attr_accessor :exchange_code_called, :connections_called, :userinfo_called,
-        :invoices_called, :invoices_filter, :refresh_token_called
+        :invoices_called, :invoices_filter, :refresh_token_called, :online_invoice_calls
 
-      def initialize(tenant_id: "tenant-123", tenant_name: "PaymentReminder Demo", include_payable_invoice: false, contact_id: "contact-456")
+      def initialize(
+        tenant_id: "tenant-123",
+        tenant_name: "PaymentReminder Demo",
+        include_payable_invoice: false,
+        additional_invoice_count: 0,
+        contact_id: "contact-456",
+        status: "AUTHORISED",
+        amount_due: "250.50",
+        online_invoice_error: nil
+      )
         @tenant_id = tenant_id
         @tenant_name = tenant_name
         @include_payable_invoice = include_payable_invoice
+        @additional_invoice_count = additional_invoice_count
         @contact_id = contact_id
+        @status = status
+        @amount_due = amount_due
+        @online_invoice_error = online_invoice_error
+        @online_invoice_calls = 0
       end
 
       def exchange_code(code:)
@@ -192,41 +255,45 @@ module InvoiceSources
 
         self.invoices_called = true
         self.invoices_filter = where
-        {
-          "Invoices" => [
-            {
-              "InvoiceID" => "invoice-456",
-              "InvoiceNumber" => "INV-456",
-              "Type" => "ACCREC",
-              "Status" => "AUTHORISED",
-              "CurrencyCode" => "USD",
-              "AmountDue" => "250.50",
-              "AmountPaid" => "0.00",
-              "Total" => "250.50",
-              "DateString" => "2026-07-01",
-              "DueDateString" => "2026-07-31",
-              "FullyPaidOnDate" => "/Date(1783728000000+0000)/",
-              "Contact" => {
-                "ContactID" => @contact_id,
-                "Name" => "Example Customer",
-                "EmailAddress" => "billing@example.com"
-              }
-            }
-          ].tap do |invoices|
-            if @include_payable_invoice
-              invoices << {
-                "InvoiceID" => "bill-456",
-                "InvoiceNumber" => "BILL-456",
-                "Type" => "ACCPAY",
-                "Status" => "AUTHORISED",
-                "CurrencyCode" => "USD",
-                "AmountDue" => "100.00",
-                "AmountPaid" => "0.00",
-                "Total" => "100.00"
-              }
-            end
-          end
+        invoice = {
+          "InvoiceID" => "invoice-456",
+          "InvoiceNumber" => "INV-456",
+          "Type" => "ACCREC",
+          "Status" => @status,
+          "CurrencyCode" => "USD",
+          "AmountDue" => @amount_due,
+          "AmountPaid" => "0.00",
+          "Total" => "250.50",
+          "DateString" => "2026-07-01",
+          "DueDateString" => "2026-07-31",
+          "FullyPaidOnDate" => "/Date(1783728000000+0000)/",
+          "Contact" => {
+            "ContactID" => @contact_id,
+            "Name" => "Example Customer",
+            "EmailAddress" => "billing@example.com"
+          }
         }
+        invoices = [ invoice ]
+        1.upto(@additional_invoice_count) do |index|
+          invoices << invoice.merge(
+            "InvoiceID" => "invoice-extra-#{index}",
+            "InvoiceNumber" => "INV-EXTRA-#{index}"
+          )
+        end
+        if @include_payable_invoice
+          invoices << {
+            "InvoiceID" => "bill-456",
+            "InvoiceNumber" => "BILL-456",
+            "Type" => "ACCPAY",
+            "Status" => "AUTHORISED",
+            "CurrencyCode" => "USD",
+            "AmountDue" => "100.00",
+            "AmountPaid" => "0.00",
+            "Total" => "100.00"
+          }
+        end
+
+        { "Invoices" => invoices }
       end
 
       def invoice(access_token:, tenant_id:, invoice_id:)
@@ -246,6 +313,20 @@ module InvoiceSources
               "AmountPaid" => "0.00",
               "Total" => "100.00"
             }
+          ]
+        }
+      end
+
+      def online_invoice(access_token:, tenant_id:, invoice_id:)
+        raise "unexpected access token" unless access_token.in?(%w[access-token new-access-token])
+        raise "unexpected tenant id" unless tenant_id == "xero-tenant-123"
+        self.online_invoice_calls += 1
+        raise @online_invoice_error if @online_invoice_error
+        raise "unexpected invoice id" unless invoice_id.start_with?("invoice-")
+
+        {
+          "OnlineInvoices" => [
+            { "OnlineInvoiceUrl" => "https://in.xero.com/#{invoice_id}" }
           ]
         }
       end

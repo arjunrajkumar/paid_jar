@@ -89,6 +89,14 @@ class Invoice < ApplicationRecord
     status
   end
 
+  def online_invoice_url
+    provider_data["online_invoice_url"].presence
+  end
+
+  def invoice_pdf_url
+    provider_data["invoice_pdf_url"].presence
+  end
+
   private
     def set_completed_on
       if status_paid?

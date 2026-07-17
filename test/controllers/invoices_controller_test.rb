@@ -37,6 +37,7 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     )
 
     rows = css_select("#invoice-index tbody tr")
+    overdue_customer = account.customers.find_by!(name: "Zeta Overdue")
     assert_equal 9, rows.size
     assert rows.all? { |row| row.css("td").size == 4 }
     assert_equal(
@@ -49,6 +50,10 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     assert_includes company_cell["class"].split, "app-customer-card__identity"
     assert_equal "Zeta Overdue", company_cell.at_css(".app-customer-card__name").text.squish
     assert_equal "Bad debtor", company_cell.at_css(".app-customer-card__payer-segment").text.squish
+    assert_select company_cell,
+      "a[href=?]",
+      customer_email_addresses_path(overdue_customer),
+      "Manage recipients"
     assert_select overdue_row, "td[data-label='Invoice due'] time", count: 0
     assert_select overdue_row, "td[data-label='Invoice due'] .app-invoice-card__amount", "USD 7,250"
     assert_select overdue_row, "td[data-label='Invoice due'] .app-table-note.app-invoice-card__summary:last-child", "INV-001 4 days overdue"

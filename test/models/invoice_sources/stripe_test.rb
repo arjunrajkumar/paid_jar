@@ -49,6 +49,8 @@ module InvoiceSources
       assert_equal Date.new(2026, 7, 31), invoice.due_on
       assert_equal Date.new(2026, 7, 15), invoice.paid_on
       assert_equal "billing@example.com", invoice.provider_data["customer_email"]
+      assert_equal "https://invoice.stripe.com/i/in_456", invoice.provider_data["online_invoice_url"]
+      assert_equal "https://invoice.stripe.com/i/in_456.pdf", invoice.provider_data["invoice_pdf_url"]
       assert_equal customer, invoice.customer
       assert_equal "Example Stripe Customer", customer.name
       assert_equal "billing@example.com", customer.email

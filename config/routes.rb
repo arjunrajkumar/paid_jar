@@ -1,6 +1,11 @@
 Rails.application.routes.draw do
   root "landing#index"
   resources :invoices, only: :index
+  resources :customers, only: [] do
+    resources :email_addresses,
+      module: :customers,
+      only: %i[index create destroy]
+  end
 
   scope module: :invoice_sources do
     get "xero/connect", to: "xero_connections#new", as: :new_xero_connection

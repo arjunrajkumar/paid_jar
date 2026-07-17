@@ -44,7 +44,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     sent_at = Time.zone.local(2026, 7, 24, 12)
 
     travel_to sent_at do
-      assert_no_emails do
+      assert_emails 1 do
         assert_difference -> { @invoice.invoice_reminders.count }, 1 do
           InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
         end
@@ -98,7 +98,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     subscribe_to(:invoice_reminder)
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
-      assert_emails 1 do
+      assert_emails 2 do
         InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
       end
     end
@@ -110,7 +110,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     subscribe_to(:invoice_reminder, :invoice_reminder_stopped)
 
     travel_to Time.zone.local(2026, 8, 14, 12) do
-      assert_emails 2 do
+      assert_emails 3 do
         InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 14, "final")
       end
     end
@@ -205,10 +205,14 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     travel_to Time.zone.local(2026, 7, 24, 12) do
       InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
       @invoice.customer.update!(customer_segment: customer_segments(:bad_debtor_segment))
+      current_stage = @invoice.account.invoice_schedules.find_by!(
+        kind: :bad_debtor,
+        category: :pre_due,
+        day_offset: 7
+      )
       InvoiceReminders::SendJob.any_instance.expects(:send_email).with(
         invoice: @invoice,
-        stage_key: "pre_due_7",
-        tone: "direct"
+        stage: current_stage
       ).returns(true)
 
       assert_difference -> { @invoice.invoice_reminders.count }, 1 do
@@ -230,8 +234,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       schedule.update!(tone: "firm")
       InvoiceReminders::SendJob.any_instance.expects(:send_email).with(
         invoice: @invoice,
-        stage_key: "pre_due_7",
-        tone: "firm"
+        stage: schedule
       ).returns(true)
 
       assert_difference -> { @invoice.invoice_reminders.count }, 1 do
@@ -354,10 +357,14 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
 
   test "does not trust a queued final tone" do
     subscribe_to(:invoice_reminder_stopped)
+    current_stage = @invoice.account.invoice_schedules.find_by!(
+      kind: @invoice.customer.payer_segment,
+      category: :pre_due,
+      day_offset: 7
+    )
     InvoiceReminders::SendJob.any_instance.expects(:send_email).with(
       invoice: @invoice,
-      stage_key: "pre_due_7",
-      tone: "friendly"
+      stage: current_stage
     ).returns(true)
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
@@ -376,7 +383,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     ).update!(tone: :firm)
 
     travel_to Time.zone.local(2026, 8, 14, 12) do
-      assert_emails 1 do
+      assert_emails 2 do
         InvoiceReminders::SendJob.perform_now(@invoice.id, "overdue", 14, "final")
       end
     end
@@ -393,7 +400,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     ).delete_all
 
     travel_to Time.zone.local(2026, 7, 30, 12) do
-      assert_no_emails do
+      assert_emails 1 do
         InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 1, "direct")
       end
     end
@@ -408,6 +415,38 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       "invoice_reminder.skipped reason=missing_email " \
         "account_id=#{@invoice.account_id} invoice_id=#{@invoice.id} " \
         "customer_id=#{@invoice.customer_id} stage_key=pre_due_7"
+    )
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+      end
+    end
+  end
+
+  test "uses an additional customer email added after the reminder was queued" do
+    @invoice.customer.update!(email: nil)
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
+      @invoice.customer.additional_email_addresses.create!(email: "accounts@example.com")
+
+      assert_emails 1 do
+        assert_difference -> { @invoice.invoice_reminders.count }, 1 do
+          perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+        end
+      end
+    end
+
+    assert_equal [ "accounts@example.com" ], ActionMailer::Base.deliveries.last.to
+  end
+
+  test "skips an account without a sender email and creates no receipt" do
+    @invoice.account.update_column(:invoice_reminder_from_email, nil)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+    Rails.logger.expects(:warn).with(
+      "invoice_reminder.skipped reason=missing_sender_email " \
+        "account_id=#{@invoice.account_id} invoice_id=#{@invoice.id} stage_key=pre_due_7"
     )
 
     travel_to Time.zone.local(2026, 7, 24, 12) do

@@ -66,6 +66,10 @@ module InvoiceSources
         URI("https://api.xero.com/api.xro/2.0/Invoices/#{CGI.escape(invoice_id)}")
       end
 
+      def online_invoice_uri(invoice_id)
+        URI("#{invoice_uri(invoice_id)}/OnlineInvoice")
+      end
+
       private
         attr_reader :host
 

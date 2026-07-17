@@ -52,7 +52,8 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "tenant-123", source.external_account_id
     assert_equal "PaymentReminder Demo", source.external_account_name
     assert_equal "person@example.com", source.provider_data["email"]
-    assert_equal [ "INV-456" ], account.invoices.where(invoice_source: source).pluck(:number)
+    invoice = account.invoices.find_by!(invoice_source: source, number: "INV-456")
+    assert_equal "https://in.xero.com/invoice-456", invoice.online_invoice_url
   end
 
   test "callback rejects invalid state" do
@@ -215,6 +216,18 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
                 "Name" => "Example Customer"
               }
             }
+          ]
+        }
+      end
+
+      def online_invoice(access_token:, tenant_id:, invoice_id:)
+        raise "unexpected access token" unless access_token == "access-token"
+        raise "unexpected tenant id" unless tenant_id == "tenant-123"
+        raise "unexpected invoice id" unless invoice_id == "invoice-456"
+
+        {
+          "OnlineInvoices" => [
+            { "OnlineInvoiceUrl" => "https://in.xero.com/invoice-456" }
           ]
         }
       end

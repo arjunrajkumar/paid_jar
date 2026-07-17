@@ -1,0 +1,20 @@
+<%= @heading %>
+
+Hello <%= @customer.name %>,
+
+<%= @message %>
+
+Invoice details
+Invoice: <%= @invoice_reference %>
+Invoice date: <%= @invoice_date %>
+Due date: <%= @due_date %>
+Amount due: <%= @amount_due %>
+
+<% if @online_invoice_url.present? %>
+View Invoice: <%= @online_invoice_url %>
+
+<% end %>
+If you have already paid, please disregard this reminder.
+
+Thank you,
+<%= @account.name %>

@@ -7,6 +7,45 @@ class AccountTest < ActiveSupport::TestCase
     assert_not_predicate account, :automatic_invoice_reminders_enabled?
   end
 
+  test "requires a sender email when automatic invoice reminders are enabled" do
+    account = Account.new(
+      name: "Missing Sender Account",
+      automatic_invoice_reminders_enabled: true
+    )
+
+    assert_not account.valid?
+    assert_includes account.errors[:invoice_reminder_from_email], "can't be blank"
+  end
+
+  test "normalizes the invoice reminder sender email" do
+    account = Account.create!(
+      name: "Normalized Sender Account",
+      invoice_reminder_from_email: " Billing@Example.COM "
+    )
+
+    assert_equal "billing@example.com", account.invoice_reminder_from_email
+  end
+
+  test "rejects an invalid invoice reminder sender email" do
+    account = Account.new(
+      name: "Invalid Sender Account",
+      invoice_reminder_from_email: "not-an-email"
+    )
+
+    assert_not account.valid?
+    assert_includes account.errors[:invoice_reminder_from_email], "is invalid"
+  end
+
+  test "rejects an invoice reminder sender longer than a mailbox address" do
+    account = Account.new(
+      name: "Long Sender Account",
+      invoice_reminder_from_email: "#{"a" * 243}@example.com"
+    )
+
+    assert_not account.valid?
+    assert_includes account.errors[:invoice_reminder_from_email], "is too long (maximum is 254 characters)"
+  end
+
   test "has many users" do
     assert_includes accounts(:paid_jar).users, users(:arjun)
   end
@@ -42,6 +81,20 @@ class AccountTest < ActiveSupport::TestCase
 
     assert_predicate account.users.find_by!(role: :system), :system?
     assert_predicate account.users.find_by!(identity: identity), :owner?
+    assert_equal "owner@example.com", account.invoice_reminder_from_email
+  end
+
+  test "keeps an explicit invoice reminder sender when creating an account with an owner" do
+    identity = Identity.create!(email_address: "owner-explicit@example.com")
+    account = Account.create_with_owner(
+      account: {
+        name: "Explicit Sender Account",
+        invoice_reminder_from_email: "accounts@example.com"
+      },
+      owner: { name: "Owner User", identity: identity }
+    )
+
+    assert_equal "accounts@example.com", account.invoice_reminder_from_email
   end
 
   test "rolls back account when owner creation fails" do

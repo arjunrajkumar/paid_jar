@@ -257,7 +257,8 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
     )
     other_account = Account.create!(
       name: "Other Custom Schedule Account",
-      automatic_invoice_reminders_enabled: true
+      automatic_invoice_reminders_enabled: true,
+      invoice_reminder_from_email: "reminders@other.example"
     )
     other_invoice_source = other_account.invoice_sources.create!(
       provider: :stripe,

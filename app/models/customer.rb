@@ -6,6 +6,11 @@ class Customer < ApplicationRecord
   belongs_to :invoice_source, inverse_of: :customers
   belongs_to :customer_segment, inverse_of: :customers
   has_many :invoices, dependent: :destroy, inverse_of: :customer
+  has_many :additional_email_addresses,
+    -> { order(:id) },
+    class_name: "CustomerEmailAddress",
+    dependent: :destroy,
+    inverse_of: :customer
 
   before_validation :assign_initial_customer_segment, on: :create
 
@@ -14,6 +19,16 @@ class Customer < ApplicationRecord
   validate :customer_segment_matches_account
 
   delegate :payer_segment, to: :customer_segment
+
+  def reminder_email_addresses
+    [ synced_reminder_email_address, *additional_email_addresses.pluck(:email) ]
+      .filter_map { |email_address| normalize_reminder_email_address(email_address) }
+      .uniq
+  end
+
+  def synced_reminder_email_address
+    normalize_reminder_email_address(email)
+  end
 
   private
     def assign_initial_customer_segment
@@ -24,5 +39,14 @@ class Customer < ApplicationRecord
       return if account.blank? || customer_segment.blank? || customer_segment.account == account
 
       errors.add(:customer_segment, "must belong to the customer account")
+    end
+
+    def normalize_reminder_email_address(email_address)
+      normalized_email_address = email_address.to_s.strip.downcase
+      return if normalized_email_address.blank?
+      return if normalized_email_address.length > 254
+      return unless normalized_email_address.match?(URI::MailTo::EMAIL_REGEXP)
+
+      normalized_email_address
     end
 end

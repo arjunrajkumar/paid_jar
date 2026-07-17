@@ -47,13 +47,14 @@ group :development, :test do
   # Static analysis for security vulnerabilities [https://brakemanscanner.org/]
   gem "brakeman", require: false
 
-  gem "letter_opener"
-
   # Omakase Ruby styling [https://github.com/rails/rubocop-rails-omakase/]
   gem "rubocop-rails-omakase", require: false
 end
 
 group :development do
+  # Preview outgoing mail in the browser during local development.
+  gem "letter_opener"
+
   # Use console on exceptions pages [https://github.com/rails/web-console]
   gem "web-console"
 end

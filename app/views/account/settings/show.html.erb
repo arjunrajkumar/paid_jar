@@ -61,6 +61,20 @@
       url: account_settings_path(script_name: @account.slug),
       method: :patch,
       class: "app-reminder-settings-form" do |form| %>
+      <div class="app-reminder-sender-field">
+        <div class="app-row__text">
+          <%= form.label :invoice_reminder_from_email,
+            "Send reminders from",
+            class: "app-row__label" %>
+          <div class="app-row__note">Customers will see this address as the sender and can reply to it.</div>
+        </div>
+        <%= form.email_field :invoice_reminder_from_email,
+          autocomplete: "email",
+          maxlength: 254,
+          placeholder: "billing@company.com",
+          class: "auth-input" %>
+      </div>
+
       <label class="app-reminder-setting">
         <span class="app-row__text">
           <span class="app-row__label">Automatic invoice reminders</span>

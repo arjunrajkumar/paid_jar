@@ -17,6 +17,47 @@ class CustomerTest < ActiveSupport::TestCase
     assert_equal @source.account.customer_segment(:normal_debtor), @customer.customer_segment
   end
 
+  test "combines the synced and additional reminder email addresses" do
+    @customer.additional_email_addresses.create!(email: " Accounts@Example.com ")
+    @customer.additional_email_addresses.create!(email: "owner@example.com")
+
+    assert_equal(
+      %w[customer@example.com accounts@example.com owner@example.com],
+      @customer.reminder_email_addresses
+    )
+  end
+
+  test "normalizes deduplicates and filters reminder email addresses" do
+    @customer.additional_email_addresses.create!(email: "accounts@example.com")
+    @customer.additional_email_addresses.create!(email: "owner@example.com")
+    @customer.update_column(:email, " ACCOUNTS@EXAMPLE.COM ")
+
+    assert_equal(
+      %w[accounts@example.com owner@example.com],
+      @customer.reminder_email_addresses
+    )
+
+    @customer.update_column(:email, "not-an-email")
+
+    assert_equal(
+      %w[accounts@example.com owner@example.com],
+      @customer.reminder_email_addresses
+    )
+
+    @customer.update_column(:email, "#{"a" * 243}@example.com")
+
+    assert_equal(
+      %w[accounts@example.com owner@example.com],
+      @customer.reminder_email_addresses
+    )
+  end
+
+  test "does not validate the provider synced email" do
+    @customer.email = "provider supplied this invalid value"
+
+    assert_predicate @customer, :valid?
+  end
+
   test "starts in the account normal debtor segment" do
     assert_equal @source.account.customer_segment(:normal_debtor), @customer.customer_segment
     assert_equal "normal_debtor", @customer.payer_segment

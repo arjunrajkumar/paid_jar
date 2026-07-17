@@ -18,6 +18,7 @@ class InvoiceReminders::SendJob < ApplicationJob
     return unless stage
     return unless stage_not_delivered?(invoice:, stage:)
     return unless stage_due_today?(invoice:, stage:)
+    return unless sender_available?(invoice:, stage_key:)
     return unless recipient_available?(invoice:, stage_key:)
 
     deliver_reminder(invoice:, stage:)
@@ -80,7 +81,7 @@ class InvoiceReminders::SendJob < ApplicationJob
     end
 
     def recipient_available?(invoice:, stage_key:)
-      return true if invoice.customer.email.present?
+      return true if invoice.customer.reminder_email_addresses.any?
 
       log_skip(
         :warn,
@@ -92,13 +93,16 @@ class InvoiceReminders::SendJob < ApplicationJob
       false
     end
 
+    def sender_available?(invoice:, stage_key:)
+      return true if invoice.account.invoice_reminder_from_email.present?
+
+      log_skip(:warn, invoice:, stage_key:, reason: "missing_sender_email")
+      false
+    end
+
     def deliver_reminder(invoice:, stage:)
       terminal = stage.category_overdue? && stage.terminal?
-      email_sent, failure_reason = send_email_result(
-        invoice:,
-        stage_key: stage.key,
-        tone: stage.tone.to_s
-      )
+      email_sent, failure_reason = send_email_result(invoice:, stage:)
 
       reminder = record_delivery(invoice:, stage:, email_sent:, failure_reason:)
       log_delivery(invoice:, stage:, email_sent:)
@@ -136,13 +140,14 @@ class InvoiceReminders::SendJob < ApplicationJob
       InvoiceReminders::Notifier.deliver(invoice:, reminder:, terminal:)
     end
 
-    def send_email_result(invoice:, stage_key:, tone:)
-      [ send_email(invoice:, stage_key:, tone:), nil ]
+    def send_email_result(invoice:, stage:)
+      [ send_email(invoice:, stage:), nil ]
     rescue StandardError => error
       [ false, error.message ]
     end
 
-    def send_email(invoice:, stage_key:, tone:)
+    def send_email(invoice:, stage:)
+      InvoiceReminderMailer.reminder(invoice, stage).deliver_now
       true
     end
 

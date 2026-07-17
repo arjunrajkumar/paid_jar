@@ -51,6 +51,53 @@ module InvoiceSources
         assert_equal [], payload.fetch("Invoices")
       end
 
+      test "online_invoice retrieves the customer-facing Xero invoice URL" do
+        stub_request(
+          :get,
+          "https://api.xero.com/api.xro/2.0/Invoices/invoice-123/OnlineInvoice"
+        ).with(
+          headers: {
+            "Authorization" => "Bearer access-token",
+            "xero-tenant-id" => "tenant-123"
+          }
+        ).to_return(
+          status: 200,
+          body: {
+            OnlineInvoices: [
+              { OnlineInvoiceUrl: "https://in.xero.com/invoice-123" }
+            ]
+          }.to_json
+        )
+
+        payload = OauthClient.new.online_invoice(
+          access_token: "access-token",
+          tenant_id: "tenant-123",
+          invoice_id: "invoice-123"
+        )
+
+        assert_equal(
+          "https://in.xero.com/invoice-123",
+          payload.fetch("OnlineInvoices").first.fetch("OnlineInvoiceUrl")
+        )
+      end
+
+      test "wraps Xero network failures in a retryable client error" do
+        stub_request(
+          :get,
+          "https://api.xero.com/api.xro/2.0/Invoices/invoice-123/OnlineInvoice"
+        ).to_timeout
+
+        error = assert_raises OauthClient::Error do
+          OauthClient.new.online_invoice(
+            access_token: "access-token",
+            tenant_id: "tenant-123",
+            invoice_id: "invoice-123"
+          )
+        end
+
+        assert_match "Xero request failed", error.message
+      end
+
       private
         def with_xero_credentials(**xero)
           credentials = ActiveSupport::OrderedOptions.new

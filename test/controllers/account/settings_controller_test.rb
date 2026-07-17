@@ -20,6 +20,7 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "a[href=?]", new_stripe_connection_path, "Connect"
     assert_select ".app-card", count: 4
     assert_select ".app-card", text: /Invoice reminders/ do
+      assert_select "input[name='account[invoice_reminder_from_email]'][type='email'][maxlength='254'][value=?]", "owner-settings@example.com"
       assert_select "input[name='account[automatic_invoice_reminders_enabled]'][type='checkbox']:not([checked])"
       assert_select "input[type='submit'][value='Save reminder settings']"
     end
@@ -108,6 +109,39 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Invoice reminder settings saved.", flash[:notice]
     assert_predicate account.reload, :automatic_invoice_reminders_enabled?
     assert_not_predicate other_account.reload, :automatic_invoice_reminders_enabled?
+  end
+
+  test "update saves the invoice reminder sender for the current account" do
+    account = sign_up_and_complete(email_address: "owner-sender-settings@example.com")
+    other_account = Account.create!(
+      name: "Other Sender Settings Account",
+      invoice_reminder_from_email: "other@example.com"
+    )
+
+    patch account_settings_url(script_name: account.slug), params: {
+      account: { invoice_reminder_from_email: " Billing@Example.COM " }
+    }
+
+    assert_redirected_to account_settings_url(script_name: account.slug)
+    assert_equal "Invoice reminder settings saved.", flash[:notice]
+    assert_equal "billing@example.com", account.reload.invoice_reminder_from_email
+    assert_equal "other@example.com", other_account.reload.invoice_reminder_from_email
+  end
+
+  test "update renders an invalid invoice reminder sender" do
+    account = sign_up_and_complete(email_address: "owner-invalid-sender@example.com")
+
+    patch account_settings_url(script_name: account.slug), params: {
+      account: {
+        automatic_invoice_reminders_enabled: "1",
+        invoice_reminder_from_email: "not-an-email"
+      }
+    }
+
+    assert_response :unprocessable_entity
+    assert_select "#flash", text: /Invoice reminder from email is invalid/
+    assert_not_predicate account.reload, :automatic_invoice_reminders_enabled?
+    assert_equal "owner-invalid-sender@example.com", account.invoice_reminder_from_email
   end
 
   test "update saves notification preferences for the current user" do

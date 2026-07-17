@@ -1,0 +1,25 @@
+<h1><%= @heading %></h1>
+
+<p>Hello <%= @customer.name %>,</p>
+
+<p><%= @message %></p>
+
+<h2>Invoice details</h2>
+
+<ul>
+  <li><strong>Invoice:</strong> <%= @invoice_reference %></li>
+  <li><strong>Invoice date:</strong> <%= @invoice_date %></li>
+  <li><strong>Due date:</strong> <%= @due_date %></li>
+  <li><strong>Amount due:</strong> <%= @amount_due %></li>
+</ul>
+
+<% if @online_invoice_url.present? %>
+  <p><%= link_to "View Invoice", @online_invoice_url %></p>
+<% end %>
+
+<p>If you have already paid, please disregard this reminder.</p>
+
+<p>
+  Thank you,<br>
+  <%= @account.name %>
+</p>

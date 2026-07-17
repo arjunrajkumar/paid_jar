@@ -69,8 +69,8 @@ module InvoiceSources
                 billing_reason: payload["billing_reason"],
                 collection_method: payload["collection_method"],
                 customer_email: customer_email(payload),
-                hosted_invoice_url: payload["hosted_invoice_url"],
-                invoice_pdf: payload["invoice_pdf"],
+                online_invoice_url: payload["hosted_invoice_url"],
+                invoice_pdf_url: payload["invoice_pdf"],
                 amount_due_cents: payload["amount_due"],
                 amount_remaining_cents: payload["amount_remaining"]
               }.compact,

@@ -529,6 +529,11 @@ body.public {
   gap: 1rem;
 }
 
+.app-reminder-sender-field {
+  display: grid;
+  gap: 0.5rem;
+}
+
 .app-reminder-setting {
   display: flex;
   align-items: center;
@@ -702,6 +707,18 @@ body.public {
 
 .app-inline-button:hover {
   color: var(--color-accent-dark);
+}
+
+.app-inline-button--danger {
+  color: #b42318;
+}
+
+.app-inline-button--danger:hover {
+  color: #8f1d1d;
+}
+
+.app-row__note--warning {
+  color: #b42318;
 }
 
 .app-inline-button svg {
@@ -1133,6 +1150,78 @@ body.app-workspace {
   line-height: 1rem;
 }
 
+.app-workspace .app-customer-card__recipient-link {
+  color: var(--color-accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1rem;
+  text-decoration: none;
+}
+
+.app-workspace .app-customer-card__recipient-link:hover {
+  color: var(--color-accent-dark);
+  text-decoration: underline;
+}
+
+.app-workspace .app-page-description {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.9375rem;
+  line-height: 1.5rem;
+}
+
+.app-workspace .app-recipient-grid {
+  align-items: start;
+}
+
+.app-workspace .app-recipient-empty {
+  margin: 1rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-recipient-form {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.app-workspace .app-recipient-form__field {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 0.375rem;
+}
+
+.app-workspace .app-recipient-form__field label {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-recipient-form__field input {
+  width: 100%;
+  min-height: 2.5rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface);
+  color: var(--color-text-soft);
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.app-workspace .app-form-errors {
+  flex-basis: 100%;
+  color: #b42318;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
 .app-workspace .app-invoice-card__summary {
   margin-top: 0.35rem;
 }
@@ -1360,6 +1449,11 @@ body.app-workspace {
 
   .app-workspace .app-segment-rules-card__header .app-secondary-button {
     width: 100%;
+  }
+
+  .app-workspace .app-recipient-form {
+    align-items: stretch;
+    flex-direction: column;
   }
 
 }
