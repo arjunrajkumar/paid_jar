@@ -63,6 +63,10 @@ Please set up PaymentReminder locally.
 
 This gives the agent enough context to install dependencies, prepare the database, verify the app, and guide credential setup without requiring a long manual checklist.
 
+## Production launch
+
+Before opening the hosted service to customers, complete the [external going-live checklist](docs/GOING_LIVE_CHECKLIST.md) for DNS, Amazon SES, Google OAuth verification, Xero, Stripe, backups, and monitoring.
+
 ## Xero
 
 Create a Xero OAuth 2.0 app and configure its redirect URI to:

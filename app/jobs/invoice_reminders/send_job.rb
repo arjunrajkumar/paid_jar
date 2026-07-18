@@ -7,6 +7,12 @@ class InvoiceReminders::SendJob < ApplicationJob
       job.send(:record_exhausted_temporary_failure, error)
     end
 
+  retry_on InvoiceReminders::InvoiceFreshnessCheck::Error,
+    InvoiceSources::Xero::OauthClient::Error,
+    InvoiceSources::Stripe::OauthClient::Error,
+    wait: :polynomially_longer,
+    attempts: 5
+
   limits_concurrency(
     to: 1,
     key: ->(invoice_id, category, day_offset, *) { "#{invoice_id}:#{category}_#{day_offset}" },
@@ -18,15 +24,15 @@ class InvoiceReminders::SendJob < ApplicationJob
     stage_key = "#{category}_#{day_offset}"
     invoice = find_invoice(invoice_id:, stage_key:)
     return unless invoice
-    connection = outbound_connection_for(invoice:, stage_key:)
-    return unless connection
-    return unless eligible_for_delivery?(invoice:, stage_key:)
 
-    stage = current_stage_for(invoice:, category:, day_offset:)
-    return unless stage
-    return unless stage_not_delivered?(invoice:, stage:)
-    return unless stage_due_today?(invoice:, stage:)
-    return unless recipient_available?(invoice:, stage_key:)
+    delivery_context = delivery_context_for(invoice:, category:, day_offset:, stage_key:)
+    return unless delivery_context
+
+    invoice = InvoiceReminders::InvoiceFreshnessCheck.call(invoice)
+    delivery_context = delivery_context_for(invoice:, category:, day_offset:, stage_key:)
+    return unless delivery_context
+
+    stage, connection = delivery_context
 
     deliver_reminder(invoice:, stage:, connection:)
   end
@@ -38,6 +44,20 @@ class InvoiceReminders::SendJob < ApplicationJob
 
       log_event(:warn, "invoice_reminder.skipped", reason: "missing_invoice", invoice_id:, stage_key:)
       nil
+    end
+
+    def delivery_context_for(invoice:, category:, day_offset:, stage_key:)
+      connection = outbound_connection_for(invoice:, stage_key:)
+      return unless connection
+      return unless eligible_for_delivery?(invoice:, stage_key:)
+
+      stage = current_stage_for(invoice:, category:, day_offset:)
+      return unless stage
+      return unless stage_not_delivered?(invoice:, stage:)
+      return unless stage_due_today?(invoice:, stage:)
+      return unless recipient_available?(invoice:, stage_key:)
+
+      [ stage, connection ]
     end
 
     def eligible_for_delivery?(invoice:, stage_key:)

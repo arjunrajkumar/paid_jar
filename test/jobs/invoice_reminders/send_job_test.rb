@@ -6,6 +6,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   setup do
     @invoice = invoices(:xero_invoice)
     @invoice.account.update!(automatic_invoice_reminders_enabled: true)
+    InvoiceReminders::InvoiceFreshnessCheck.stubs(:call).returns(@invoice)
     OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns("gmail-message-123")
   end
 
@@ -177,6 +178,64 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
         perform_enqueued_jobs(only: InvoiceReminders::SendJob)
       end
     end
+  end
+
+  test "refreshes a Xero invoice and does not send when the provider reports it paid" do
+    InvoiceReminders::InvoiceFreshnessCheck.expects(:call).with do |invoice|
+      @invoice.update!(status: :paid, amount_due: 0, paid_on: Date.current)
+      invoice.invoice_source.xero?
+    end.returns(@invoice)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+      end
+    end
+  end
+
+  test "refreshes a Stripe invoice and does not send when the provider reports it paid" do
+    invoice = create_stripe_invoice
+    InvoiceReminders::InvoiceFreshnessCheck.expects(:call).with do |refreshed_invoice|
+      invoice.update!(status: :paid, amount_due: 0, paid_on: Date.current)
+      refreshed_invoice.invoice_source.stripe?
+    end.returns(invoice)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_no_difference -> { invoice.invoice_reminders.count } do
+        InvoiceReminders::SendJob.perform_now(invoice.id, "pre_due", 7, "friendly")
+      end
+    end
+  end
+
+  test "retries a Xero refresh failure without sending or recording a receipt" do
+    InvoiceReminders::InvoiceFreshnessCheck.stubs(:call)
+      .raises(InvoiceSources::Xero::OauthClient::Error, "Xero unavailable")
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_enqueued_jobs 1, only: InvoiceReminders::SendJob do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+      end
+    end
+
+    assert_not @invoice.invoice_reminders.exists?(stage_key: "pre_due_7")
+  end
+
+  test "retries a Stripe refresh failure without sending or recording a receipt" do
+    invoice = create_stripe_invoice
+    InvoiceReminders::InvoiceFreshnessCheck.stubs(:call)
+      .raises(InvoiceSources::Stripe::OauthClient::Error, "Stripe unavailable")
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_enqueued_jobs 1, only: InvoiceReminders::SendJob do
+        InvoiceReminders::SendJob.perform_now(invoice.id, "pre_due", 7, "friendly")
+      end
+    end
+
+    assert_not invoice.invoice_reminders.exists?(stage_key: "pre_due_7")
   end
 
   test "does not send a queued reminder after the due date changes" do
@@ -628,6 +687,37 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   private
+    def create_stripe_invoice
+      source = @invoice.account.invoice_sources.create!(
+        provider: :stripe,
+        status: :active,
+        external_account_id: "acct_payment_reminder"
+      )
+      customer = source.customers.create!(
+        account: @invoice.account,
+        customer_segment: customer_segments(:normal_debtor_segment),
+        external_id: "cus_payment_reminder",
+        name: "Stripe Customer",
+        email: "stripe-customer@example.com"
+      )
+
+      source.invoices.create!(
+        account: @invoice.account,
+        customer:,
+        external_id: "in_payment_reminder",
+        number: "STRIPE-001",
+        provider_status: "open",
+        status: :open,
+        currency: "USD",
+        amount_due: 125,
+        amount_paid: 0,
+        total: 125,
+        issued_on: Date.new(2026, 7, 1),
+        due_on: Date.new(2026, 7, 31),
+        synced_at: Time.current
+      )
+    end
+
     def subscribe_to(*events)
       user = users(:arjun)
       user.update!(identity: Identity.create!(email_address: "notifications@example.com"))

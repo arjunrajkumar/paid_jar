@@ -1,4 +1,4 @@
-class InvoiceReminder::Policy
+class InvoiceReminders::Policy
   Stage = Data.define(:category, :day_offset, :tone) do
     def key
       "#{category}_#{day_offset}"

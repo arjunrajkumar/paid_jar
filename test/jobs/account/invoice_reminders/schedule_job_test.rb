@@ -23,7 +23,7 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
     expected_jobs = []
 
     travel_to reminder_on.in_time_zone.change(hour: 12) do
-      InvoiceReminder::Policy::SCHEDULES.each do |payer_segment, stages|
+      InvoiceReminders::Policy::SCHEDULES.each do |payer_segment, stages|
         customer = create_customer(payer_segment:)
 
         stages.each do |stage|
@@ -357,7 +357,7 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
     end
 
     def stage_for(payer_segment, stage_key)
-      InvoiceReminder::Policy.stages_for(payer_segment:).find do |stage|
+      InvoiceReminders::Policy.stages_for(payer_segment:).find do |stage|
         stage.key == stage_key
       end
     end

@@ -1,6 +1,6 @@
 require "test_helper"
 
-class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
+class InvoiceReminders::PolicyTest < ActiveSupport::TestCase
   test "defines the good debtor schedule" do
     assert_equal(
       [
@@ -40,13 +40,13 @@ class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
   end
 
   test "accepts a persisted payer segment string" do
-    stages = InvoiceReminder::Policy.stages_for(payer_segment: "good_debtor")
+    stages = InvoiceReminders::Policy.stages_for(payer_segment: "good_debtor")
 
     assert_equal "pre_due_3", stages.first.key
   end
 
   test "finds a stage by payer segment and stable stage key" do
-    stage = InvoiceReminder::Policy.stage_for(
+    stage = InvoiceReminders::Policy.stage_for(
       payer_segment: :bad_debtor,
       stage_key: "pre_due_7"
     )
@@ -55,7 +55,7 @@ class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
   end
 
   test "returns nil when a stage is absent from the payer segment schedule" do
-    stage = InvoiceReminder::Policy.stage_for(
+    stage = InvoiceReminders::Policy.stage_for(
       payer_segment: :good_debtor,
       stage_key: "pre_due_7"
     )
@@ -65,7 +65,7 @@ class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
 
   test "calculates stage dates from an invoice due date" do
     due_on = Date.new(2026, 7, 31)
-    stages = InvoiceReminder::Policy.stages_for(payer_segment: :normal_debtor).index_by(&:key)
+    stages = InvoiceReminders::Policy.stages_for(payer_segment: :normal_debtor).index_by(&:key)
 
     assert_equal Date.new(2026, 7, 24), stages.fetch("pre_due_7").date_for(due_on:)
     assert_equal Date.new(2026, 8, 14), stages.fetch("overdue_14").date_for(due_on:)
@@ -73,14 +73,14 @@ class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
 
   test "calculates target invoice due dates from the reminder date" do
     reminder_on = Date.new(2026, 7, 24)
-    stages = InvoiceReminder::Policy.stages_for(payer_segment: :normal_debtor).index_by(&:key)
+    stages = InvoiceReminders::Policy.stages_for(payer_segment: :normal_debtor).index_by(&:key)
 
     assert_equal Date.new(2026, 7, 31), stages.fetch("pre_due_7").invoice_due_on_for(reminder_on:)
     assert_equal Date.new(2026, 7, 10), stages.fetch("overdue_14").invoice_due_on_for(reminder_on:)
   end
 
   test "returns an immutable schedule" do
-    stages = InvoiceReminder::Policy.stages_for(payer_segment: :good_debtor)
+    stages = InvoiceReminders::Policy.stages_for(payer_segment: :good_debtor)
 
     assert_predicate stages, :frozen?
     assert_raises(FrozenError) { stages << stages.first }
@@ -88,13 +88,13 @@ class InvoiceReminder::PolicyTest < ActiveSupport::TestCase
 
   test "rejects an unknown payer segment" do
     assert_raises KeyError do
-      InvoiceReminder::Policy.stages_for(payer_segment: :unknown)
+      InvoiceReminders::Policy.stages_for(payer_segment: :unknown)
     end
   end
 
   private
     def schedule_for(payer_segment)
-      InvoiceReminder::Policy.stages_for(payer_segment:).map do |stage|
+      InvoiceReminders::Policy.stages_for(payer_segment:).map do |stage|
         [ stage.key, stage.category, stage.day_offset, stage.tone ]
       end
     end

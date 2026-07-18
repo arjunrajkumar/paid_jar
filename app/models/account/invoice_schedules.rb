@@ -12,7 +12,7 @@ module Account::InvoiceSchedules
         [ schedule.kind, schedule.category, schedule.day_offset ]
       end
 
-      InvoiceReminder::Policy::SCHEDULES.each do |kind, stages|
+      InvoiceReminders::Policy::SCHEDULES.each do |kind, stages|
         stages.each do |stage|
           schedule_key = [ kind.to_s, stage.category.to_s, stage.day_offset ]
           next if schedule_key.in?(existing_schedule_keys)

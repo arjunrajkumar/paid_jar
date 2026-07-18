@@ -152,7 +152,7 @@ class AccountTest < ActiveSupport::TestCase
 
   test "creates the default invoice schedules" do
     account = Account.create!(name: "Invoice Schedule Defaults")
-    expected_schedules = InvoiceReminder::Policy::SCHEDULES.flat_map do |kind, stages|
+    expected_schedules = InvoiceReminders::Policy::SCHEDULES.flat_map do |kind, stages|
       stages.map do |stage|
         [ kind.to_s, stage.category.to_s, stage.day_offset, stage.tone.to_s ]
       end
