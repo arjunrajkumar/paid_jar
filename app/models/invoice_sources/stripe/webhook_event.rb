@@ -7,6 +7,7 @@ module InvoiceSources
       class Error < StandardError; end
 
       TIMESTAMP_TOLERANCE = 5.minutes
+      APPLICATION_DEAUTHORIZED_EVENT_TYPE = "account.application.deauthorized"
       INVOICE_EVENT_TYPES = %w[
         invoice.created
         invoice.updated
@@ -27,8 +28,8 @@ module InvoiceSources
       end
 
       def events
-        return [] unless invoice_event?
-        return [] if stripe_account_id.blank? || invoice_id.blank?
+        return [] unless supported_event?
+        return [] if stripe_account_id.blank? || resource_id.blank?
 
         invoice_sources.map do |source|
           {
@@ -36,8 +37,8 @@ module InvoiceSources
             provider: :stripe,
             provider_event_id: event.id,
             event_type: event.type,
-            resource_type: "invoice",
-            resource_id: invoice_id,
+            resource_type: resource_type,
+            resource_id: resource_id,
             occurred_at: occurred_at,
             payload: payload_hash
           }
@@ -95,6 +96,14 @@ module InvoiceSources
           event.type.in?(INVOICE_EVENT_TYPES)
         end
 
+        def application_deauthorized_event?
+          event.type == APPLICATION_DEAUTHORIZED_EVENT_TYPE
+        end
+
+        def supported_event?
+          invoice_event? || application_deauthorized_event?
+        end
+
         def invoice_id
           event.data.object.id
         end
@@ -104,7 +113,18 @@ module InvoiceSources
         end
 
         def invoice_sources
-          InvoiceSource.where(provider: :stripe, external_account_id: stripe_account_id).select(&:connected?)
+          sources = InvoiceSource.where(provider: :stripe, external_account_id: stripe_account_id)
+          return sources.where.not(status: :disconnected) if application_deauthorized_event?
+
+          sources.select(&:connected?)
+        end
+
+        def resource_type
+          application_deauthorized_event? ? "connection" : "invoice"
+        end
+
+        def resource_id
+          application_deauthorized_event? ? stripe_account_id : invoice_id
         end
 
         def occurred_at

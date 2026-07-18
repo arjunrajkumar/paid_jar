@@ -3,11 +3,11 @@ require "test_helper"
 module InvoiceSources
   class Stripe
     class ConfigurationTest < ActiveSupport::TestCase
-      test "default scope requests account access" do
+      test "default scope requests read-only account access" do
         with_stripe_credentials(client_id: "ca_123", secret_key: "sk_test_123") do
           config = Configuration.new
 
-          assert_equal "read_write", config.scope
+          assert_equal "read_only", config.scope
         end
       end
 

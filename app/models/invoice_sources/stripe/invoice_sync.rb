@@ -35,6 +35,7 @@ module InvoiceSources
 
         def sync_invoice!(payload)
           invoice_external_id = payload.fetch("id")
+          currency = payload["currency"].to_s.upcase
 
           Invoice.transaction do
             customer = Customer.sync_from_provider!(
@@ -55,10 +56,10 @@ module InvoiceSources
               invoice_type: payload["collection_method"],
               provider_status: payload["status"],
               status: InvoiceStatus.normalize(payload["status"]),
-              currency: payload["currency"].to_s.upcase,
-              amount_due: money_from_cents(payload["amount_remaining"] || payload["amount_due"]),
-              amount_paid: money_from_cents(payload["amount_paid"]),
-              total: money_from_cents(payload["total"]),
+              currency:,
+              amount_due: amount_from_minor_units(payload["amount_remaining"] || payload["amount_due"], currency:),
+              amount_paid: amount_from_minor_units(payload["amount_paid"], currency:),
+              total: amount_from_minor_units(payload["total"], currency:),
               issued_on: date_from_timestamp(payload["created"]),
               due_on: date_from_timestamp(payload["due_date"]),
               paid_on: date_from_timestamp(payload.dig("status_transitions", "paid_at")),
@@ -71,8 +72,8 @@ module InvoiceSources
                 customer_email: customer_email(payload),
                 online_invoice_url: payload["hosted_invoice_url"],
                 invoice_pdf_url: payload["invoice_pdf"],
-                amount_due_cents: payload["amount_due"],
-                amount_remaining_cents: payload["amount_remaining"]
+                amount_due_minor_units: payload["amount_due"],
+                amount_remaining_minor_units: payload["amount_remaining"]
               }.compact,
               raw_data: payload,
               synced_at: Time.current
@@ -80,10 +81,8 @@ module InvoiceSources
           end
         end
 
-        def money_from_cents(value)
-          return if value.nil?
-
-          BigDecimal(value.to_s) / 100
+        def amount_from_minor_units(value, currency:)
+          Currency.amount_from_minor_units(value, currency:)
         end
 
         def date_from_timestamp(value)

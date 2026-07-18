@@ -22,8 +22,10 @@ module InvoiceSources
     end
 
     def destroy
-      @invoice_source&.disconnect!
+      InvoiceSources::Stripe.new(@invoice_source).disconnect!
       redirect_to account_settings_path, notice: "Stripe disconnected."
+    rescue InvoiceSources::Stripe::OauthClient::Error => error
+      redirect_to account_settings_path, alert: "Stripe disconnection failed: #{error.message}"
     end
 
     private

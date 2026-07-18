@@ -39,6 +39,11 @@ module InvoiceSources
       InvoiceSync.new(source, client: oauth_client).sync_invoice_by_id!(external_id)
     end
 
+    def disconnect!
+      oauth_client.deauthorize(stripe_account_id: source.external_account_id) if oauth_client.config.configured?
+      source.disconnect!
+    end
+
     def connected?
       source.active? && source.external_account_id.present?
     end

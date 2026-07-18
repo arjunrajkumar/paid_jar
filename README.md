@@ -124,10 +124,18 @@ https://your-tunnel.example/invoice_sources/webhooks/xero
 
 ## Stripe
 
-Create a Stripe Connect OAuth application and configure its redirect URI to:
+PaymentReminder is a Stripe Connect **Extension**: it connects to an existing Standard Stripe account and reads invoice information without creating accounts, moving money, or modifying Stripe data. Register the Connect integration as an Extension and use OAuth with the `read_only` scope. If the Connect application is currently classified as a Platform, contact Stripe to change its integration type before launch.
+
+In Stripe Connect settings, enable OAuth for Standard accounts and configure the redirect URI:
 
 ```text
 http://localhost:3000/stripe/callback
+```
+
+For production, register the public HTTPS callback instead, for example:
+
+```text
+https://payment-reminder.example/stripe/callback
 ```
 
 Then edit Rails credentials:
@@ -145,17 +153,38 @@ stripe:
   webhook_signing_secret: whsec_your-webhook-secret
 ```
 
-Register `<HOST>/stripe/callback` as the Stripe Connect redirect URI.
+The client ID and secret key must belong to the same Stripe mode: use sandbox values together or live values together. PaymentReminder uses the connected account ID returned by OAuth with the platform secret key and a `Stripe-Account` header; the deprecated OAuth access token is not used for invoice API requests.
 
-PaymentReminder uses the connected Stripe account id returned by OAuth to read invoices through the Stripe API.
+In **Workbench → Webhooks**, create an event destination that listens to **Connected accounts**, not events on the PaymentReminder Stripe account. Set its endpoint to `<HOST>/invoice_sources/webhooks/stripe` and select:
+
+- `invoice.created`
+- `invoice.updated`
+- `invoice.finalized`
+- `invoice.paid`
+- `invoice.voided`
+- `invoice.marked_uncollectible`
+- `account.application.deauthorized`
+
+Reveal that destination's signing secret and store it as `stripe.webhook_signing_secret`. Sandbox, live, and Stripe CLI destinations each have different signing secrets.
+
+For a signing-secret rotation, configure both secrets temporarily:
+
+```yaml
+stripe:
+  webhook_signing_secrets:
+    - whsec_old
+    - whsec_new
+```
 
 For local webhook testing with the Stripe CLI:
 
 ```bash
-stripe listen --forward-to localhost:3000/invoice_sources/webhooks/stripe
+stripe listen \
+  --events invoice.created,invoice.updated,invoice.finalized,invoice.paid,invoice.voided,invoice.marked_uncollectible,account.application.deauthorized \
+  --forward-connect-to localhost:3000/invoice_sources/webhooks/stripe
 ```
 
-After credentials are configured, sign in and open `/account/settings` to connect Xero or Stripe.
+Use the `whsec_...` value printed by that command only for local CLI testing. After credentials are configured, sign in and open `/account/settings` to connect Xero or Stripe. See [Stripe OAuth for Standard accounts](https://docs.stripe.com/connect/oauth-standard-accounts), [Connect webhooks](https://docs.stripe.com/connect/webhooks), and [Stripe currencies](https://docs.stripe.com/currencies).
 
 ## System email
 

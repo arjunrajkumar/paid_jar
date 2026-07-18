@@ -26,10 +26,19 @@ module InvoiceSources
       end
 
       def exchange_code(code:, redirect_uri: config.redirect_uri)
-        post_token(
+        post_form(
+          config.token_uri,
           grant_type: "authorization_code",
           code: code,
           redirect_uri: redirect_uri
+        )
+      end
+
+      def deauthorize(stripe_account_id:)
+        post_form(
+          config.deauthorization_uri,
+          client_id: config.client_id,
+          stripe_user_id: stripe_account_id
         )
       end
 
@@ -55,13 +64,13 @@ module InvoiceSources
       end
 
       private
-        def post_token(form)
-          request = Net::HTTP::Post.new(config.token_uri)
+        def post_form(uri, form)
+          request = Net::HTTP::Post.new(uri)
           request.basic_auth(config.secret_key, "")
           request["Content-Type"] = "application/x-www-form-urlencoded"
           request.set_form_data(form)
 
-          request_json(config.token_uri, request)
+          request_json(uri, request)
         end
 
         def list_invoices(stripe_account_id:, starting_after:)

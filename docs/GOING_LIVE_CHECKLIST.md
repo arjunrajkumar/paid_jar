@@ -200,25 +200,27 @@ See [Xero webhooks and Intent to receive](https://developer.xero.com/documentati
 
 Current tiers and limits are listed on [Xero Developer pricing](https://developer.xero.com/pricing) and [OAuth 2.0 API limits](https://developer.xero.com/documentation/guides/oauth2/limits).
 
-## 5. Stripe Connect — optional for the first launch
+## 5. Stripe Connect Extension
 
 Stripe should remain hidden or clearly unavailable until every item in this section is complete.
 
-### Decide the Connect integration type first
+### Confirm the Connect integration type and OAuth access
 
-- [ ] Confirm with Stripe whether PaymentReminder should be registered as an **Extension** that reads existing Standard accounts or as a Platform.
-- [ ] Make the Stripe Dashboard classification and the application's requested OAuth scope agree.
-- [ ] Do not launch Stripe accidentally with the current `read_write` scope merely because it connects successfully.
+- [ ] In **Connect settings → Availability**, confirm PaymentReminder is registered as an **Extension**, not a Platform.
+- [ ] If it is currently classified as a Platform, contact Stripe to change the integration selection before inviting users.
+- [ ] Confirm OAuth onboarding is enabled for Standard accounts.
+- [ ] Confirm the authorization screen grants `read_only` access.
+- [ ] Confirm PaymentReminder does not create Stripe accounts, modify invoices, create payments, or move connected-account funds.
 
-PaymentReminder currently reads invoices and requests `read_write`. Stripe states that only Extension integrations can request `read_only`, and Stripe recommends Connect Onboarding rather than OAuth for new Platforms. This product decision must be resolved before live Stripe credentials are used. See [Stripe's OAuth reference](https://docs.stripe.com/connect/oauth-reference) and [OAuth with Standard accounts](https://docs.stripe.com/connect/oauth-standard-accounts).
+PaymentReminder reads existing Standard-account invoices, so it is an Extension and requests `read_only`. Stripe reserves `read_only` for Extensions; new payment Platforms follow a different Connect onboarding model. See [Stripe's OAuth reference](https://docs.stripe.com/connect/oauth-reference), [OAuth changes for Standard accounts](https://docs.stripe.com/connect/oauth-changes-for-standard-platforms), and [OAuth with Standard accounts](https://docs.stripe.com/connect/oauth-standard-accounts).
 
-### Configure Stripe live mode if Stripe is launching
+### Configure Stripe live mode
 
 - [ ] Activate the production Stripe account and complete all requested business verification.
 - [ ] Complete the Connect profile, branding, support details, website, privacy policy, and terms.
-- [ ] Enable the chosen Connect/OAuth integration in **live mode**.
+- [ ] Enable the Extension's OAuth integration in **live mode**.
 - [ ] Register the exact live redirect URI: `https://app.paymentreminderemails.com/stripe/callback`.
-- [ ] Copy the live Connect client ID and restricted/secret key into Rails credentials. Never mix sandbox and live values:
+- [ ] Copy the live Connect client ID and live secret key into Rails credentials. Never mix sandbox and live values:
 
 ```yaml
 stripe:
@@ -227,21 +229,44 @@ stripe:
   webhook_signing_secret: your-live-connect-webhook-secret
 ```
 
-- [ ] In Stripe Workbench, create an HTTPS event destination for **Connected accounts**.
+The webhook signing secret is added after the live event destination is created. Never paste any of these values into this checklist.
+
+### Register the live Connect webhook
+
+- [ ] In **Stripe Workbench → Webhooks**, create an HTTPS event destination.
+- [ ] Select **Connected accounts** as the event source; do not select events on the PaymentReminder Stripe account.
+- [ ] Record the API version selected for the destination so webhook payload changes can be reviewed deliberately.
 - [ ] Set its URL to `https://app.paymentreminderemails.com/invoice_sources/webhooks/stripe`.
-- [ ] Subscribe only to the invoice events currently handled by PaymentReminder:
+- [ ] Subscribe only to the events currently handled by PaymentReminder:
   - `invoice.created`
   - `invoice.updated`
   - `invoice.finalized`
   - `invoice.paid`
   - `invoice.voided`
   - `invoice.marked_uncollectible`
+  - `account.application.deauthorized`
 - [ ] Reveal the live endpoint signing secret and store it as `stripe.webhook_signing_secret`.
-- [ ] Confirm the endpoint reports successful `2xx` deliveries for a connected test account.
-- [ ] Document webhook-secret rotation; PaymentReminder supports `webhook_signing_secrets` during a rotation window.
+- [ ] Restart or deploy PaymentReminder after saving the signing secret.
+- [ ] Confirm a connected Standard test account produces successful `2xx` deliveries in Workbench.
+- [ ] Confirm duplicate delivery of the same Stripe event does not create duplicate webhook records or jobs.
+- [ ] During signing-secret rotation, configure `stripe.webhook_signing_secrets` with both active secrets, verify delivery, and then remove the expired secret.
 - [ ] Monitor Workbench for failed deliveries after launch.
 
-Stripe requires HTTPS in live mode and generates a different signing secret for each endpoint and mode. See [Stripe webhook setup](https://docs.stripe.com/webhooks).
+Stripe requires HTTPS in live mode, Connect webhooks must explicitly listen to connected-account events, and each sandbox, live, or CLI destination has its own signing secret. See [Connect webhooks](https://docs.stripe.com/connect/webhooks), [Workbench event destinations](https://docs.stripe.com/workbench/event-destinations), and [webhook signature verification](https://docs.stripe.com/webhooks).
+
+### Stripe production smoke tests
+
+- [ ] Connect a live Standard account that is not the PaymentReminder platform account.
+- [ ] Confirm the consent screen displays read-only access and returns to `https://app.paymentreminderemails.com/stripe/callback`.
+- [ ] Confirm the initial import includes every invoice page for an account with more than 100 invoices.
+- [ ] Import a two-decimal invoice such as USD and confirm `25050` minor units are displayed as `250.50`.
+- [ ] Import a zero-decimal invoice such as JPY and confirm `25050` minor units are displayed as `25050`, not `250.50`.
+- [ ] Mark an open test invoice paid and confirm its `invoice.paid` delivery updates PaymentReminder before the next reminder run.
+- [ ] Change an amount or due date and confirm `invoice.updated` refreshes the invoice.
+- [ ] Void and mark test invoices uncollectible and confirm both states synchronize.
+- [ ] Disconnect Stripe from PaymentReminder and confirm the OAuth connection is removed in Stripe.
+- [ ] Reconnect, then deauthorize PaymentReminder from the connected Stripe account and confirm `account.application.deauthorized` marks the PaymentReminder source disconnected.
+- [ ] Confirm automatic reminders remain disabled until Gmail and the intended accounting source are connected and verified.
 
 ## 6. Hosting, data, and operational services
 
@@ -299,7 +324,7 @@ Complete this in production before opening signup broadly:
 - [ ] The SES message passes DKIM and DMARC checks.
 - [ ] A non-owner Google account can connect Gmail without an unverified-app warning and receive the test email.
 - [ ] A Xero demo organization can connect, import invoices, and deliver a verified webhook update.
-- [ ] If Stripe is visible, a suitable connected test account can connect, import invoices, and deliver a verified Connect webhook update.
+- [ ] A live Standard Stripe account can grant read-only access, import invoices, deliver a verified Connect webhook update, and disconnect cleanly.
 - [ ] The production job worker processes queued mail and scheduled refresh jobs.
 - [ ] External monitoring and provider alerts reach the intended operator.
 - [ ] A database restore and Rails master-key recovery have been rehearsed.
@@ -307,4 +332,4 @@ Complete this in production before opening signup broadly:
 
 ## Launch gate
 
-For the initial Gmail + Xero launch, Sections 1–4, 6, and 7 must be complete. Section 5 is required only if Stripe is visible or advertised as available. If Stripe is not ready, hide or clearly defer it rather than publishing a partially configured connection.
+Because Stripe is currently offered in the product interface and public copy, Sections 1–7 must all be complete before launch. If Section 5 is not complete, hide Stripe from both the interface and public copy rather than publishing a partially configured connection.

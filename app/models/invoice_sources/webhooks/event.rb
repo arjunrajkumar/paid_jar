@@ -46,7 +46,7 @@ class InvoiceSources::Webhooks::Event < ApplicationRecord
       return if processed? || ignored?
 
       processing!
-      if process_invoice_event!
+      if process_provider_event!
         update!(status: :processed, processed_at: Time.current, last_error: nil)
       else
         update!(status: :ignored, processed_at: Time.current, last_error: nil)
@@ -58,6 +58,12 @@ class InvoiceSources::Webhooks::Event < ApplicationRecord
   end
 
   private
+    def process_provider_event!
+      return disconnect_stripe_source! if stripe_deauthorization_event?
+
+      process_invoice_event!
+    end
+
     def process_invoice_event!
       if resource_type.to_s.casecmp?("invoice") && resource_id.present?
         invoice_source.sync_invoice!(external_id: resource_id)
@@ -65,5 +71,14 @@ class InvoiceSources::Webhooks::Event < ApplicationRecord
       else
         false
       end
+    end
+
+    def stripe_deauthorization_event?
+      provider == "stripe" && event_type == InvoiceSources::Stripe::WebhookEvent::APPLICATION_DEAUTHORIZED_EVENT_TYPE
+    end
+
+    def disconnect_stripe_source!
+      invoice_source.disconnect!
+      true
     end
 end

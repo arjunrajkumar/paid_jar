@@ -23,7 +23,7 @@ module InvoiceSources
           assert_equal "code", params["response_type"]
           assert_equal "ca_123", params["client_id"]
           assert_equal "https://example.com/stripe/callback", params["redirect_uri"]
-          assert_equal "read_write", params["scope"]
+          assert_equal "read_only", params["scope"]
           assert_equal "state-123", params["state"]
         end
       end

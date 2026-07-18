@@ -4,7 +4,7 @@ module InvoiceSources
   class Stripe
     class Configuration
       DEFAULT_HOST = "http://localhost:3000"
-      DEFAULT_SCOPE = "read_write"
+      DEFAULT_SCOPE = "read_only"
 
       def initialize(host: ENV["HOST"])
         @host = host.presence || DEFAULT_HOST
@@ -44,6 +44,10 @@ module InvoiceSources
 
       def token_uri
         URI("https://connect.stripe.com/oauth/token")
+      end
+
+      def deauthorization_uri
+        URI("https://connect.stripe.com/oauth/deauthorize")
       end
 
       def invoices_uri
