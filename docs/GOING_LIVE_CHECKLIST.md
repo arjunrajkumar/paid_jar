@@ -266,11 +266,28 @@ Stripe requires HTTPS in live mode and generates a different signing secret for 
 ### Monitoring and incident notification
 
 - [ ] Add external HTTPS monitoring for the homepage, application, and `/up` endpoint.
-- [ ] Add application exception tracking and alert routing.
-- [ ] Alert when the Solid Queue job worker stops or scheduled jobs stop running.
-- [ ] Alert on repeated Gmail authentication failures and provider webhook rejection logs.
+- [ ] Create a Sentry project using the Ruby/Rails platform and copy its production DSN.
+- [ ] Add the DSN using `bin/rails credentials:edit`:
+
+```yaml
+sentry:
+  dsn: your-production-sentry-dsn
+```
+
+- [ ] Deploy the application and verify a test exception reaches the correct Sentry project and `production` environment.
+- [ ] Confirm the `schedule-invoice-reminders` monitor appears after the hourly reminder scheduler first runs.
+- [ ] Confirm the `refresh-invoice-sources` monitor appears after the six-hour invoice-source scheduler first runs.
+- [ ] Configure Sentry notifications for missed, timed-out, and error check-ins on both monitors.
+- [ ] Configure issue alerts for new and regressed production errors.
+- [ ] Configure a threshold alert for repeated Gmail authentication failures (`provider:gmail`, `operation:invoice_reminder_delivery`).
+- [ ] Configure alerts for repeated `InvoiceSources::Xero::OauthClient::Error` and `InvoiceSources::Stripe::OauthClient::Error` retry events.
+- [ ] Trigger a controlled test failure or temporarily pause a non-customer test worker and confirm the intended operator receives the alert; restore normal operation immediately afterward.
+- [ ] Confirm Sentry events do not contain OAuth tokens, email bodies, recipient addresses, or invoice financial data.
+- [ ] Monitor Solid Queue failed executions separately; a successful scheduler check-in proves that scheduling completed, not that every child refresh or reminder delivery succeeded.
 - [ ] Subscribe to AWS, Google Cloud, Xero, Stripe, Cloudflare, and hosting-provider status/security notifications.
 - [ ] Document who can disable automatic reminders if a provider or synchronization incident occurs.
+
+PaymentReminder sends Sentry cron check-ins only from the production Solid Queue jobs. The `/up` endpoint can remain healthy while the job server is stopped, which is why both external uptime monitoring and scheduled-job check-ins are required. See [Sentry's Rails integration](https://docs.sentry.io/platforms/ruby/guides/rails/) and [Cron Monitoring](https://docs.sentry.io/product/crons/).
 
 ## 7. Final external smoke test
 

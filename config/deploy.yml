@@ -36,6 +36,7 @@ env:
   secret:
     - RAILS_MASTER_KEY
     - MYSQL_ROOT_PASSWORD
+    - SENTRY_DSN
   clear:
     # Set number of processes dedicated to Solid Queue (default: 1)
     # JOB_CONCURRENCY: 3
@@ -52,6 +53,7 @@ env:
     MAILER_FROM_ADDRESS: PaymentReminder <support@paymentreminderemails.com>
     SES_SMTP_ADDRESS: email-smtp.us-east-1.amazonaws.com
     SES_SMTP_PORT: 587
+    SENTRY_TRACES_SAMPLE_RATE: 0.05
 
     # Log everything from Rails
     # RAILS_LOG_LEVEL: debug

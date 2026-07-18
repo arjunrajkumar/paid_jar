@@ -16,6 +16,7 @@ gem "turbo-rails"
 gem "stimulus-rails"
 gem "geared_pagination"
 gem "google-apis-gmail_v1"
+gem "sentry-rails", "~> 6.6"
 gem "stripe", "~> 19.0"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]

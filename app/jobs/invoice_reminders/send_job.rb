@@ -190,8 +190,25 @@ class InvoiceReminders::SendJob < ApplicationJob
       [ result.present?, result.is_a?(String) ? result : nil, nil ]
     rescue OutboundEmailConnection::Errors::TemporaryDeliveryError
       raise
+    rescue OutboundEmailConnection::Errors::AuthenticationError => error
+      report_gmail_authentication_failure(error, invoice:)
+      [ false, nil, error.message ]
     rescue StandardError => error
       [ false, nil, error.message ]
+    end
+
+    def report_gmail_authentication_failure(error, invoice:)
+      Sentry.capture_exception(
+        error,
+        tags: {
+          provider: "gmail",
+          operation: "invoice_reminder_delivery"
+        },
+        extra: {
+          account_id: invoice.account_id,
+          invoice_id: invoice.id
+        }
+      )
     end
 
     def send_email(invoice:, stage:)

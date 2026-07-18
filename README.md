@@ -67,6 +67,26 @@ This gives the agent enough context to install dependencies, prepare the databas
 
 Before opening the hosted service to customers, complete the [external going-live checklist](docs/GOING_LIVE_CHECKLIST.md) for DNS, Amazon SES, Google OAuth verification, Xero, Stripe, backups, and monitoring.
 
+## Error and scheduled-job monitoring
+
+PaymentReminder supports optional [Sentry for Rails](https://docs.sentry.io/platforms/ruby/guides/rails/). Set `SENTRY_DSN` in the production runtime to enable exception reporting. No events are sent when the variable is absent.
+
+The official Kamal deployment reads the DSN from encrypted Rails credentials. Add it with `bin/rails credentials:edit`:
+
+```yaml
+sentry:
+  dsn: https://your-sentry-dsn
+```
+
+Self-hosters using another deployment system can inject `SENTRY_DSN` directly. `SENTRY_TRACES_SAMPLE_RATE` controls performance sampling and defaults to `0.05`. Default PII collection is disabled; do not add OAuth tokens, email contents, or customer financial data to Sentry context.
+
+The Solid Queue worker reports expected-schedule check-ins for these critical recurring jobs:
+
+- `schedule-invoice-reminders`: every hour, with a 10-minute check-in grace period and a 30-minute maximum runtime.
+- `refresh-invoice-sources`: every six hours, with a 15-minute check-in grace period and a 15-minute maximum runtime.
+
+Sentry creates or updates these cron monitors when the jobs first run. Configure Sentry alerts for missed and failed check-ins as well as application issues. These monitors require the production Solid Queue process (`bin/jobs`) to be running; the Rails `/up` endpoint only checks the web process.
+
 ## Xero
 
 Create a Xero OAuth 2.0 app and configure its redirect URI to:
