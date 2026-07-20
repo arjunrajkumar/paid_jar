@@ -154,6 +154,75 @@ module InvoiceSources
         )
       end
 
+      test "disconnect_connection deletes the exact Xero connection and accepts an empty response" do
+        request = stub_request(
+          :delete,
+          "https://api.xero.com/connections/connection-123"
+        ).with(
+          headers: {
+            "Accept" => "application/json",
+            "Authorization" => "Bearer access-token"
+          }
+        ).to_return(status: 204, body: "")
+
+        result = OauthClient.new.disconnect_connection(
+          access_token: "access-token",
+          connection_id: "connection-123"
+        )
+
+        assert_equal({}, result)
+        assert_requested request, times: 1
+      end
+
+      test "disconnect_connection escapes the connection id as a path segment" do
+        request = stub_request(
+          :delete,
+          "https://api.xero.com/connections/connection%20with%20spaces"
+        ).to_return(status: 204, body: "")
+
+        OauthClient.new.disconnect_connection(
+          access_token: "access-token",
+          connection_id: "connection with spaces"
+        )
+
+        assert_requested request, times: 1
+      end
+
+      test "disconnect_connection reports Xero API failures" do
+        stub_request(
+          :delete,
+          "https://api.xero.com/connections/connection-123"
+        ).to_return(
+          status: 401,
+          body: { error: "unauthorized", error_description: "Token expired" }.to_json
+        )
+
+        error = assert_raises OauthClient::Error do
+          OauthClient.new.disconnect_connection(
+            access_token: "access-token",
+            connection_id: "connection-123"
+          )
+        end
+
+        assert_equal "Token expired", error.message
+      end
+
+      test "disconnect_connection wraps network failures" do
+        stub_request(
+          :delete,
+          "https://api.xero.com/connections/connection-123"
+        ).to_timeout
+
+        error = assert_raises OauthClient::Error do
+          OauthClient.new.disconnect_connection(
+            access_token: "access-token",
+            connection_id: "connection-123"
+          )
+        end
+
+        assert_match "Xero request failed", error.message
+      end
+
       test "wraps Xero network failures in a retryable client error" do
         stub_request(
           :get,

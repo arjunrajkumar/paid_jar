@@ -1,5 +1,6 @@
 class Account::SettingsController < ApplicationController
   before_action :set_account
+  before_action :set_xero_invoice_source
   before_action :set_invoice_sources
   before_action :set_customer_segments
   before_action :set_notification_preferences
@@ -27,6 +28,10 @@ class Account::SettingsController < ApplicationController
 
     def set_invoice_sources
       @invoice_sources = InvoiceSource.available_sources_for(@account)
+    end
+
+    def set_xero_invoice_source
+      @xero_invoice_source = @account.invoice_sources.xero.first
     end
 
     def set_customer_segments

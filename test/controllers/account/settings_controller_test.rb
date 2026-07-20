@@ -16,7 +16,14 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_select "body", { text: "Billing email", count: 0 }
     assert_select "body", { text: "Currency", count: 0 }
     assert_select ".app-card__title", "Accounting integration"
-    assert_select "a[href=?]", new_xero_connection_path, "Connect"
+    assert_select "[data-testid='xero-invoice-source']" do
+      assert_select ".app-pill", "Not connected"
+      assert_select ".app-row__note", "Not synced yet"
+      assert_select "a[href=?]", new_xero_connection_path(script_name: account.slug), "Connect"
+      assert_select "a", { text: "Reconnect", count: 0 }
+      assert_select "button", { text: "Resync", count: 0 }
+      assert_select "button", { text: "Disconnect", count: 0 }
+    end
     assert_select "a[href=?]", new_stripe_connection_path, "Connect"
     assert_select ".app-card", count: 4
     assert_select ".app-card", text: /Invoice reminders/ do
@@ -38,7 +45,7 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
-  test "connected invoice sources can be resynced" do
+  test "connected Xero source shows its tenant sync status and connection actions" do
     account = sign_up_and_complete(email_address: "owner-settings-resync@example.com")
     source = account.invoice_sources.create!(
       provider: :xero,
@@ -47,16 +54,129 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
       external_account_name: "PaymentReminder Xero",
       access_token: "access-token",
       refresh_token: "refresh-token",
-      expires_at: 30.minutes.from_now
+      expires_at: 30.minutes.from_now,
+      last_synced_at: 2.days.ago,
+      provider_data: { connection_id: "connection-settings-resync" }
     )
 
     get account_settings_url(script_name: account.slug)
 
     assert_response :success
-    assert_select ".app-pill", "Connected"
-    assert_select "form[action=?]", invoice_source_refresh_path(source) do
-      assert_select "button", "Resync"
+    assert_select "[data-testid='xero-invoice-source']" do
+      assert_select ".app-row__note", "PaymentReminder Xero"
+      assert_select ".app-row__note", text: /Synced 2 days ago/
+      assert_select ".app-pill", "Connected"
+      assert_select "form[action=?]", invoice_source_refresh_path(source, script_name: account.slug) do
+        assert_select "button", "Resync"
+      end
+      assert_select "a[href=?]", new_xero_connection_path(script_name: account.slug), "Reconnect"
+      assert_select "form[action=?]", xero_connection_path(script_name: account.slug) do
+        assert_select "input[name='_method'][value='delete']", count: 1
+        assert_select "button", "Disconnect"
+      end
     end
+  end
+
+  test "errored Xero source shows the tenant error and recovery actions while credentials remain" do
+    account = sign_up_and_complete(email_address: "owner-settings-xero-error@example.com")
+    account.invoice_sources.create!(
+      provider: :xero,
+      status: :error,
+      external_account_id: "tenant-settings-error",
+      external_account_name: "Recovery Test Ltd",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      expires_at: 30.minutes.from_now,
+      provider_data: { connection_id: "connection-settings-error" },
+      last_error: "Xero rejected the request"
+    )
+
+    get account_settings_url(script_name: account.slug)
+
+    assert_response :success
+    assert_select "[data-testid='xero-invoice-source']" do
+      assert_select ".app-row__note", "Recovery Test Ltd"
+      assert_select ".app-row__note", "Not synced yet"
+      assert_select ".app-row__note--warning", text: /Last error: Xero rejected the request/
+      assert_select ".app-pill", "Error"
+      assert_select "a[href=?]", new_xero_connection_path(script_name: account.slug), "Reconnect"
+      assert_select "form[action=?]", xero_connection_path(script_name: account.slug) do
+        assert_select "button", "Disconnect"
+      end
+      assert_select "button", { text: "Resync", count: 0 }
+    end
+  end
+
+  test "errored Xero source without remote credentials cannot be disconnected again" do
+    account = sign_up_and_complete(email_address: "owner-settings-xero-cleared-error@example.com")
+    account.invoice_sources.create!(
+      provider: :xero,
+      status: :error,
+      external_account_id: "tenant-settings-cleared-error",
+      external_account_name: "Cleared Error Ltd",
+      provider_data: { connection_id: "connection-settings-cleared-error" },
+      last_error: "The connection has already been cleared"
+    )
+
+    get account_settings_url(script_name: account.slug)
+
+    assert_response :success
+    assert_select "[data-testid='xero-invoice-source']" do
+      assert_select ".app-pill", "Error"
+      assert_select "a[href=?]", new_xero_connection_path(script_name: account.slug), "Reconnect"
+      assert_select "button", { text: "Disconnect", count: 0 }
+    end
+  end
+
+  test "disconnected Xero source retains its tenant name and offers reconnect only" do
+    account = sign_up_and_complete(email_address: "owner-settings-xero-disconnected@example.com")
+    account.invoice_sources.create!(
+      provider: :xero,
+      status: :disconnected,
+      external_account_id: "tenant-settings-disconnected",
+      external_account_name: "Former Tenant Ltd",
+      last_synced_at: 3.days.ago,
+      provider_data: { connection_id: "connection-settings-disconnected" }
+    )
+
+    get account_settings_url(script_name: account.slug)
+
+    assert_response :success
+    assert_select "[data-testid='xero-invoice-source']" do
+      assert_select ".app-row__note", "Former Tenant Ltd"
+      assert_select ".app-row__note", text: /Synced 3 days ago/
+      assert_select ".app-pill", "Disconnected"
+      assert_select "a[href=?]", new_xero_connection_path(script_name: account.slug), "Reconnect"
+      assert_select "a", { text: "Connect", count: 0 }
+      assert_select "button", { text: "Resync", count: 0 }
+      assert_select "button", { text: "Disconnect", count: 0 }
+    end
+  end
+
+  test "Xero settings are isolated to the current account" do
+    account = sign_up_and_complete(email_address: "owner-settings-xero-isolation@example.com")
+    other_account = Account.create!(name: "Other Xero Account")
+    other_account.invoice_sources.create!(
+      provider: :xero,
+      status: :error,
+      external_account_id: "tenant-settings-other-account",
+      external_account_name: "Private Other Tenant",
+      access_token: "other-access-token",
+      refresh_token: "other-refresh-token",
+      provider_data: { connection_id: "connection-settings-other-account" },
+      last_error: "Private connection error"
+    )
+
+    get account_settings_url(script_name: account.slug)
+
+    assert_response :success
+    assert_select "[data-testid='xero-invoice-source']" do
+      assert_select ".app-pill", "Not connected"
+      assert_select "a[href=?]", new_xero_connection_path(script_name: account.slug), "Connect"
+    end
+    assert_select "body", { text: /Private Other Tenant/, count: 0 }
+    assert_select "body", { text: /Private connection error/, count: 0 }
+    assert_select "form[action=?]", xero_connection_path(script_name: account.slug), count: 0
   end
 
   test "connected Stripe source links to its test-mode App settings" do

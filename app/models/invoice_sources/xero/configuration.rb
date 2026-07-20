@@ -84,8 +84,9 @@ module InvoiceSources
         URI("https://api.xero.com/connections")
       end
 
-      def userinfo_uri
-        URI("https://api.xero.com/identity/connect/userinfo")
+      def connection_uri(connection_id)
+        escaped_connection_id = CGI.escape(connection_id.to_s).gsub("+", "%20")
+        URI("#{connections_uri}/#{escaped_connection_id}")
       end
 
       def invoices_uri

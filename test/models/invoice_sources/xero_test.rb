@@ -2,14 +2,30 @@ require "test_helper"
 
 module InvoiceSources
   class XeroTest < ActiveSupport::TestCase
-    test "connect exchanges the code and stores the active tenant" do
+    test "connect_from_authorization stores the verified identity and selected tenant" do
       account = Account.create!(name: "New Xero Account")
       source = account.invoice_sources.build(provider: :xero)
-      fake_client = FakeXeroClient.new
+      identity = Struct.new(:subject, :email).new("verified-user-123", "person@example.com")
+      token_set = {
+        "access_token" => "access-token",
+        "refresh_token" => "refresh-token",
+        "id_token" => "id-token",
+        "token_type" => "Bearer",
+        "expires_in" => 1800,
+        "scope" => "openid profile email accounting.invoices.read accounting.contacts.read offline_access"
+      }
+      connection = {
+        "id" => "connection-123",
+        "tenantId" => "tenant-123",
+        "tenantName" => "PaymentReminder Demo"
+      }
 
-      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
-
-      source = InvoiceSources::Xero.new(source).connect!(code: "auth-code")
+      source = InvoiceSources::Xero.new(source).connect_from_authorization!(
+        token_set:,
+        connection:,
+        identity:,
+        authentication_event_id: "auth-event-123"
+      )
 
       assert_predicate source, :persisted?
       assert_predicate source, :active?
@@ -18,13 +34,13 @@ module InvoiceSources
       assert_equal "tenant-123", source.external_account_id
       assert_equal "PaymentReminder Demo", source.external_account_name
       assert_equal "person@example.com", source.provider_data["email"]
+      assert_equal "verified-user-123", source.provider_data["xero_user_id"]
+      assert_equal "connection-123", source.provider_data["connection_id"]
+      assert_equal "auth-event-123", source.provider_data["authentication_event_id"]
       assert_equal "Bearer", source.raw_token_data["token_type"]
       refute source.raw_token_data.key?("access_token")
       refute source.raw_token_data.key?("refresh_token")
       refute source.raw_token_data.key?("id_token")
-      assert fake_client.exchange_code_called
-      assert fake_client.connections_called
-      assert fake_client.userinfo_called
     end
 
     test "sync_invoices stores Xero invoices" do
@@ -175,9 +191,184 @@ module InvoiceSources
       assert fake_client.refresh_token_called
     end
 
+    test "disconnect removes the remote connection before clearing local tokens" do
+      source = invoice_sources(:xero)
+      expires_at = source.expires_at
+      source.update!(
+        provider_data: source.provider_data.merge(
+          "connection_id" => "connection-123",
+          "authentication_event_id" => "auth-event-123"
+        ),
+        raw_token_data: { "token_type" => "Bearer", "scope" => "accounting.invoices.read" },
+        last_error: "old error"
+      )
+      original_provider_data = source.provider_data.deep_dup
+      fake_client = FakeXeroClient.new
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      InvoiceSources::Xero.new(source).disconnect!
+
+      source.reload
+      assert_predicate source, :disconnected?
+      assert_nil source.access_token
+      assert_nil source.refresh_token
+      assert_nil source.expires_at
+      assert_empty source.raw_token_data
+      assert_nil source.last_error
+      assert_equal "xero-tenant-123", source.external_account_id
+      assert_equal "PaymentReminder Xero", source.external_account_name
+      assert_equal original_provider_data, source.provider_data
+      assert_equal "access-token", fake_client.disconnect_access_token
+      assert_equal "connection-123", fake_client.disconnect_connection_id
+      assert fake_client.disconnect_connection_called
+      assert expires_at.present?
+    end
+
+    test "disconnect preserves credentials and tenant metadata when Xero rejects the request" do
+      source = invoice_sources(:xero)
+      source.update!(
+        provider_data: source.provider_data.merge("connection_id" => "connection-123"),
+        raw_token_data: { "token_type" => "Bearer" }
+      )
+      original_attributes = source.attributes.slice(
+        "access_token",
+        "refresh_token",
+        "expires_at",
+        "external_account_id",
+        "external_account_name",
+        "provider_data",
+        "raw_token_data"
+      )
+      error = InvoiceSources::Xero::OauthClient::Error.new("Connection could not be deleted")
+      fake_client = FakeXeroClient.new(disconnect_error: error)
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      raised_error = assert_raises InvoiceSources::Xero::OauthClient::Error do
+        InvoiceSources::Xero.new(source).disconnect!
+      end
+
+      assert_same error, raised_error
+      source.reload
+      assert_predicate source, :error?
+      assert_equal "Connection could not be deleted", source.last_error
+      original_attributes.each do |attribute, value|
+        assert_equal value, source.public_send(attribute), "expected #{attribute} to be preserved"
+      end
+    end
+
+    test "disconnect refreshes an expired token before deleting the remote connection" do
+      source = invoice_sources(:xero)
+      source.update!(
+        access_token: "old-token",
+        refresh_token: "old-refresh-token",
+        expires_at: 1.minute.ago,
+        provider_data: source.provider_data.merge("connection_id" => "connection-123")
+      )
+      fake_client = FakeXeroClient.new
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      InvoiceSources::Xero.new(source).disconnect!
+
+      assert fake_client.refresh_token_called
+      assert_equal "new-access-token", fake_client.disconnect_access_token
+      assert_equal "connection-123", fake_client.disconnect_connection_id
+      assert_predicate source.reload, :disconnected?
+      assert_nil source.access_token
+      assert_nil source.refresh_token
+    end
+
+    test "disconnect resolves a legacy connection id for the source tenant" do
+      source = invoice_sources(:xero)
+      source.update!(
+        provider_data: source.provider_data.except("connection_id").merge(
+          "connections" => [
+            {
+              "id" => "wrong-connection",
+              "tenantId" => "another-tenant",
+              "tenantName" => "Another tenant"
+            },
+            {
+              "id" => "legacy-connection-123",
+              "tenantId" => source.external_account_id,
+              "tenantName" => source.external_account_name
+            }
+          ]
+        )
+      )
+      fake_client = FakeXeroClient.new
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      InvoiceSources::Xero.new(source).disconnect!
+
+      assert_equal "legacy-connection-123", fake_client.disconnect_connection_id
+      assert_predicate source.reload, :disconnected?
+    end
+
+    test "disconnect reports a missing connection id without clearing credentials" do
+      source = invoice_sources(:xero)
+      source.update!(
+        provider_data: source.provider_data.except("connection_id").merge("connections" => []),
+        raw_token_data: { "token_type" => "Bearer" }
+      )
+      original_access_token = source.access_token
+      original_refresh_token = source.refresh_token
+      original_provider_data = source.provider_data.deep_dup
+      fake_client = FakeXeroClient.new
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      error = assert_raises InvoiceSources::Xero::DisconnectError do
+        InvoiceSources::Xero.new(source).disconnect!
+      end
+
+      assert_equal "Xero connection ID is missing.", error.message
+      source.reload
+      assert_predicate source, :error?
+      assert_equal error.message, source.last_error
+      assert_equal original_access_token, source.access_token
+      assert_equal original_refresh_token, source.refresh_token
+      assert_equal original_provider_data, source.provider_data
+      assert_equal({ "token_type" => "Bearer" }, source.raw_token_data)
+      assert_not fake_client.disconnect_connection_called
+      assert_not fake_client.refresh_token_called
+    end
+
+    test "disconnect preserves credentials when refreshing an expired token fails" do
+      source = invoice_sources(:xero)
+      source.update!(
+        access_token: "old-token",
+        refresh_token: "old-refresh-token",
+        expires_at: 1.minute.ago,
+        provider_data: source.provider_data.merge("connection_id" => "connection-123"),
+        raw_token_data: { "token_type" => "Bearer" }
+      )
+      error = InvoiceSources::Xero::OauthClient::Error.new("Refresh token was rejected")
+      fake_client = FakeXeroClient.new(refresh_token_error: error)
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      raised_error = assert_raises InvoiceSources::Xero::OauthClient::Error do
+        InvoiceSources::Xero.new(source).disconnect!
+      end
+
+      assert_same error, raised_error
+      source.reload
+      assert_predicate source, :error?
+      assert_equal "Refresh token was rejected", source.last_error
+      assert_equal "old-token", source.access_token
+      assert_equal "old-refresh-token", source.refresh_token
+      assert_equal({ "token_type" => "Bearer" }, source.raw_token_data)
+      assert_not fake_client.disconnect_connection_called
+    end
+
     class FakeXeroClient
-      attr_accessor :exchange_code_called, :connections_called, :userinfo_called,
-        :invoices_called, :invoices_filter, :refresh_token_called, :online_invoice_calls
+      attr_accessor :invoices_called, :invoices_filter, :refresh_token_called,
+        :online_invoice_calls, :disconnect_connection_called, :disconnect_access_token,
+        :disconnect_connection_id
 
       def initialize(
         tenant_id: "tenant-123",
@@ -187,7 +378,9 @@ module InvoiceSources
         contact_id: "contact-456",
         status: "AUTHORISED",
         amount_due: "250.50",
-        online_invoice_error: nil
+        online_invoice_error: nil,
+        disconnect_error: nil,
+        refresh_token_error: nil
       )
         @tenant_id = tenant_id
         @tenant_name = tenant_name
@@ -197,27 +390,17 @@ module InvoiceSources
         @status = status
         @amount_due = amount_due
         @online_invoice_error = online_invoice_error
+        @disconnect_error = disconnect_error
+        @refresh_token_error = refresh_token_error
         @online_invoice_calls = 0
-      end
-
-      def exchange_code(code:)
-        raise "unexpected code" unless code == "auth-code"
-
-        self.exchange_code_called = true
-        {
-          "access_token" => "access-token",
-          "refresh_token" => "refresh-token",
-          "id_token" => "id-token",
-          "token_type" => "Bearer",
-          "expires_in" => 1800,
-          "scope" => "openid profile email accounting.invoices.read accounting.contacts.read offline_access"
-        }
       end
 
       def refresh_token(refresh_token:)
         raise "unexpected refresh token" unless refresh_token == "old-refresh-token"
 
         self.refresh_token_called = true
+        raise @refresh_token_error if @refresh_token_error
+
         {
           "access_token" => "new-access-token",
           "refresh_token" => "new-refresh-token",
@@ -227,26 +410,13 @@ module InvoiceSources
         }
       end
 
-      def connections(access_token:)
-        raise "unexpected access token" unless access_token == "access-token"
+      def disconnect_connection(access_token:, connection_id:)
+        self.disconnect_connection_called = true
+        self.disconnect_access_token = access_token
+        self.disconnect_connection_id = connection_id
+        raise @disconnect_error if @disconnect_error
 
-        self.connections_called = true
-        [
-          {
-            "tenantId" => @tenant_id,
-            "tenantName" => @tenant_name
-          }
-        ]
-      end
-
-      def userinfo(access_token:)
-        raise "unexpected access token" unless access_token == "access-token"
-
-        self.userinfo_called = true
-        {
-          "xero_userid" => "user-123",
-          "email" => "person@example.com"
-        }
+        {}
       end
 
       def invoices(access_token:, tenant_id:, where:)

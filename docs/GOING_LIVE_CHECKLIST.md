@@ -177,6 +177,9 @@ xero:
 ```
 
 - [ ] Confirm the app requests only the scopes used by PaymentReminder: OpenID profile/email, read-only invoices, read-only contacts, and offline access.
+- [ ] Confirm Settings shows the connected Xero organization name, connection status, last API error, and the appropriate Connect, Reconnect, and Disconnect actions.
+- [ ] Disconnect a Xero demo organization from PaymentReminder and confirm the remote Xero connection is removed before local OAuth tokens are cleared.
+- [ ] Reconnect the same organization and confirm invoice synchronization resumes without creating a second PaymentReminder identity or mixing tenant data.
 - [ ] Confirm the public privacy policy and terms satisfy the current Xero Developer Platform terms.
 
 Xero requires an HTTPS production redirect URI and recommends minimum scopes. See [Xero's authorization-code flow](https://developer.xero.com/documentation/guides/oauth2/auth-flow) and [Developer Platform terms](https://developer.xero.com/xero-developer-platform-terms-conditions).

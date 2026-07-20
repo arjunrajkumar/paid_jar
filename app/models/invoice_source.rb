@@ -71,10 +71,6 @@ class InvoiceSource < ApplicationRecord
     token_data.to_h.stringify_keys.except(*SENSITIVE_TOKEN_KEYS)
   end
 
-  def connect!(...)
-    provider_adapter.connect!(...)
-  end
-
   def sync_invoices!
     provider_adapter.sync_invoices!
     customers.find_each(&:refresh_customer_segment!)

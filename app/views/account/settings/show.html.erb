@@ -22,44 +22,108 @@
 
     <div class="app-list">
       <% @invoice_sources.each do |source| %>
-        <% connected_source = source.connected_source %>
-        <div class="app-row">
-          <div class="app-row__text">
-            <div class="app-row__label"><%= source.name %></div>
-            <div class="app-row__note">
-              <% if connected_source %>
-                Synced <%= time_ago_in_words(connected_source.last_synced_at || connected_source.updated_at) %> ago
+        <% if source.provider == :xero %>
+          <div class="app-row" data-testid="xero-invoice-source">
+            <div class="app-row__text">
+              <div class="app-row__label"><%= source.name %></div>
+              <% if @xero_invoice_source&.external_account_name.present? %>
+                <div class="app-row__note"><%= @xero_invoice_source.external_account_name %></div>
+              <% end %>
+              <div class="app-row__note">
+                <% if @xero_invoice_source&.last_synced_at %>
+                  Synced <%= time_ago_in_words(@xero_invoice_source.last_synced_at) %> ago
+                <% else %>
+                  Not synced yet
+                <% end %>
+              </div>
+              <% if @xero_invoice_source&.last_error.present? %>
+                <div class="app-row__note app-row__note--warning">
+                  Last error: <%= @xero_invoice_source.last_error %>
+                </div>
+              <% end %>
+            </div>
+
+            <div class="app-row__actions">
+              <span class="app-pill <%= @xero_invoice_source&.connected? ? "app-pill--green" : "app-pill--slate" %>">
+                <% if @xero_invoice_source&.connected? %>
+                  Connected
+                <% elsif @xero_invoice_source&.error? %>
+                  Error
+                <% elsif @xero_invoice_source&.disconnected? %>
+                  Disconnected
+                <% else %>
+                  Not connected
+                <% end %>
+              </span>
+
+              <% if @xero_invoice_source&.connected? %>
+                <%= button_to invoice_source_refresh_path(@xero_invoice_source, script_name: @account.slug), class: "app-inline-button", title: "Resync #{source.name} invoices" do %>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path>
+                    <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path>
+                  </svg>
+                  <span>Resync</span>
+                <% end %>
+              <% end %>
+
+              <% if @xero_invoice_source %>
+                <%= link_to "Reconnect",
+                  new_xero_connection_path(script_name: @account.slug),
+                  class: "app-inline-button" %>
               <% else %>
-                Not connected
+                <%= link_to "Connect",
+                  new_xero_connection_path(script_name: @account.slug),
+                  class: "app-inline-button" %>
+              <% end %>
+
+              <% if @xero_invoice_source&.connected? || (@xero_invoice_source&.error? && @xero_invoice_source.refresh_token.present?) %>
+                <%= button_to "Disconnect",
+                  xero_connection_path(script_name: @account.slug),
+                  method: :delete,
+                  class: "app-inline-button app-inline-button--danger" %>
               <% end %>
             </div>
           </div>
-
-          <% if connected_source %>
-            <div class="app-row__actions">
-              <span class="app-pill app-pill--green">Connected</span>
-              <%= button_to invoice_source_refresh_path(connected_source), class: "app-inline-button", title: "Resync #{source.name} invoices" do %>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path>
-                  <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path>
-                </svg>
-                <span>Resync</span>
-              <% end %>
-              <% if connected_source.stripe? %>
-                <% stripe_settings_url = connected_source.provider_data.fetch("livemode", true) ?
-                  "https://dashboard.stripe.com/settings/apps" :
-                  "https://dashboard.stripe.com/test/settings/apps" %>
-                <%= link_to "Manage in Stripe",
-                  stripe_settings_url,
-                  class: "app-inline-button",
-                  target: "_blank",
-                  rel: "noopener" %>
-              <% end %>
+        <% else %>
+          <% connected_source = source.connected_source %>
+          <div class="app-row">
+            <div class="app-row__text">
+              <div class="app-row__label"><%= source.name %></div>
+              <div class="app-row__note">
+                <% if connected_source %>
+                  Synced <%= time_ago_in_words(connected_source.last_synced_at || connected_source.updated_at) %> ago
+                <% else %>
+                  Not connected
+                <% end %>
+              </div>
             </div>
-          <% else %>
-            <%= link_to "Connect", public_send(source.connect_path_name), class: "app-pill app-pill--slate" %>
-          <% end %>
-        </div>
+
+            <% if connected_source %>
+              <div class="app-row__actions">
+                <span class="app-pill app-pill--green">Connected</span>
+                <%= button_to invoice_source_refresh_path(connected_source), class: "app-inline-button", title: "Resync #{source.name} invoices" do %>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5"></path>
+                    <path d="M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"></path>
+                  </svg>
+                  <span>Resync</span>
+                <% end %>
+                <% if connected_source.stripe? %>
+                  <% stripe_settings_url = connected_source.provider_data.fetch("livemode", true) ?
+                    "https://dashboard.stripe.com/settings/apps" :
+                    "https://dashboard.stripe.com/test/settings/apps" %>
+                  <%= link_to "Manage in Stripe",
+                    stripe_settings_url,
+                    class: "app-inline-button",
+                    target: "_blank",
+                    rel: "noopener" %>
+                <% end %>
+              </div>
+            <% else %>
+              <%= link_to "Connect", public_send(source.connect_path_name), class: "app-pill app-pill--slate" %>
+            <% end %>
+          </div>
+        <% end %>
       <% end %>
     </div>
   </section>

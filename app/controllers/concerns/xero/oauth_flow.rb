@@ -4,13 +4,14 @@ module Xero::OauthFlow
   class Error < StandardError; end
 
   private
-    def start_xero_oauth(flow:, redirect_uri:, scopes:)
+    def start_xero_oauth(flow:, redirect_uri:, scopes:, context: nil)
       browser_nonce = SecureRandom.urlsafe_base64(32)
       oidc_nonce = SecureRandom.urlsafe_base64(32)
       session[oauth_attempt_key(flow)] = {
         "browser_nonce" => browser_nonce,
-        "oidc_nonce" => oidc_nonce
-      }
+        "oidc_nonce" => oidc_nonce,
+        "context" => context
+      }.compact
       state = Xero::OauthState.issue(flow:, browser_nonce:)
 
       redirect_to xero_oauth_client.authorization_url(
@@ -23,6 +24,7 @@ module Xero::OauthFlow
 
     def finish_xero_oauth(flow:, redirect_uri:, include_connections:)
       attempt = session.delete(oauth_attempt_key(flow))&.with_indifferent_access
+      @xero_oauth_context = attempt&.fetch(:context, nil)&.with_indifferent_access
       valid_state = attempt.present? && Xero::OauthState.valid?(
         params[:state],
         flow:,
@@ -33,6 +35,8 @@ module Xero::OauthFlow
 
       code = params[:code].to_s.presence
       raise Error, "Xero did not return an authorization code." if code.blank?
+
+      yield(@xero_oauth_context) if block_given?
 
       Xero::Authorization.new.complete!(
         code:,
@@ -59,5 +63,9 @@ module Xero::OauthFlow
 
     def oauth_attempt_key(flow)
       "xero_#{flow}_oauth_attempt"
+    end
+
+    def xero_oauth_context
+      @xero_oauth_context
     end
 end

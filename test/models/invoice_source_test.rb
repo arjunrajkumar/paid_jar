@@ -122,17 +122,15 @@ class InvoiceSourceTest < ActiveSupport::TestCase
     assert_equal source, stripe.connected_source
   end
 
-  test "delegates connection and invoice sync to provider adapter" do
+  test "delegates invoice sync to provider adapter" do
     source = invoice_sources(:xero)
     adapter = mock
     sync_sequence = sequence("full invoice sync")
 
-    InvoiceSources::Xero.expects(:new).twice.with(source).returns(adapter)
-    adapter.expects(:connect!).with(code: "auth-code")
+    InvoiceSources::Xero.expects(:new).with(source).returns(adapter)
     adapter.expects(:sync_invoices!).in_sequence(sync_sequence)
     Customer.any_instance.expects(:refresh_customer_segment!).once.in_sequence(sync_sequence)
 
-    source.connect!(code: "auth-code")
     source.sync_invoices!
   end
 

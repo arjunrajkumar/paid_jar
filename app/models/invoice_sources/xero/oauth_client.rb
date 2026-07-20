@@ -52,10 +52,13 @@ module InvoiceSources
         get_json(uri, access_token: access_token)
       end
 
-      def userinfo(access_token:)
-        get_json(config.userinfo_uri, access_token: access_token)
-      rescue Error
-        {}
+      def disconnect_connection(access_token:, connection_id:)
+        uri = config.connection_uri(connection_id)
+        request = Net::HTTP::Delete.new(uri)
+        request["Authorization"] = "Bearer #{access_token}"
+        request["Accept"] = "application/json"
+
+        request_json(uri, request)
       end
 
       def jwks
