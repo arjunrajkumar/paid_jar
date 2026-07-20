@@ -59,6 +59,7 @@ class InvoiceSources::Webhooks::Event < ApplicationRecord
 
   private
     def process_provider_event!
+      return authorize_stripe_source! if stripe_authorization_event?
       return disconnect_stripe_source! if stripe_deauthorization_event?
 
       process_invoice_event!
@@ -77,8 +78,15 @@ class InvoiceSources::Webhooks::Event < ApplicationRecord
       provider == "stripe" && event_type == InvoiceSources::Stripe::WebhookEvent::APPLICATION_DEAUTHORIZED_EVENT_TYPE
     end
 
+    def stripe_authorization_event?
+      provider == "stripe" && event_type == InvoiceSources::Stripe::WebhookEvent::APPLICATION_AUTHORIZED_EVENT_TYPE
+    end
+
+    def authorize_stripe_source!
+      InvoiceSources::Stripe.new(invoice_source).authorize_from_webhook!(occurred_at:)
+    end
+
     def disconnect_stripe_source!
-      invoice_source.disconnect!
-      true
+      InvoiceSources::Stripe.new(invoice_source).deauthorize_from_webhook!(occurred_at:)
     end
 end

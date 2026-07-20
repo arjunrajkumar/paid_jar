@@ -1,7 +1,7 @@
 class InvoiceSources::Webhooks::ProcessJob < ApplicationJob
   queue_as :webhooks
 
-  retry_on InvoiceSources::Stripe::OauthClient::Error,
+  retry_on InvoiceSources::Stripe::ApiClient::Error,
     InvoiceSources::Xero::OauthClient::Error,
     wait: :polynomially_longer,
     attempts: 5

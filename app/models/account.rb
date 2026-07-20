@@ -1,5 +1,8 @@
 class Account < ApplicationRecord
   has_many :invoice_sources, dependent: :destroy
+  has_many :stripe_installation_claims,
+    class_name: "InvoiceSources::Stripe::InstallationClaim",
+    dependent: :nullify
   has_one :outbound_email_connection, dependent: :destroy, inverse_of: :account
   has_many :customers, dependent: :destroy
   has_many :invoices, dependent: :destroy

@@ -35,9 +35,14 @@ class Signups::CompletionsController < ApplicationController
 
     def welcome_to_account
       respond_to do |format|
-        format.html { redirect_to account_settings_url(script_name: @signup.account.slug), notice: "Welcome to PaymentReminder." }
+        format.html { redirect_to after_signup_url, notice: "Welcome to PaymentReminder." }
         format.json { head :created }
       end
+    end
+
+    def after_signup_url
+      session.delete(:return_to_after_authenticating) ||
+        account_settings_url(script_name: @signup.account.slug)
     end
 
     def invalid_signup

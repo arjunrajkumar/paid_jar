@@ -9,7 +9,7 @@ class InvoiceReminders::SendJob < ApplicationJob
 
   retry_on InvoiceReminders::InvoiceFreshnessCheck::Error,
     InvoiceSources::Xero::OauthClient::Error,
-    InvoiceSources::Stripe::OauthClient::Error,
+    InvoiceSources::Stripe::ApiClient::Error,
     wait: :polynomially_longer,
     attempts: 5
 

@@ -1,0 +1,20 @@
+{
+  "name": "payment-reminder-stripe-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "jest --runInBand",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@stripe/ui-extension-sdk": "9.1.0",
+    "stripe": "22.3.2"
+  },
+  "devDependencies": {
+    "@types/jest": "29.5.14",
+    "@types/react": "18.3.23",
+    "jest": "29.7.0",
+    "ts-jest": "29.4.5",
+    "typescript": "5.9.3"
+  }
+}

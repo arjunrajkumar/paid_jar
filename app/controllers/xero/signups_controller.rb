@@ -28,7 +28,7 @@ module Xero
 
       start_new_session_for(signup.identity)
       queue_initial_refresh(signup.invoice_source)
-      redirect_to account_settings_url(script_name: signup.account.slug),
+      redirect_to after_signup_url(signup),
         notice: "Your Xero account is connected."
     rescue Xero::Signup::ExistingIdentityError => error
       redirect_to new_session_path, alert: error.message
@@ -50,6 +50,11 @@ module Xero
         InvoiceSources::RefreshJob.perform_later(invoice_source)
       rescue ActiveJob::EnqueueError => error
         Rails.error.report(error, severity: :error)
+      end
+
+      def after_signup_url(signup)
+        session.delete(:return_to_after_authenticating) ||
+          account_settings_url(script_name: signup.account.slug)
       end
   end
 end

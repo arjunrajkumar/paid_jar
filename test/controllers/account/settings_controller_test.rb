@@ -59,6 +59,21 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "connected Stripe source links to its test-mode App settings" do
+    account = sign_up_and_complete(email_address: "owner-settings-stripe@example.com")
+    account.invoice_sources.create!(
+      provider: :stripe,
+      status: :active,
+      external_account_id: "acct_settings_stripe",
+      provider_data: { livemode: false }
+    )
+
+    get account_settings_url(script_name: account.slug)
+
+    assert_response :success
+    assert_select "a[href=?]", "https://dashboard.stripe.com/test/settings/apps", "Manage in Stripe"
+  end
+
   test "connected Gmail shows its address status sender controls and delivery actions" do
     account = sign_up_and_complete(email_address: "owner-connected-gmail@example.com")
     connect_gmail(account, email: "billing@example.com")

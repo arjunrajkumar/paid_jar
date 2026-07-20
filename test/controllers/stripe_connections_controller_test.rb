@@ -1,198 +1,211 @@
 require "test_helper"
 
 class StripeConnectionsControllerTest < ActionDispatch::IntegrationTest
-  test "connect requires a PaymentReminder session" do
+  include ActiveJob::TestHelper
+
+  setup do
+    clear_enqueued_jobs
+    @stripe_config = FakeStripeConfiguration.new
+    InvoiceSources::Stripe::Configuration.stubs(:new).returns(@stripe_config)
+    InvoiceSources::Stripe::ApiClient.any_instance.stubs(:verify_access!).returns(true)
+  end
+
+  teardown do
+    clear_enqueued_jobs
+    clear_performed_jobs
+  end
+
+  test "install requires a PaymentReminder session" do
     get new_stripe_connection_url
 
     assert_redirected_to new_session_url(script_name: nil)
   end
 
-  test "connect redirects to Stripe authorization" do
-    sign_up_and_complete
+  test "install redirects to Stripe with a callback and signed state" do
+    expected_account = sign_up_and_complete
+    InvoiceSources::Stripe::InstallState.expects(:issue).with do |account:, nonce:, **|
+      account == expected_account && nonce.present?
+    end.returns("signed-install-state")
 
-    with_stripe_configured do
-      fake_client = FakeStripeClient.new
+    get new_stripe_connection_url
 
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
+    uri = URI(response.location)
+    query = Rack::Utils.parse_query(uri.query)
 
-      get new_stripe_connection_url
-
-      assert_redirected_to FakeStripeClient::AUTHORIZATION_URL
-      assert fake_client.authorization_url_called
-    end
+    assert_equal "marketplace.stripe.test", uri.host
+    assert_equal @stripe_config.redirect_uri, query.fetch("redirect_uri")
+    assert_equal "signed-install-state", query.fetch("state")
   end
 
-  test "connect redirects home when credentials are missing" do
+  test "install redirects home when Stripe App credentials are missing" do
     sign_up_and_complete
-    InvoiceSources::Stripe::Configuration.stubs(:new).returns(FakeStripeConfiguration.new(false))
+    @stripe_config.configured = false
 
     get new_stripe_connection_url
 
     assert_redirected_to root_url
+    assert_equal "Stripe App credentials are not configured.", flash[:alert]
   end
 
-  test "callback stores token set active account and invoices on the current account" do
+  test "signed callback connects the Stripe account without OAuth tokens and queues a refresh" do
     account = sign_up_and_complete
+    state = begin_install
 
-    with_stripe_configured do
-      fake_client = FakeStripeClient.new
-
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
-
-      get new_stripe_connection_url
-      get stripe_callback_url, params: { code: "auth-code", state: fake_client.state }
+    assert_difference -> { account.invoice_sources.stripe.count }, 1 do
+      get stripe_callback_url, params: callback_params(state:)
     end
 
-    source = account.invoice_sources.stripe.first
+    source = account.invoice_sources.stripe.sole
 
-    assert_redirected_to invoices_url
+    assert_redirected_to invoices_url(script_name: account.slug)
+    assert_equal "Stripe connected. Your invoices are syncing now.", flash[:notice]
     assert_predicate source, :active?
-    assert_equal "deprecated-access-token", source.access_token
-    assert_nil source.refresh_token
     assert_equal "acct_123", source.external_account_id
     assert_equal "acct_123", source.external_account_name
-    assert_equal false, source.provider_data["livemode"]
-    assert_equal [ "STR-456" ], account.invoices.where(invoice_source: source).pluck(:number)
-  end
-
-  test "callback rejects invalid state" do
-    account = sign_up_and_complete
-
-    with_stripe_configured do
-      fake_client = FakeStripeClient.new
-
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
-
-      get new_stripe_connection_url
-      get stripe_callback_url, params: { code: "auth-code", state: "wrong-state" }
-    end
-
-    assert_redirected_to root_url
-    assert_empty account.invoice_sources.stripe
-  end
-
-  test "callback handles denied access" do
-    account = sign_up_and_complete
-
-    with_stripe_configured do
-      get stripe_callback_url, params: { error: "access_denied" }
-    end
-
-    assert_redirected_to root_url
-    assert_empty account.invoice_sources.stripe
-  end
-
-  test "callback handles stripe client errors" do
-    account = sign_up_and_complete
-
-    with_stripe_configured do
-      fake_client = FakeStripeClient.new(error: InvoiceSources::Stripe::OauthClient::Error.new("invalid grant"))
-
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
-
-      get new_stripe_connection_url
-      get stripe_callback_url, params: { code: "auth-code", state: fake_client.state }
-    end
-
-    assert_redirected_to root_url
-    assert_empty account.invoice_sources.stripe
-  end
-
-  test "destroy disconnects current account stripe source" do
-    account = sign_up_and_complete
-    source = account.invoice_sources.create!(
-      provider: :stripe,
-      status: :active,
-      external_account_id: "acct_123",
-      access_token: "deprecated-access-token"
-    )
-
-    delete stripe_connection_url
-
-    assert_redirected_to account_settings_url
-    assert_predicate source.reload, :disconnected?
     assert_nil source.access_token
     assert_nil source.refresh_token
+    assert_equal %w[invoice_read event_read], source.scopes
+    assert_equal "stripe_app_platform", source.provider_data.fetch("authorization_type")
+    assert_equal "com.example.paymentreminder", source.provider_data.fetch("app_id")
+    assert_equal "usr_123", source.provider_data.fetch("stripe_user_id")
+    assert_equal false, source.provider_data.fetch("livemode")
+    assert_enqueued_with(job: InvoiceSources::RefreshJob, args: [ source ])
   end
 
-  test "destroy redirects when stripe is not connected" do
-    sign_up_and_complete
+  test "callback rejects invalid state before connecting Stripe" do
+    account = sign_up_and_complete
+    begin_install
 
-    delete stripe_connection_url
+    get stripe_callback_url, params: callback_params(state: "wrong-state")
 
-    assert_redirected_to new_stripe_connection_url
-    assert_equal "Connect Stripe first.", flash[:alert]
+    assert_redirected_to root_url
+    assert_equal "Stripe could not be connected securely. Please try again.", flash[:alert]
+    assert_empty account.invoice_sources.stripe
+    assert_no_enqueued_jobs only: InvoiceSources::RefreshJob
+  end
+
+  test "callback rejects a forged install signature" do
+    account = sign_up_and_complete
+    state = begin_install
+
+    get stripe_callback_url, params: callback_params(state:).merge(install_signature: "invalid")
+
+    assert_redirected_to root_url
+    assert_equal "Stripe could not be connected securely. Please try again.", flash[:alert]
+    assert_empty account.invoice_sources.stripe
+    assert_no_enqueued_jobs only: InvoiceSources::RefreshJob
+  end
+
+  test "callback state can only be used once" do
+    account = sign_up_and_complete
+    state = begin_install
+    params = callback_params(state:)
+
+    get stripe_callback_url, params: params
+    clear_enqueued_jobs
+
+    get stripe_callback_url, params: params
+
+    assert_redirected_to root_url
+    assert_equal "Stripe could not be connected securely. Please try again.", flash[:alert]
+    assert_equal 1, account.invoice_sources.stripe.count
+    assert_no_enqueued_jobs only: InvoiceSources::RefreshJob
+  end
+
+  test "callback handles cancelled installation without creating a source" do
+    account = sign_up_and_complete
+    begin_install
+
+    get stripe_callback_url, params: { error: "access_denied" }
+
+    assert_redirected_to root_url
+    assert_equal "Stripe installation was cancelled.", flash[:alert]
+    assert_empty account.invoice_sources.stripe
+  end
+
+  test "callback rejects an environment without a platform API key" do
+    account = sign_up_and_complete
+    state = begin_install
+    @stripe_config.configured_modes = [ true ]
+
+    get stripe_callback_url, params: callback_params(state:, livemode: false)
+
+    assert_redirected_to root_url
+    assert_equal "Stripe could not be connected securely. Please try again.", flash[:alert]
+    assert_empty account.invoice_sources.stripe
   end
 
   private
     def sign_up_and_complete(email_address: "owner-stripe@example.com", full_name: "Owner Person")
-      post signup_url, params: { signup: { email_address: email_address } }
+      post signup_url, params: { signup: { email_address: } }
       post session_magic_link_url, params: { code: MagicLink.last.code }
-      post signup_completion_url, params: { signup: { full_name: full_name } }
+      post signup_completion_url, params: { signup: { full_name: } }
 
-      Identity.find_by!(email_address: email_address).accounts.first
+      Identity.find_by!(email_address:).accounts.first.tap { clear_enqueued_jobs }
     end
 
-    def with_stripe_configured
-      InvoiceSources::Stripe::Configuration.any_instance.stubs(:configured?).returns(true)
-      yield
+    def begin_install
+      get new_stripe_connection_url
+
+      Rack::Utils.parse_query(URI(response.location).query).fetch("state")
     end
 
-    FakeStripeConfiguration = Struct.new(:configured?)
+    def callback_params(state:, livemode: false)
+      attributes = {
+        state:,
+        user_id: "usr_123",
+        account_id: "acct_123",
+        livemode:
+      }
+      payload = JSON.generate(
+        state: attributes.fetch(:state).to_s,
+        user_id: attributes.fetch(:user_id),
+        account_id: attributes.fetch(:account_id)
+      )
 
-    class FakeStripeClient
-      AUTHORIZATION_URL = "https://connect.stripe.com/oauth/authorize?fake=true"
+      attributes.merge(install_signature: stripe_signature(payload, @stripe_config.signing_secrets.first))
+    end
 
-      attr_reader :state
-      attr_accessor :authorization_url_called
+    def stripe_signature(payload, secret)
+      timestamp = Time.current.to_i
+      digest = OpenSSL::HMAC.hexdigest("SHA256", secret, "#{timestamp}.#{payload}")
+      "t=#{timestamp},v1=#{digest}"
+    end
 
-      def initialize(error: nil)
-        @error = error
+    class FakeStripeConfiguration
+      attr_accessor :configured, :configured_modes
+
+      def initialize
+        @configured = true
+        @configured_modes = [ true, false ]
       end
 
-      def authorization_url(state:, redirect_uri: nil)
-        @state = state
-        self.authorization_url_called = true
-        AUTHORIZATION_URL
+      def configured?
+        configured
       end
 
-      def exchange_code(code:, redirect_uri: nil)
-        raise @error if @error
-        raise "unexpected code" unless code == "auth-code"
-
-        {
-          "access_token" => "deprecated-access-token",
-          "stripe_user_id" => "acct_123",
-          "livemode" => false,
-          "token_type" => "bearer",
-          "scope" => "read_write"
-        }
+      def app_id
+        "com.example.paymentreminder"
       end
 
-      def invoices(stripe_account_id:)
-        raise "unexpected Stripe account id" unless stripe_account_id == "acct_123"
+      def install_url
+        "https://marketplace.stripe.test/apps/install/paymentreminder?source=settings"
+      end
 
-        {
-          "data" => [
-            {
-              "id" => "in_456",
-              "number" => "STR-456",
-              "collection_method" => "send_invoice",
-              "billing_reason" => "manual",
-              "status" => "open",
-              "currency" => "usd",
-              "amount_due" => 25050,
-              "amount_paid" => 0,
-              "amount_remaining" => 25050,
-              "total" => 25050,
-              "created" => Time.zone.local(2026, 7, 1).to_i,
-              "due_date" => Time.zone.local(2026, 7, 31).to_i,
-              "customer" => "cus_123",
-              "customer_name" => "Example Stripe Customer",
-              "customer_email" => "billing@example.com"
-            }
-          ]
-        }
+      def redirect_uri
+        "https://paymentreminder.test/stripe/callback"
+      end
+
+      def signing_secrets
+        [ "absec_test" ]
+      end
+
+      def secret_key_configured?(livemode:)
+        configured_modes.include?(livemode)
+      end
+
+      def permissions
+        %w[invoice_read event_read]
       end
     end
 end

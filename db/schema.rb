@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_20_130000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_20_150000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -242,6 +242,24 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_130000) do
     t.index ["identity_id"], name: "index_sessions_on_identity_id"
   end
 
+  create_table "stripe_installation_claims", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id"
+    t.datetime "consumed_at"
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.boolean "livemode", null: false
+    t.string "request_digest", limit: 64, null: false
+    t.string "stripe_account_id", null: false
+    t.string "stripe_user_id", null: false
+    t.string "token_digest", limit: 64, null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_stripe_installation_claims_on_account_id"
+    t.index ["expires_at"], name: "index_stripe_installation_claims_on_expires_at"
+    t.index ["request_digest"], name: "index_stripe_installation_claims_on_request_digest", unique: true
+    t.index ["stripe_account_id", "livemode"], name: "idx_on_stripe_account_id_livemode_2fff42ae45"
+    t.index ["token_digest"], name: "index_stripe_installation_claims_on_token_digest", unique: true
+  end
+
   create_table "users", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.boolean "active", default: true, null: false
@@ -276,6 +294,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_130000) do
   add_foreign_key "notification_subscriptions", "users", on_delete: :cascade
   add_foreign_key "outbound_email_connections", "accounts"
   add_foreign_key "sessions", "identities"
+  add_foreign_key "stripe_installation_claims", "accounts", on_delete: :nullify
   add_foreign_key "users", "accounts"
   add_foreign_key "users", "identities"
 end

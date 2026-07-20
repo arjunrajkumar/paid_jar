@@ -1,0 +1,42 @@
+{
+  "id": "com.paymentreminderemails.paymentreminder",
+  "version": "0.1.0",
+  "name": "Payment Reminder",
+  "icon": "./icons/icon.png",
+  "sandbox_install_compatible": false,
+  "distribution_type": "public",
+  "stripe_api_access_type": "platform",
+  "allowed_redirect_uris": [
+    "https://app.paymentreminderemails.com/stripe/callback"
+  ],
+  "permissions": [
+    {
+      "permission": "invoice_read",
+      "purpose": "Read invoices so Payment Reminder can track what is due and paid."
+    },
+    {
+      "permission": "event_read",
+      "purpose": "Receive invoice and installation events so Payment Reminder stays up to date."
+    }
+  ],
+  "post_install_action": {
+    "type": "settings"
+  },
+  "constants": {
+    "PAYMENT_REMINDER_ORIGIN": "https://app.paymentreminderemails.com"
+  },
+  "ui_extension": {
+    "views": [
+      {
+        "viewport": "settings",
+        "component": "PaymentReminderSettings"
+      }
+    ],
+    "content_security_policy": {
+      "connect-src": [
+        "https://app.paymentreminderemails.com/stripe/app/onboarding_claims"
+      ],
+      "purpose": "Securely connect the Stripe account to the user's Payment Reminder account."
+    }
+  }
+}

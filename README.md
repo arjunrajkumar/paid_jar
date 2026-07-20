@@ -47,9 +47,18 @@ Please set up PaymentReminder locally.
    If I want Stripe connected, help me configure Rails credentials with:
 
    stripe:
-     client_id: my-stripe-connect-client-id
-     secret_key: my-stripe-secret-key
-     webhook_signing_secret: whsec_my-stripe-webhook-secret
+     app_id: my-stripe-app-id
+     install_url: https://marketplace.stripe.com/apps/install/link/my-install-link
+     signing_secrets:
+       - absec_my-stripe-app-signing-secret
+     secret_keys:
+       live: sk_live_my-stripe-platform-key
+       test: sk_test_my-stripe-platform-key
+     webhook_signing_secrets:
+       live:
+         - whsec_my-live-stripe-app-webhook-secret
+       test:
+         - whsec_my-test-stripe-app-webhook-secret
 
    If I want Gmail delivery for invoice reminders, follow the Gmail section in this README and help me configure Rails credentials with:
 
@@ -126,21 +135,60 @@ https://your-tunnel.example/invoice_sources/webhooks/xero
 
 ## Stripe
 
-PaymentReminder is a Stripe Connect **Extension**: it connects to an existing Standard Stripe account and reads invoice information without creating accounts, moving money, or modifying Stripe data. Register the Connect integration as an Extension and use OAuth with the `read_only` scope. If the Connect application is currently classified as a Platform, contact Stripe to change its integration type before launch.
+The official hosted PaymentReminder service uses a public Stripe App with
+`stripe_api_access_type: platform`. The App requests only the `invoice_read` and `event_read`
+permissions. It reads invoice information from an existing Stripe account; it does not create
+accounts, move money, or modify Stripe data. Stripe Apps replace the legacy Connect Extension
+integration. See [Migrate from a Connect extension to a Stripe App](https://docs.stripe.com/stripe-apps/migrate-connect-extension)
+and [Stripe App permissions](https://docs.stripe.com/stripe-apps/reference/permissions).
 
-In Stripe Connect settings, enable OAuth for Standard accounts and configure the redirect URI:
+### Register the Stripe App and collect credentials
+
+Do not add placeholder values to Rails credentials. First register the App with Stripe and copy the
+real values from the Stripe account that owns it.
+
+1. Install the Stripe CLI and Apps plugin, then sign in:
+
+   ```bash
+   stripe login
+   stripe plugin install apps
+   ```
+
+2. For development, use a separate Stripe account and a globally unique test App ID, such as an ID
+   ending in `.test`. App IDs are global, so do not upload the final production ID from the
+   development account.
+3. For the production migration, sign the CLI into the same Stripe account that owns the legacy
+   Connect Extension. Verify the active Stripe account before uploading the final App ID.
+4. From the Stripe App package, upload the manifest:
+
+   ```bash
+   cd stripe-app
+   stripe apps upload
+   ```
+
+5. In **Stripe Dashboard → Developers → Apps → Payment Reminder**, collect:
+   - The App ID from the uploaded manifest.
+   - The App signing secret (`absec_...`) from the App's **Signing secret** dialog.
+   - The external-test install link while testing, and the public install link when publishing.
+6. In **Stripe Dashboard → Developers → API keys**, copy the publisher account's test
+   (`sk_test_...`) and live (`sk_live_...`) secret keys. These are server-side platform keys and
+   must never be placed in `stripe-app/`, JavaScript, or Git.
+7. Register the live and test webhook destinations described below, then copy each endpoint's
+   separate `whsec_...` signing secret.
+
+For local install-link testing, use a development manifest whose callback is:
 
 ```text
 http://localhost:3000/stripe/callback
 ```
 
-For production, register the public HTTPS callback instead, for example:
+The production manifest must use the public HTTPS callback:
 
 ```text
-https://payment-reminder.example/stripe/callback
+https://app.paymentreminderemails.com/stripe/callback
 ```
 
-Then edit Rails credentials:
+After collecting the real values, edit Rails credentials:
 
 ```bash
 bin/rails credentials:edit
@@ -150,14 +198,48 @@ Add:
 
 ```yaml
 stripe:
-  client_id: your-connect-client-id
-  secret_key: your-stripe-secret-key
-  webhook_signing_secret: whsec_your-webhook-secret
+  app_id: your-stripe-app-id
+  install_url: https://marketplace.stripe.com/apps/install/link/your-install-link
+  signing_secrets:
+    - absec_your-app-signing-secret
+  secret_keys:
+    live: sk_live_your-platform-key
+    test: sk_test_your-platform-key
+  webhook_signing_secrets:
+    live:
+      - whsec_your-live-webhook-secret
+    test:
+      - whsec_your-test-webhook-secret
 ```
 
-The client ID and secret key must belong to the same Stripe mode: use sandbox values together or live values together. PaymentReminder uses the connected account ID returned by OAuth with the platform secret key and a `Stripe-Account` header; the deprecated OAuth access token is not used for invoice API requests.
+The legacy Connect Extension's OAuth `client_id`, OAuth client secret, and per-install access or
+refresh tokens are not used by this Stripe App flow.
 
-In **Workbench → Webhooks**, create an event destination that listens to **Connected accounts**, not events on the PaymentReminder Stripe account. Set its endpoint to `<HOST>/invoice_sources/webhooks/stripe` and select:
+Copy `install_url` exactly from the Stripe App's public or external-test install link. Stripe App
+requests to PaymentReminder are verified with an `absec_...` signing secret. Keep every active
+signing secret in `signing_secrets` during a rotation. PaymentReminder stores the verified Stripe
+account ID and uses the appropriate hosted platform key with the `Stripe-Account` header. It does
+not receive or store per-install Stripe OAuth access or refresh tokens.
+
+The first release supports live mode and the developer account's ordinary test mode, not general
+Stripe Sandboxes. Keep `sandbox_install_compatible` false until isolated Sandbox keys, installs,
+and webhooks are supported end to end. The App's Stripe Settings onboarding view submits its signed
+account context to `POST <HOST>/stripe/app/onboarding_claims`; that endpoint must not accept an
+unsigned account ID. See [Stripe App install links](https://docs.stripe.com/stripe-apps/install-links)
+and [authenticate Stripe Dashboard requests](https://docs.stripe.com/stripe-apps/build-backend).
+
+The checked-in Stripe App manifest supplies `PAYMENT_REMINDER_ORIGIN` to the Settings view. For a
+separate external-test or local-preview backend, use a Stripe CLI extended manifest that overrides
+both that constant and `ui_extension.content_security_policy.connect-src`. Do not add staging,
+localhost, or placeholder redirect URIs to the production manifest.
+
+Create separate live-mode and test-mode event destinations that listen to events on
+**Connected accounts**. Use these distinct URLs:
+
+- Live mode: `<HOST>/invoice_sources/webhooks/stripe`
+- Test mode: `<HOST>/invoice_sources/webhooks/stripe/test`
+
+Select:
 
 - `invoice.created`
 - `invoice.updated`
@@ -165,28 +247,38 @@ In **Workbench → Webhooks**, create an event destination that listens to **Con
 - `invoice.paid`
 - `invoice.voided`
 - `invoice.marked_uncollectible`
+- `account.application.authorized`
 - `account.application.deauthorized`
 
-Reveal that destination's signing secret and store it as `stripe.webhook_signing_secret`. Sandbox, live, and Stripe CLI destinations each have different signing secrets.
-
-For a signing-secret rotation, configure both secrets temporarily:
-
-```yaml
-stripe:
-  webhook_signing_secrets:
-    - whsec_old
-    - whsec_new
-```
+Store each destination's signing secret under the matching live or test credential. Stripe CLI,
+test-mode, live-mode, and future Sandbox destinations have different signing secrets. During a
+rotation, keep both active secrets in the appropriate array until Stripe no longer signs with the
+old value. The live URL verifies only `webhook_signing_secrets.live`; the test URL verifies only
+`webhook_signing_secrets.test`. See [Stripe App events](https://docs.stripe.com/stripe-apps/events) and
+[webhook signature verification](https://docs.stripe.com/webhooks/signature).
 
 For local webhook testing with the Stripe CLI:
 
 ```bash
 stripe listen \
-  --events invoice.created,invoice.updated,invoice.finalized,invoice.paid,invoice.voided,invoice.marked_uncollectible,account.application.deauthorized \
-  --forward-connect-to localhost:3000/invoice_sources/webhooks/stripe
+  --events invoice.created,invoice.updated,invoice.finalized,invoice.paid,invoice.voided,invoice.marked_uncollectible,account.application.authorized,account.application.deauthorized \
+  --forward-connect-to localhost:3000/invoice_sources/webhooks/stripe/test
 ```
 
-Use the `whsec_...` value printed by that command only for local CLI testing. After credentials are configured, sign in and open `/account/settings` to connect Xero or Stripe. See [Stripe OAuth for Standard accounts](https://docs.stripe.com/connect/oauth-standard-accounts), [Connect webhooks](https://docs.stripe.com/connect/webhooks), and [Stripe currencies](https://docs.stripe.com/currencies).
+Use the `whsec_...` value printed by that command only for local CLI testing and store it under the
+test webhook credentials. After credentials are configured, sign in and open `/account/settings`
+to install Stripe. Installing authorizes access;
+uninstalling in **Stripe → Settings → Installed apps** revokes it and sends
+`account.application.deauthorized`.
+
+The credential example above configures the hosted public-App path. A self-hoster can instead
+create a private Stripe App under an account they control and install it from that account's Stripe
+Dashboard. A private App does not use the public `install_url`; it must hand off signed account
+context through its own Settings view and backend, and use its own App ID, platform keys, signing
+secrets, and webhook destinations. The official hosted App's install link and secrets are never
+distributed or shared. Turnkey multi-tenant self-hosted Stripe distribution is outside this
+release. See [Stripe App distribution](https://docs.stripe.com/stripe-apps/distribution-options)
+and [Stripe App settings](https://docs.stripe.com/stripe-apps/app-settings).
 
 ## System email
 

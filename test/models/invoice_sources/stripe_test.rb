@@ -2,33 +2,121 @@ require "test_helper"
 
 module InvoiceSources
   class StripeTest < ActiveSupport::TestCase
-    test "connect exchanges the code and stores the active account" do
+    test "connects a Stripe App installation without storing OAuth tokens" do
       account = Account.create!(name: "New Stripe Account")
       source = account.invoice_sources.build(provider: :stripe)
-      fake_client = FakeStripeClient.new
+      config = Struct.new(:permissions, :app_id).new(
+        %w[invoice_read event_read],
+        "com.example.paymentreminder"
+      )
 
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
-
-      source = InvoiceSources::Stripe.new(source).connect!(code: "auth-code")
+      source = InvoiceSources::Stripe.new(source).connect_from_install!(
+        stripe_account_id: "acct_123",
+        stripe_user_id: "usr_123",
+        livemode: false,
+        config:,
+        client: stripe_access_client
+      )
 
       assert_predicate source, :persisted?
       assert_predicate source, :active?
-      assert_equal "deprecated-access-token", source.access_token
+      assert_nil source.access_token
       assert_nil source.refresh_token
       assert_equal "acct_123", source.external_account_id
       assert_equal "acct_123", source.external_account_name
+      assert_equal %w[invoice_read event_read], source.scopes
+      assert_equal InvoiceSources::Stripe::AUTHORIZATION_TYPE,
+        source.provider_data["authorization_type"]
+      assert_equal "com.example.paymentreminder", source.provider_data["app_id"]
+      assert_equal "usr_123", source.provider_data["stripe_user_id"]
       assert_equal false, source.provider_data["livemode"]
-      assert_equal "acct_123", source.raw_token_data["stripe_user_id"]
-      refute source.raw_token_data.key?("access_token")
-      refute source.raw_token_data.key?("refresh_token")
-      assert fake_client.exchange_code_called
+      assert source.provider_data["authorized_at"].present?
+      assert_equal source.provider_data["authorized_at"],
+        source.provider_data[InvoiceSources::Stripe::LIFECYCLE_EVENT_AT_KEY]
+      assert_equal InvoiceSources::Stripe::WebhookEvent::APPLICATION_AUTHORIZED_EVENT_TYPE,
+        source.provider_data[InvoiceSources::Stripe::LIFECYCLE_EVENT_TYPE_KEY]
+      assert_empty source.raw_token_data
+    end
+
+    test "successful reconnect rejects an older delayed deauthorization" do
+      source = stripe_source
+      adapter = InvoiceSources::Stripe.new(source)
+      reconnected_at = Time.zone.local(2026, 7, 20, 12)
+
+      adapter.deauthorize_from_webhook!(occurred_at: reconnected_at - 2.minutes)
+
+      travel_to reconnected_at do
+        adapter.connect_from_install!(
+          stripe_account_id: source.external_account_id,
+          stripe_user_id: "usr_reconnected",
+          livemode: false,
+          config: stripe_config,
+          client: stripe_access_client
+        )
+      end
+
+      applied = adapter.deauthorize_from_webhook!(occurred_at: reconnected_at - 1.minute)
+
+      assert_equal false, applied
+      assert_predicate source.reload, :active?
+      assert_equal reconnected_at.iso8601,
+        source.provider_data[InvoiceSources::Stripe::LIFECYCLE_EVENT_AT_KEY]
+      assert_equal InvoiceSources::Stripe::WebhookEvent::APPLICATION_AUTHORIZED_EVENT_TYPE,
+        source.provider_data[InvoiceSources::Stripe::LIFECYCLE_EVENT_TYPE_KEY]
+    end
+
+    test "does not attach one Stripe account to two workspaces" do
+      existing_source = stripe_source
+      other_account = Account.create!(name: "Other Workspace")
+      candidate = other_account.invoice_sources.build(provider: :stripe)
+
+      error = assert_raises(InvoiceSources::Stripe::AccountConflictError) do
+        InvoiceSources::Stripe.new(candidate).connect_from_install!(
+          stripe_account_id: existing_source.external_account_id,
+          stripe_user_id: "usr_other",
+          livemode: false,
+          config: stripe_config,
+          client: stripe_access_client
+        )
+      end
+
+      assert_match(/another PaymentReminder workspace/, error.message)
+      assert_not_predicate candidate, :persisted?
+    end
+
+    test "does not silently replace a workspace's Stripe account or environment" do
+      source = stripe_source
+      adapter = InvoiceSources::Stripe.new(source)
+
+      assert_raises(InvoiceSources::Stripe::AccountMismatchError) do
+        adapter.connect_from_install!(
+          stripe_account_id: "acct_different",
+          stripe_user_id: "usr_123",
+          livemode: false,
+          config: stripe_config,
+          client: stripe_access_client
+        )
+      end
+
+      assert_raises(InvoiceSources::Stripe::ModeConflictError) do
+        adapter.connect_from_install!(
+          stripe_account_id: source.external_account_id,
+          stripe_user_id: "usr_123",
+          livemode: true,
+          config: stripe_config,
+          client: stripe_access_client
+        )
+      end
+
+      assert_equal "acct_123", source.reload.external_account_id
+      assert_equal false, source.provider_data.fetch("livemode")
     end
 
     test "sync_invoices stores Stripe invoices" do
       source = stripe_source
       fake_client = FakeStripeClient.new
 
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Stripe::ApiClient.stubs(:new).returns(fake_client)
 
       assert_difference -> { source.customers.count }, 1 do
         assert_difference -> { source.invoices.count }, 1 do
@@ -77,7 +165,7 @@ module InvoiceSources
       source = stripe_source
       fake_client = FakeStripeClient.new
 
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Stripe::ApiClient.stubs(:new).returns(fake_client)
 
       InvoiceSources::Stripe.new(source).sync_invoices!
 
@@ -123,7 +211,7 @@ module InvoiceSources
         customer_email: "invoice@example.com"
       )
 
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Stripe::ApiClient.stubs(:new).returns(fake_client)
 
       InvoiceSources::Stripe.new(source).sync_invoices!
 
@@ -139,7 +227,7 @@ module InvoiceSources
       source = stripe_source
       fake_client = FakeStripeClient.new(customer: nil)
 
-      InvoiceSources::Stripe::OauthClient.stubs(:new).returns(fake_client)
+      InvoiceSources::Stripe::ApiClient.stubs(:new).returns(fake_client)
 
       InvoiceSources::Stripe.new(source).sync_invoices!
 
@@ -155,12 +243,24 @@ module InvoiceSources
         accounts(:paid_jar).invoice_sources.create!(
           provider: :stripe,
           status: :active,
-          external_account_id: "acct_123"
+          external_account_id: "acct_123",
+          provider_data: { livemode: false }
         )
       end
 
+      def stripe_config
+        Struct.new(:permissions, :app_id).new(
+          %w[invoice_read event_read],
+          "com.example.paymentreminder"
+        )
+      end
+
+      def stripe_access_client
+        stub(verify_access!: true)
+      end
+
     class FakeStripeClient
-      attr_accessor :exchange_code_called, :invoices_called
+      attr_accessor :invoices_called
 
       def initialize(
         customer: "cus_123",
@@ -178,19 +278,6 @@ module InvoiceSources
         @created = created
         @status = status
         @marked_uncollectible_at = marked_uncollectible_at
-      end
-
-      def exchange_code(code:)
-        raise "unexpected code" unless code == "auth-code"
-
-        self.exchange_code_called = true
-        {
-          "access_token" => "deprecated-access-token",
-          "stripe_user_id" => "acct_123",
-          "livemode" => false,
-          "token_type" => "bearer",
-          "scope" => "read_write"
-        }
       end
 
       def invoices(stripe_account_id:)

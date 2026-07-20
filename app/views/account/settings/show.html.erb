@@ -45,6 +45,16 @@
                 </svg>
                 <span>Resync</span>
               <% end %>
+              <% if connected_source.stripe? %>
+                <% stripe_settings_url = connected_source.provider_data.fetch("livemode", true) ?
+                  "https://dashboard.stripe.com/settings/apps" :
+                  "https://dashboard.stripe.com/test/settings/apps" %>
+                <%= link_to "Manage in Stripe",
+                  stripe_settings_url,
+                  class: "app-inline-button",
+                  target: "_blank",
+                  rel: "noopener" %>
+              <% end %>
             </div>
           <% else %>
             <%= link_to "Connect", public_send(source.connect_path_name), class: "app-pill app-pill--slate" %>

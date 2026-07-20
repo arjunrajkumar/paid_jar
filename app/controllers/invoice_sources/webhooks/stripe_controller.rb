@@ -13,7 +13,8 @@ module InvoiceSources
         def verified_events
           InvoiceSources::Stripe::WebhookEvent.from_request(
             payload: request.body.read,
-            signature: request.headers["Stripe-Signature"]
+            signature: request.headers["Stripe-Signature"],
+            endpoint_livemode: params[:webhook_mode] == "live"
           )
         end
     end

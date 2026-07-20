@@ -1,6 +1,6 @@
 # PaymentReminder external going-live checklist
 
-Last reviewed: 18 July 2026
+Last reviewed: 20 July 2026
 
 This checklist covers work that must be completed outside the PaymentReminder repository before the hosted service is opened to customers. It focuses on provider dashboards, DNS, public policies, credentials, webhooks, backups, and monitoring.
 
@@ -21,8 +21,10 @@ Use these exact production URLs when a provider asks for them:
 | Xero signup callback | `https://app.paymentreminderemails.com/signup/xero/callback` |
 | Xero sign-in callback | `https://app.paymentreminderemails.com/session/xero/callback` |
 | Xero webhook | `https://app.paymentreminderemails.com/invoice_sources/webhooks/xero` |
-| Stripe OAuth callback | `https://app.paymentreminderemails.com/stripe/callback` |
-| Stripe Connect webhook | `https://app.paymentreminderemails.com/invoice_sources/webhooks/stripe` |
+| Stripe App install callback | `https://app.paymentreminderemails.com/stripe/callback` |
+| Stripe App onboarding claims | `https://app.paymentreminderemails.com/stripe/app/onboarding_claims` |
+| Stripe App live webhook | `https://app.paymentreminderemails.com/invoice_sources/webhooks/stripe` |
+| Stripe App test webhook | `https://app.paymentreminderemails.com/invoice_sources/webhooks/stripe/test` |
 | System-email sender | `PaymentReminder <support@paymentreminderemails.com>` |
 | Amazon SES Region | `us-east-1` |
 
@@ -202,43 +204,68 @@ See [Xero webhooks and Intent to receive](https://developer.xero.com/documentati
 
 Current tiers and limits are listed on [Xero Developer pricing](https://developer.xero.com/pricing) and [OAuth 2.0 API limits](https://developer.xero.com/documentation/guides/oauth2/limits).
 
-## 5. Stripe Connect Extension
+## 5. Stripe App
 
 Stripe should remain hidden or clearly unavailable until every item in this section is complete.
 
-### Confirm the Connect integration type and OAuth access
+### Create and review the Stripe App
 
-- [ ] In **Connect settings → Availability**, confirm PaymentReminder is registered as an **Extension**, not a Platform.
-- [ ] If it is currently classified as a Platform, contact Stripe to change the integration selection before inviting users.
-- [ ] Confirm OAuth onboarding is enabled for Standard accounts.
-- [ ] Confirm the authorization screen grants `read_only` access.
-- [ ] Confirm PaymentReminder does not create Stripe accounts, modify invoices, create payments, or move connected-account funds.
+- [ ] Confirm which activated Stripe account owns the legacy Connect Extension.
+- [ ] Develop and external-test the replacement App on a separate Stripe account, with a separate backend and globally unique test App ID.
+- [ ] Upload and publish the final App from the same Stripe account that owns the Extension so Stripe can offer its built-in migration to any existing Extension users.
+- [ ] Configure public distribution and `stripe_api_access_type: platform`.
+- [ ] Request only `invoice_read` and `event_read`; document why each permission is necessary for review.
+- [ ] Set `sandbox_install_compatible` to false for the first release. Do not claim general Stripe Sandbox support until isolated Sandbox installs, keys, and event destinations work end to end.
+- [ ] Add the PaymentReminder Stripe Settings/onboarding view and confirm it sends signed account context to `POST https://app.paymentreminderemails.com/stripe/app/onboarding_claims`.
+- [ ] Confirm the App reads invoice information but cannot create Stripe accounts, modify invoices, create payments, or move funds.
+- [ ] Complete the Marketplace listing, pricing, support details, screenshots, privacy policy, terms, and review instructions.
 
-PaymentReminder reads existing Standard-account invoices, so it is an Extension and requests `read_only`. Stripe reserves `read_only` for Extensions; new payment Platforms follow a different Connect onboarding model. See [Stripe's OAuth reference](https://docs.stripe.com/connect/oauth-reference), [OAuth changes for Standard accounts](https://docs.stripe.com/connect/oauth-changes-for-standard-platforms), and [OAuth with Standard accounts](https://docs.stripe.com/connect/oauth-standard-accounts).
+Stripe Apps replace legacy Connect Extensions and use granular permissions. Existing Extension
+users retain their current connection until they approve the App migration; reauthorization
+replaces the Extension's broad permission with the App manifest's permissions, so the final
+manifest must be complete before migration. See [Stripe's migration guide](https://docs.stripe.com/stripe-apps/migrate-connect-extension),
+[App manifest reference](https://docs.stripe.com/stripe-apps/reference/app-manifest),
+[permissions reference](https://docs.stripe.com/stripe-apps/reference/permissions), and
+[publish an app](https://docs.stripe.com/stripe-apps/publish-app).
 
 ### Configure Stripe live mode
 
 - [ ] Activate the production Stripe account and complete all requested business verification.
-- [ ] Complete the Connect profile, branding, support details, website, privacy policy, and terms.
-- [ ] Enable the Extension's OAuth integration in **live mode**.
-- [ ] Register the exact live redirect URI: `https://app.paymentreminderemails.com/stripe/callback`.
-- [ ] Copy the live Connect client ID and live secret key into Rails credentials. Never mix sandbox and live values:
+- [ ] Copy the exact public App install link and register `https://app.paymentreminderemails.com/stripe/callback` as its callback.
+- [ ] Copy the App signing secret and the platform account's separate live and test secret keys.
+- [ ] Never use a live platform key for a test-mode installation or a test key for a live installation.
+- [ ] Add the credentials using `bin/rails credentials:edit`:
 
 ```yaml
 stripe:
-  client_id: your-live-connect-client-id
-  secret_key: your-live-stripe-secret-key
-  webhook_signing_secret: your-live-connect-webhook-secret
+  app_id: your-stripe-app-id
+  install_url: https://marketplace.stripe.com/apps/install/link/your-public-install-link
+  signing_secrets:
+    - absec_your-app-signing-secret
+  secret_keys:
+    live: sk_live_your-platform-key
+    test: sk_test_your-platform-key
+  webhook_signing_secrets:
+    live:
+      - whsec_your-live-webhook-secret
+    test:
+      - whsec_your-test-webhook-secret
 ```
 
-The webhook signing secret is added after the live event destination is created. Never paste any of these values into this checklist.
+The event-destination secrets are added after those destinations are created. Keep all active App
+signing secrets in `signing_secrets` during a rotation. PaymentReminder stores the verified Stripe
+account ID and uses the matching platform key with the `Stripe-Account` header; it does not receive
+or store a per-install Stripe OAuth access or refresh token. Never paste any credential into this
+checklist. See [Stripe App install links](https://docs.stripe.com/stripe-apps/install-links) and
+[platform-key authentication](https://docs.stripe.com/stripe-apps/build-backend#using-stripe-apis).
 
-### Register the live Connect webhook
+### Register live and test Stripe App webhooks
 
-- [ ] In **Stripe Workbench → Webhooks**, create an HTTPS event destination.
-- [ ] Select **Connected accounts** as the event source; do not select events on the PaymentReminder Stripe account.
-- [ ] Record the API version selected for the destination so webhook payload changes can be reviewed deliberately.
-- [ ] Set its URL to `https://app.paymentreminderemails.com/invoice_sources/webhooks/stripe`.
+- [ ] In **Stripe Workbench → Webhooks**, create separate HTTPS event destinations for live mode and test mode.
+- [ ] Select **Listen to events on Connected accounts** for both destinations.
+- [ ] Record the API version selected for each destination so webhook payload changes can be reviewed deliberately.
+- [ ] Set the live destination URL to `https://app.paymentreminderemails.com/invoice_sources/webhooks/stripe`.
+- [ ] Set the test destination URL to `https://app.paymentreminderemails.com/invoice_sources/webhooks/stripe/test`.
 - [ ] Subscribe only to the events currently handled by PaymentReminder:
   - `invoice.created`
   - `invoice.updated`
@@ -246,29 +273,52 @@ The webhook signing secret is added after the live event destination is created.
   - `invoice.paid`
   - `invoice.voided`
   - `invoice.marked_uncollectible`
+  - `account.application.authorized`
   - `account.application.deauthorized`
-- [ ] Reveal the live endpoint signing secret and store it as `stripe.webhook_signing_secret`.
+- [ ] Store each endpoint signing secret in the matching `stripe.webhook_signing_secrets.live` or `.test` array.
 - [ ] Restart or deploy PaymentReminder after saving the signing secret.
-- [ ] Confirm a connected Standard test account produces successful `2xx` deliveries in Workbench.
+- [ ] Confirm an installed test-mode account produces successful `2xx` deliveries in Workbench.
 - [ ] Confirm duplicate delivery of the same Stripe event does not create duplicate webhook records or jobs.
-- [ ] During signing-secret rotation, configure `stripe.webhook_signing_secrets` with both active secrets, verify delivery, and then remove the expired secret.
+- [ ] During rotation, keep both active secrets in the appropriate live or test array, verify delivery, and then remove the expired secret.
 - [ ] Monitor Workbench for failed deliveries after launch.
 
-Stripe requires HTTPS in live mode, Connect webhooks must explicitly listen to connected-account events, and each sandbox, live, or CLI destination has its own signing secret. See [Connect webhooks](https://docs.stripe.com/connect/webhooks), [Workbench event destinations](https://docs.stripe.com/workbench/event-destinations), and [webhook signature verification](https://docs.stripe.com/webhooks).
+Stripe requires HTTPS in live mode, and each test-mode, live-mode, Stripe CLI, or future Sandbox
+destination has its own signing secret. App install and uninstall lifecycle events are
+`account.application.authorized` and `account.application.deauthorized`. See
+[Stripe App events](https://docs.stripe.com/stripe-apps/events),
+[Workbench event destinations](https://docs.stripe.com/workbench/event-destinations), and
+[webhook signature verification](https://docs.stripe.com/webhooks/signature).
 
 ### Stripe production smoke tests
 
-- [ ] Connect a live Standard account that is not the PaymentReminder platform account.
-- [ ] Confirm the consent screen displays read-only access and returns to `https://app.paymentreminderemails.com/stripe/callback`.
+- [ ] From a signed-in PaymentReminder account, install the App on a live Stripe account that is not the PaymentReminder platform account.
+- [ ] Confirm the install screen displays only invoice and event read access and returns to `https://app.paymentreminderemails.com/stripe/callback`.
+- [ ] Confirm the callback rejects an expired, replayed, or tampered state and an invalid `install_signature`.
+- [ ] Install from the Marketplace, complete the signed onboarding handoff, and confirm the Stripe account is attached only after PaymentReminder signup or sign-in.
+- [ ] Confirm the onboarding-claim endpoint rejects missing, invalid, expired, and replayed signed claims.
+- [ ] Confirm `account.application.authorized` records or reconciles the installation without creating duplicate sources.
 - [ ] Confirm the initial import includes every invoice page for an account with more than 100 invoices.
 - [ ] Import a two-decimal invoice such as USD and confirm `25050` minor units are displayed as `250.50`.
 - [ ] Import a zero-decimal invoice such as JPY and confirm `25050` minor units are displayed as `25050`, not `250.50`.
 - [ ] Mark an open test invoice paid and confirm its `invoice.paid` delivery updates PaymentReminder before the next reminder run.
 - [ ] Change an amount or due date and confirm `invoice.updated` refreshes the invoice.
 - [ ] Void and mark test invoices uncollectible and confirm both states synchronize.
-- [ ] Disconnect Stripe from PaymentReminder and confirm the OAuth connection is removed in Stripe.
-- [ ] Reconnect, then deauthorize PaymentReminder from the connected Stripe account and confirm `account.application.deauthorized` marks the PaymentReminder source disconnected.
+- [ ] Uninstall PaymentReminder from **Stripe → Settings → Installed apps** and confirm `account.application.deauthorized` marks the PaymentReminder source disconnected.
+- [ ] Confirm PaymentReminder directs users to Stripe to uninstall rather than attempting legacy Connect OAuth deauthorization.
 - [ ] Confirm automatic reminders remain disabled until Gmail and the intended accounting source are connected and verified.
+
+### Confirm the self-hosted path is separate
+
+- [ ] Document that each self-hoster creates and installs a private Stripe App under an account they control.
+- [ ] Install that private App from the operator's Stripe Dashboard; do not give it the hosted public App's `install_url`.
+- [ ] Confirm the private App uses a unique App ID and its own platform live/test keys, App signing secrets, and live/test webhook destinations.
+- [ ] Point the private App's Settings view, onboarding-claim endpoint, and webhook destination only at that self-hosted deployment.
+- [ ] Hand off signed account context through the private App's own Settings view and backend.
+- [ ] Never distribute or reuse the official hosted App's platform keys, signing secrets, public install link, or webhook secrets.
+- [ ] State clearly that this release does not provide turnkey multi-tenant self-hosted Stripe distribution.
+
+See [Stripe App distribution options](https://docs.stripe.com/stripe-apps/distribution-options) and
+[App settings and uninstall](https://docs.stripe.com/stripe-apps/app-settings).
 
 ## 6. Hosting, data, and operational services
 
@@ -307,7 +357,7 @@ sentry:
 - [ ] Configure Sentry notifications for missed, timed-out, and error check-ins on both monitors.
 - [ ] Configure issue alerts for new and regressed production errors.
 - [ ] Configure a threshold alert for repeated Gmail authentication failures (`provider:gmail`, `operation:invoice_reminder_delivery`).
-- [ ] Configure alerts for repeated `InvoiceSources::Xero::OauthClient::Error` and `InvoiceSources::Stripe::OauthClient::Error` retry events.
+- [ ] Configure alerts for repeated Xero OAuth and Stripe App authentication/API retry failures.
 - [ ] Trigger a controlled test failure or temporarily pause a non-customer test worker and confirm the intended operator receives the alert; restore normal operation immediately afterward.
 - [ ] Confirm Sentry events do not contain OAuth tokens, email bodies, recipient addresses, or invoice financial data.
 - [ ] Monitor Solid Queue failed executions separately; a successful scheduler check-in proves that scheduling completed, not that every child refresh or reminder delivery succeeded.
@@ -326,7 +376,7 @@ Complete this in production before opening signup broadly:
 - [ ] The SES message passes DKIM and DMARC checks.
 - [ ] A non-owner Google account can connect Gmail without an unverified-app warning and receive the test email.
 - [ ] A Xero demo organization can connect, import invoices, and deliver a verified webhook update.
-- [ ] A live Standard Stripe account can grant read-only access, import invoices, deliver a verified Connect webhook update, and disconnect cleanly.
+- [ ] A live Stripe account can install the App with only `invoice_read` and `event_read`, import invoices, deliver a verified App webhook update, and uninstall cleanly from Stripe.
 - [ ] The production job worker processes queued mail and scheduled refresh jobs.
 - [ ] External monitoring and provider alerts reach the intended operator.
 - [ ] A database restore and Rails master-key recovery have been rehearsed.

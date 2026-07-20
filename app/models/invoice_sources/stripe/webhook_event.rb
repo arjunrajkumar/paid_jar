@@ -7,6 +7,7 @@ module InvoiceSources
       class Error < StandardError; end
 
       TIMESTAMP_TOLERANCE = 5.minutes
+      APPLICATION_AUTHORIZED_EVENT_TYPE = "account.application.authorized"
       APPLICATION_DEAUTHORIZED_EVENT_TYPE = "account.application.deauthorized"
       INVOICE_EVENT_TYPES = %w[
         invoice.created
@@ -17,18 +18,20 @@ module InvoiceSources
         invoice.marked_uncollectible
       ].freeze
 
-      def self.from_request(payload:, signature:, config: Configuration.new)
-        new(payload: payload, signature: signature, config: config).events
+      def self.from_request(payload:, signature:, endpoint_livemode: true, config: Configuration.new)
+        new(payload:, signature:, endpoint_livemode:, config:).events
       end
 
-      def initialize(payload:, signature:, config: Configuration.new)
+      def initialize(payload:, signature:, endpoint_livemode:, config: Configuration.new)
         @payload = payload
         @signature = signature
+        @endpoint_livemode = endpoint_livemode
         @config = config
       end
 
       def events
         return [] unless supported_event?
+        return [] unless event.livemode == endpoint_livemode
         return [] if stripe_account_id.blank? || resource_id.blank?
 
         invoice_sources.map do |source|
@@ -46,7 +49,7 @@ module InvoiceSources
       end
 
       private
-        attr_reader :payload, :signature, :config
+        attr_reader :payload, :signature, :endpoint_livemode, :config
 
         def event
           @event ||= begin
@@ -89,19 +92,27 @@ module InvoiceSources
         end
 
         def signing_secrets
-          config.webhook_signing_secrets
+          config.webhook_signing_secrets_for(livemode: endpoint_livemode)
         end
 
         def invoice_event?
           event.type.in?(INVOICE_EVENT_TYPES)
         end
 
+        def application_authorized_event?
+          event.type == APPLICATION_AUTHORIZED_EVENT_TYPE
+        end
+
         def application_deauthorized_event?
           event.type == APPLICATION_DEAUTHORIZED_EVENT_TYPE
         end
 
+        def application_event?
+          application_authorized_event? || application_deauthorized_event?
+        end
+
         def supported_event?
-          invoice_event? || application_deauthorized_event?
+          invoice_event? || application_event?
         end
 
         def invoice_id
@@ -113,18 +124,20 @@ module InvoiceSources
         end
 
         def invoice_sources
-          sources = InvoiceSource.where(provider: :stripe, external_account_id: stripe_account_id)
-          return sources.where.not(status: :disconnected) if application_deauthorized_event?
+          sources = InvoiceSource.where(provider: :stripe, external_account_id: stripe_account_id).select do |source|
+            source.provider_data.fetch("livemode", true) == event.livemode
+          end
+          return sources if application_event?
 
           sources.select(&:connected?)
         end
 
         def resource_type
-          application_deauthorized_event? ? "connection" : "invoice"
+          application_event? ? "connection" : "invoice"
         end
 
         def resource_id
-          application_deauthorized_event? ? stripe_account_id : invoice_id
+          application_event? ? stripe_account_id : invoice_id
         end
 
         def occurred_at

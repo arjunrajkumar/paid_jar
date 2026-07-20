@@ -1,65 +1,101 @@
 module InvoiceSources
   class StripeConnectionsController < ApplicationController
-    before_action :ensure_stripe_configured, only: %i[new create]
-    before_action :ensure_stripe_approved, only: :create
-    before_action :ensure_oauth_state, only: :create
-    before_action :set_stripe_source, only: :destroy
+    before_action :ensure_stripe_configured
 
     def new
-      session[:stripe_oauth_state] = SecureRandom.urlsafe_base64(32)
-      redirect_to InvoiceSources::Stripe::OauthClient.new.authorization_url(state: session[:stripe_oauth_state]), allow_other_host: true
+      nonce = SecureRandom.urlsafe_base64(32)
+      session[:stripe_app_install_nonce] = nonce
+      state = InvoiceSources::Stripe::InstallState.issue(account: Current.account, nonce:)
+
+      redirect_to InvoiceSources::Stripe::InstallLink.new.url(state:), allow_other_host: true
     end
 
     def create
-      @invoice_source = Current.account.invoice_sources.find_or_initialize_by(provider: :stripe)
-      @invoice_source.connect!(code: params.require(:code))
-      @invoice_source.sync_invoices!
-      session.delete(:stripe_oauth_state)
+      nonce = session.delete(:stripe_app_install_nonce)
+      return installation_denied if params[:error].present?
 
-      redirect_to invoices_path, notice: "Stripe connected."
-    rescue InvoiceSources::Stripe::OauthClient::Error => error
-      handle_stripe_error(error)
-    end
+      account = verified_install_account(nonce:)
+      livemode = parsed_livemode
+      ensure_api_key_configured!(livemode:)
+      verify_install_signature!
 
-    def destroy
-      InvoiceSources::Stripe.new(@invoice_source).disconnect!
-      redirect_to account_settings_path, notice: "Stripe disconnected."
-    rescue InvoiceSources::Stripe::OauthClient::Error => error
-      redirect_to account_settings_path, alert: "Stripe disconnection failed: #{error.message}"
+      source = account.invoice_sources.find_or_initialize_by(provider: :stripe)
+      source = InvoiceSources::Stripe.new(source).connect_from_install!(
+        stripe_account_id: params.require(:account_id),
+        stripe_user_id: params.require(:user_id),
+        livemode:
+      )
+      queue_initial_refresh(source)
+
+      redirect_to invoices_url(script_name: account.slug),
+        notice: "Stripe connected. Your invoices are syncing now."
+    rescue ActionController::ParameterMissing, ActiveRecord::RecordNotFound,
+      InvoiceSources::Stripe::InstallSignature::Error,
+      InvoiceSources::Stripe::ConnectionError,
+      InvoiceSources::Stripe::ApiClient::Error => error
+      handle_installation_error(error)
     end
 
     private
+      def stripe_configuration
+        @stripe_configuration ||= InvoiceSources::Stripe::Configuration.new
+      end
+
       def ensure_stripe_configured
-        unless InvoiceSources::Stripe::Configuration.new.configured?
-          redirect_to root_path, alert: "Stripe credentials are not configured."
-        end
+        return if stripe_configuration.configured?
+
+        redirect_to root_path, alert: "Stripe App credentials are not configured."
       end
 
-      def ensure_stripe_approved
-        redirect_to root_path, alert: "Stripe connection was not approved." if params[:error].present?
+      def verified_install_account(nonce:)
+        account_id = InvoiceSources::Stripe::InstallState.verify(
+          params.require(:state),
+          nonce:,
+          app_id: stripe_configuration.app_id
+        )
+        raise ActiveRecord::RecordNotFound if account_id.blank?
+
+        Current.identity.users.admin.find_by!(account_id:).account
       end
 
-      def ensure_oauth_state
-        redirect_to root_path, alert: "Stripe connection could not be verified." unless valid_oauth_state?
-      end
-
-      def set_stripe_source
-        if invoice_source = InvoiceSource.connected_for_provider(Current.account, :stripe)
-          @invoice_source = invoice_source
-        else
-          redirect_to new_stripe_connection_path, alert: "Connect Stripe first."
-        end
-      end
-
-      def valid_oauth_state?
-        session[:stripe_oauth_state].present? && ActiveSupport::SecurityUtils.secure_compare(
-          session[:stripe_oauth_state],
-          params[:state].to_s
+      def verify_install_signature!
+        InvoiceSources::Stripe::InstallSignature.new(config: stripe_configuration).verify!(
+          state: params.require(:state),
+          user_id: params.require(:user_id),
+          account_id: params.require(:account_id),
+          signature: params.require(:install_signature)
         )
       end
 
-      def handle_stripe_error(error)
-        redirect_to root_path, alert: "Stripe connection failed: #{error.message}"
+      def parsed_livemode
+        value = params[:livemode]
+        return true if value.nil? || value == true || value == "true"
+        return false if value == false || value == "false"
+
+        raise ActionController::ParameterMissing, :livemode
+      end
+
+      def ensure_api_key_configured!(livemode:)
+        return if stripe_configuration.secret_key_configured?(livemode:)
+
+        raise InvoiceSources::Stripe::ConnectionError,
+          "Stripe API credentials are not configured for the selected environment."
+      end
+
+      def queue_initial_refresh(source)
+        InvoiceSources::RefreshJob.perform_later(source)
+      rescue ActiveJob::EnqueueError => error
+        Rails.error.report(error, severity: :error)
+      end
+
+      def installation_denied
+        redirect_to root_path, alert: "Stripe installation was cancelled."
+      end
+
+      def handle_installation_error(error)
+        Rails.error.report(error, severity: :warning)
+        redirect_to root_path,
+          alert: "Stripe could not be connected securely. Please try again."
       end
   end
 end

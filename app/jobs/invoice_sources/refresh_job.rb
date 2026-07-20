@@ -1,7 +1,7 @@
 class InvoiceSources::RefreshJob < ApplicationJob
   queue_as :default
 
-  retry_on InvoiceSources::Stripe::OauthClient::Error,
+  retry_on InvoiceSources::Stripe::ApiClient::Error,
     InvoiceSources::Xero::OauthClient::Error,
     wait: :polynomially_longer,
     attempts: 5

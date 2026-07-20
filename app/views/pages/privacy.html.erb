@@ -2,7 +2,7 @@
   <header class="legal-page__header">
     <p class="legal-page__eyebrow">PaymentReminder</p>
     <h1>PaymentReminder Privacy Policy</h1>
-    <p class="legal-page__updated">Last updated: July 18, 2026</p>
+    <p class="legal-page__updated">Last updated: July 20, 2026</p>
   </header>
 
   <section>
@@ -32,6 +32,15 @@
       invoice identifiers and numbers, invoice dates and due dates, amounts, currencies, payment
       status, invoice links, provider records, and synchronization or webhook events. You may also
       add customer reminder email addresses directly in PaymentReminder.
+    </p>
+
+    <h3>Stripe App connection information</h3>
+    <p>
+      When you install the official hosted PaymentReminder Stripe App, Stripe provides the Stripe
+      account and installer identifiers and signed installation information needed to connect the
+      accounts. The Service uses its own Stripe App platform credentials to request invoice data
+      for the Stripe account you authorize. We do not receive or store a per-install Stripe OAuth
+      access or refresh token.
     </p>
 
     <h3>Google user data</h3>
@@ -141,10 +150,11 @@
     <h2>6. Data security</h2>
     <p>
       The official hosted Service uses HTTPS in production, access controls, and operational
-      safeguards designed to protect information. OAuth access and refresh tokens for Gmail, Xero,
-      and Stripe are encrypted before they are stored in the database, with encryption keys kept
-      separately from database records. No security measure is perfect, and we cannot guarantee
-      absolute security.
+      safeguards designed to protect information. OAuth access and refresh tokens for Gmail and
+      Xero are encrypted before they are stored in the database, with encryption keys kept
+      separately from database records. Stripe App platform, signing, and webhook credentials are
+      stored as restricted operational secrets rather than in individual user connection records.
+      No security measure is perfect, and we cannot guarantee absolute security.
     </p>
     <p>
       Independent operators are responsible for securing their own PaymentReminder installation,
@@ -165,6 +175,13 @@
       has an accurate operational history. You can also revoke access from your
       <a href="https://myaccount.google.com/permissions">Google Account permissions</a>. Revocation
       prevents future access but does not remove messages already delivered through Gmail.
+    </p>
+    <p>
+      You can revoke the hosted Service's Stripe access by uninstalling PaymentReminder from your
+      Stripe account's installed-app settings. Stripe then notifies the Service that authorization
+      has ended, and we mark the connection disconnected. Previously imported invoice and
+      operational records may remain under the retention terms described above until you request
+      deletion or they are no longer needed.
     </p>
     <p>
       You may request account or personal-information deletion by contacting us. Some information

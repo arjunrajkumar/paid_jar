@@ -1,0 +1,31 @@
+<% @page_title = "Connect Stripe" %>
+
+<div class="auth-shell">
+  <div class="auth-panel">
+    <div class="auth-logo" aria-hidden="true">
+      <%= render "layouts/shared/logo_mark", suffix: "stripe-onboarding", width: 48, height: 56 %>
+    </div>
+
+    <div class="auth-card">
+      <h1 class="auth-title">Connect Stripe</h1>
+      <p class="auth-subtitle">
+        Stripe verified this account. Sign in or create a PaymentReminder account to finish connecting it.
+      </p>
+
+      <% if authenticated? && @administered_account %>
+        <%= form_with url: stripe_app_onboarding_path, method: :patch, class: "auth-form" do |form| %>
+          <%= form.submit "Finish connecting Stripe", class: "auth-button" %>
+        <% end %>
+      <% elsif authenticated? %>
+        <div class="auth-errors" role="alert">
+          <p>You need to be an owner or administrator of a PaymentReminder account to connect Stripe.</p>
+        </div>
+      <% else %>
+        <div class="auth-form">
+          <%= link_to "Sign in to PaymentReminder", new_session_path, class: "auth-button" %>
+          <%= link_to "Create a PaymentReminder account", new_signup_path, class: "app-secondary-button" %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</div>

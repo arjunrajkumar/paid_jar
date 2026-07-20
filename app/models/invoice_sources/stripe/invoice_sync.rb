@@ -3,9 +3,9 @@ require "bigdecimal"
 module InvoiceSources
   class Stripe
     class InvoiceSync
-      def initialize(source, client: OauthClient.new)
+      def initialize(source, client: nil)
         @source = source
-        @client = client
+        @client = client || ApiClient.new(livemode: source.provider_data.fetch("livemode", true))
       end
 
       def sync!
@@ -16,8 +16,8 @@ module InvoiceSources
         end
 
         source.update!(status: :active, last_synced_at: Time.current, last_error: nil)
-      rescue OauthClient::Error => error
-        source.update!(status: :error, last_error: error.message)
+      rescue ApiClient::Error => error
+        record_api_failure(error)
         raise
       end
 
@@ -25,8 +25,8 @@ module InvoiceSources
         payload = client.invoice(stripe_account_id: source.external_account_id, invoice_id: external_id)
         sync_invoice!(payload)
         source.update!(status: :active, last_synced_at: Time.current, last_error: nil)
-      rescue OauthClient::Error => error
-        source.update!(status: :error, last_error: error.message)
+      rescue ApiClient::Error => error
+        record_api_failure(error)
         raise
       end
 
@@ -83,6 +83,17 @@ module InvoiceSources
 
         def amount_from_minor_units(value, currency:)
           Currency.amount_from_minor_units(value, currency:)
+        end
+
+        def record_api_failure(error)
+          attributes = {
+            status: error.is_a?(ApiClient::AuthorizationError) ? :disconnected : :error,
+            last_error: error.message
+          }
+          if error.is_a?(ApiClient::AuthorizationError)
+            attributes.merge!(access_token: nil, refresh_token: nil, expires_at: nil, raw_token_data: {})
+          end
+          source.update!(attributes)
         end
 
         def date_from_timestamp(value)

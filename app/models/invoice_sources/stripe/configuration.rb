@@ -4,50 +4,54 @@ module InvoiceSources
   class Stripe
     class Configuration
       DEFAULT_HOST = "http://localhost:3000"
-      DEFAULT_SCOPE = "read_only"
+      PERMISSIONS = %w[invoice_read event_read].freeze
+
+      attr_reader :host
 
       def initialize(host: ENV["HOST"])
         @host = host.presence || DEFAULT_HOST
       end
 
       def configured?
-        client_id.present? && secret_key.present?
+        app_id.present? && install_url.present? && signing_secrets.any? &&
+          [ true, false ].any? { |livemode| secret_key_configured?(livemode:) }
       end
 
-      def client_id
-        credentials[:client_id]
+      def app_id
+        credentials[:app_id]
       end
 
-      def secret_key
-        credentials[:secret_key]
+      def install_url
+        credentials[:install_url]
       end
 
-      def webhook_signing_secret
-        credentials[:webhook_signing_secret]
+      def signing_secrets
+        Array.wrap(credentials[:signing_secrets]).compact_blank
+      end
+
+      def secret_key(livemode:)
+        key = secret_keys[environment_key(livemode)].to_s
+        key if key.start_with?(livemode ? "sk_live_" : "sk_test_")
+      end
+
+      def secret_key_configured?(livemode:)
+        secret_key(livemode:).present?
       end
 
       def webhook_signing_secrets
-        Array.wrap(credentials[:webhook_signing_secrets].presence || webhook_signing_secret).compact_blank
+        webhook_secrets_by_environment.values.flatten.compact_blank.uniq
       end
 
-      def scope
-        DEFAULT_SCOPE
+      def webhook_signing_secrets_for(livemode:)
+        Array.wrap(webhook_secrets_by_environment[environment_key(livemode)]).compact_blank
+      end
+
+      def permissions
+        PERMISSIONS
       end
 
       def redirect_uri
         "#{host.chomp("/")}/stripe/callback"
-      end
-
-      def authorization_uri
-        URI("https://connect.stripe.com/oauth/authorize")
-      end
-
-      def token_uri
-        URI("https://connect.stripe.com/oauth/token")
-      end
-
-      def deauthorization_uri
-        URI("https://connect.stripe.com/oauth/deauthorize")
       end
 
       def invoices_uri
@@ -59,10 +63,24 @@ module InvoiceSources
       end
 
       private
-        attr_reader :host
-
         def credentials
           Rails.application.credentials.stripe || {}
+        end
+
+        def secret_keys
+          normalize_environment_hash(credentials[:secret_keys])
+        end
+
+        def webhook_secrets_by_environment
+          normalize_environment_hash(credentials[:webhook_signing_secrets])
+        end
+
+        def normalize_environment_hash(value)
+          value.to_h.deep_symbolize_keys.slice(:live, :test)
+        end
+
+        def environment_key(livemode)
+          livemode ? :live : :test
         end
     end
   end

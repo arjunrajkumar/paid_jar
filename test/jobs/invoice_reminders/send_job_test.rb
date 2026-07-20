@@ -226,7 +226,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   test "retries a Stripe refresh failure without sending or recording a receipt" do
     invoice = create_stripe_invoice
     InvoiceReminders::InvoiceFreshnessCheck.stubs(:call)
-      .raises(InvoiceSources::Stripe::OauthClient::Error, "Stripe unavailable")
+      .raises(InvoiceSources::Stripe::ApiClient::Error, "Stripe unavailable")
     InvoiceReminders::SendJob.any_instance.expects(:send_email).never
 
     travel_to Time.zone.local(2026, 7, 24, 12) do

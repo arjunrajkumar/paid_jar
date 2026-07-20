@@ -22,7 +22,12 @@ Rails.application.routes.draw do
 
     get "stripe/connect", to: "stripe_connections#new", as: :new_stripe_connection
     get "stripe/callback", to: "stripe_connections#create", as: :stripe_callback
-    resource :stripe_connection, controller: :stripe_connections, only: :destroy
+  end
+
+  namespace :stripe_app, path: "stripe/app" do
+    resources :onboarding_claims, only: :create
+    match "onboarding_claims", to: "onboarding_claims#preflight", via: :options
+    resource :onboarding, only: %i[show update]
   end
 
   scope module: :outbound_email_connections do
@@ -41,7 +46,8 @@ Rails.application.routes.draw do
 
   namespace :invoice_sources do
     namespace :webhooks do
-      post :stripe, to: "stripe#create"
+      post :stripe, to: "stripe#create", defaults: { webhook_mode: "live" }
+      post "stripe/test", to: "stripe#create", as: :stripe_test, defaults: { webhook_mode: "test" }
       post :xero, to: "xero#create"
     end
   end
