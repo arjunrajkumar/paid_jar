@@ -6,7 +6,7 @@ class Account::SettingsController < ApplicationController
   before_action :set_invoice_sources
   before_action :set_customer_segments
   before_action :set_notification_preferences
-  before_action :set_outbound_email_connection
+  before_action :set_email_connection
 
   def show; end
 
@@ -63,7 +63,7 @@ class Account::SettingsController < ApplicationController
       end
     end
 
-    def set_outbound_email_connection
-      @outbound_email_connection = @account.outbound_email_connection
+    def set_email_connection
+      @email_connection = @account.email_connection
     end
 end

@@ -54,7 +54,7 @@ class Madmin::OperationsControllerTest < ActionDispatch::IntegrationTest
       madmin_invoice_sources_webhooks_event_url(event),
       madmin_invoice_url(invoice),
       madmin_payment_promise_url(promise),
-      madmin_outbound_email_connection_url(outbound_email_connections(:paid_jar_gmail)),
+      madmin_email_connection_url(email_connections(:paid_jar_gmail)),
       madmin_magic_link_url(magic_link),
       madmin_session_url(other_session),
       madmin_user_url(user)
@@ -121,7 +121,7 @@ class Madmin::OperationsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select "form[action=?]", record_payment_promise_madmin_invoice_path(invoice)
 
-    assert_difference [ -> { PaymentPromise.count }, -> { InvoiceMessage.count } ], 1 do
+    assert_difference [ -> { PaymentPromise.count }, -> { ConversationMessage.count } ], 1 do
       post record_payment_promise_madmin_invoice_url(invoice), params: {
         payment_promise: {
           promised_on: promised_on.iso8601,
@@ -169,12 +169,12 @@ class Madmin::OperationsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "disconnects Gmail and disables automatic reminders" do
-    connection = outbound_email_connections(:paid_jar_gmail)
+    connection = email_connections(:paid_jar_gmail)
     connection.account.update!(automatic_invoice_reminders_enabled: true)
 
-    post disconnect_madmin_outbound_email_connection_url(connection)
+    post disconnect_madmin_email_connection_url(connection)
 
-    assert_redirected_to madmin_outbound_email_connection_url(connection)
+    assert_redirected_to madmin_email_connection_url(connection)
     assert_predicate connection.reload, :disconnected?
     assert_not connection.account.reload.automatic_invoice_reminders_enabled?
   end

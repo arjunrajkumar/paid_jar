@@ -10,17 +10,18 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
 
   test "atomically reserves and links an auditable follow-up message" do
     travel_to follow_up_time do
-      assert_difference -> { @invoice.invoice_messages.count }, 1 do
+      assert_difference -> { @invoice.conversation_messages.count }, 1 do
         @reservation = reserve
       end
     end
 
     assert_predicate @reservation, :reserved?
     assert_equal @payment_promise.reload.follow_up_message, @reservation.message
+    assert_equal Conversation.for_invoice!(invoice: @invoice), @reservation.message.conversation
     assert_predicate @reservation.message, :status_pending?
     assert_predicate @reservation.message, :kind_promise_follow_up?
     assert_equal "promise-delivery-job", @reservation.message.delivery_job_id
-    assert_equal outbound_email_connections(:paid_jar_gmail), @reservation.connection
+    assert_equal email_connections(:paid_jar_gmail), @reservation.connection
     assert_equal "Payment status: Invoice INV-001", @reservation.mail_message.subject
   end
 
@@ -28,7 +29,7 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
     travel_to follow_up_time do
       first = reserve
 
-      assert_no_difference -> { @invoice.invoice_messages.count } do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
         second = reserve
         assert_predicate second, :reserved?
         assert_equal first.message, second.message
@@ -44,7 +45,7 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
     @invoice.update!(status: :paid, amount_due: 0, paid_on: Date.current)
 
     travel_to follow_up_time do
-      assert_no_difference -> { @invoice.invoice_messages.count } do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
         @reservation = reserve
       end
     end
@@ -58,7 +59,7 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
     @account.update!(automatic_invoice_reminders_enabled: false)
 
     travel_to follow_up_time do
-      assert_no_difference -> { @invoice.invoice_messages.count } do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
         @reservation = reserve
       end
     end
@@ -79,8 +80,9 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
     def create_promise
       PaymentPromise.record!(
         invoice: @invoice,
-        source_message: @invoice.invoice_messages.create!(
+        source_message: @invoice.conversation_messages.create!(
           account: @account,
+          conversation: Conversation.for_invoice!(invoice: @invoice),
           direction: :inbound,
           kind: :customer_reply,
           status: :received,

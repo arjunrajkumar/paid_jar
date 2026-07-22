@@ -13,7 +13,7 @@ class InvoiceReminder < ApplicationRecord
 
   belongs_to :account, inverse_of: :invoice_reminders
   belongs_to :invoice, inverse_of: :invoice_reminders
-  belongs_to :invoice_message, inverse_of: :invoice_reminder
+  belongs_to :conversation_message, inverse_of: :invoice_reminder
   belongs_to :invoice_schedule, optional: true, inverse_of: :invoice_reminders
 
   enum :category, CATEGORIES, prefix: true, validate: true
@@ -27,15 +27,15 @@ class InvoiceReminder < ApplicationRecord
     :provider_message_id,
     :provider_thread_id,
     :failure_reason,
-    to: :invoice_message
+    to: :conversation_message
 
   validates :stage_key, presence: true
   validates :stage_key, uniqueness: { scope: :invoice_id }
-  validates :invoice_message_id, uniqueness: true
+  validates :conversation_message_id, uniqueness: true
   validates :invoice_schedule_id, uniqueness: { scope: :invoice_id }, allow_nil: true
   validates :day_offset, numericality: { only_integer: true, greater_than: 0 }
   validate :account_matches_invoice
-  validate :invoice_message_matches_reminder
+  validate :conversation_message_matches_reminder
   validate :invoice_schedule_matches_account
   validate :stage_key_matches_category_and_day_offset
 
@@ -49,9 +49,9 @@ class InvoiceReminder < ApplicationRecord
     delivery_job_id:,
     failure_reason:
   )
-    message = includes(:invoice_message)
+    message = includes(:conversation_message)
       .find_by(invoice:, stage_key:)
-      &.invoice_message
+      &.conversation_message
 
     message&.mark_delivery_failed!(
       job_id: delivery_job_id,
@@ -72,13 +72,13 @@ class InvoiceReminder < ApplicationRecord
       errors.add(:invoice_schedule, "must belong to the same account")
     end
 
-    def invoice_message_matches_reminder
-      return if invoice_message.blank? || invoice.blank? || account.blank?
+    def conversation_message_matches_reminder
+      return if conversation_message.blank? || invoice.blank? || account.blank?
 
-      errors.add(:invoice_message, "must belong to the same invoice") unless invoice_message.invoice == invoice
-      errors.add(:invoice_message, "must belong to the same account") unless invoice_message.account == account
-      errors.add(:invoice_message, "must be an outbound scheduled reminder") unless
-        invoice_message.direction_outbound? && invoice_message.kind_scheduled_reminder?
+      errors.add(:conversation_message, "must belong to the same invoice") unless conversation_message.invoice == invoice
+      errors.add(:conversation_message, "must belong to the same account") unless conversation_message.account == account
+      errors.add(:conversation_message, "must be an outbound scheduled reminder") unless
+        conversation_message.direction_outbound? && conversation_message.kind_scheduled_reminder?
     end
 
     def stage_key_matches_category_and_day_offset

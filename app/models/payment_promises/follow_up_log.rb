@@ -2,7 +2,7 @@ class PaymentPromises::FollowUpLog
   WARNING_SKIP_REASONS = %w[
     delivery_state_changed
     missing_email
-    missing_outbound_email_connection
+    missing_email_connection
     sender_address_mismatch
   ].freeze
 

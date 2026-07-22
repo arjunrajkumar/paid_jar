@@ -10,13 +10,13 @@ class AccountResource < Madmin::Resource
 
   attribute :invoice_sources, form: false
   attribute :stripe_installation_claims, form: false
-  attribute :outbound_email_connection, form: false
+  attribute :email_connection, form: false
   attribute :customers, form: false
   attribute :invoices, form: false
   attribute :payment_promises, form: false
   attribute :invoice_reminders, form: false
   attribute :invoice_reminder_suppressions, form: false
-  attribute :invoice_messages, form: false
+  attribute :conversation_messages, form: false
   attribute :users, form: false
   attribute :customer_segments, form: false
   attribute :invoice_schedules, form: false

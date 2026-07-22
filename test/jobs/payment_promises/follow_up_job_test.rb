@@ -6,12 +6,12 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     @account = @invoice.account
     @account.update!(automatic_invoice_reminders_enabled: true)
     @payment_promise = create_promise
-    @delivery_result = OutboundEmailConnection::Delivery::Result.new(
+    @delivery_result = EmailConnection::Delivery::Result.new(
       provider_message_id: "promise-follow-up-message",
       provider_thread_id: "promise-follow-up-thread"
     )
     InvoiceReminders::InvoiceFreshnessCheck.stubs(:call).returns(@invoice)
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns(@delivery_result)
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns(@delivery_result)
   end
 
   test "limits concurrency to one job for each payment promise" do
@@ -27,7 +27,7 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
 
   test "refreshes an outstanding invoice and sends one auditable follow-up" do
     travel_to follow_up_time do
-      assert_difference -> { @invoice.invoice_messages.count }, 1 do
+      assert_difference -> { @invoice.conversation_messages.count }, 1 do
         PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
       end
     end
@@ -48,10 +48,10 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
   end
 
   test "duplicate jobs do not send the follow-up twice" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.expects(:deliver).once.returns(@delivery_result)
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).once.returns(@delivery_result)
 
     travel_to follow_up_time do
-      assert_difference -> { @invoice.invoice_messages.count }, 1 do
+      assert_difference -> { @invoice.conversation_messages.count }, 1 do
         2.times { PaymentPromises::FollowUpJob.perform_now(@payment_promise.id) }
       end
     end
@@ -64,10 +64,10 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
       @invoice.update!(status: :paid, amount_due: 0, paid_on: Date.new(2026, 8, 3))
       invoice == @invoice
     end.returns(@invoice)
-    OutboundEmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
 
     travel_to follow_up_time do
-      assert_no_difference -> { @invoice.invoice_messages.count } do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
         PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
       end
     end
@@ -102,10 +102,10 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
 
   test "waits when another successful outbound message was sent within 48 hours" do
     create_outbound_message(sent_at: follow_up_time - 1.hour)
-    OutboundEmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
 
     travel_to follow_up_time do
-      assert_no_difference -> { @invoice.invoice_messages.count } do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
         PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
       end
     end
@@ -118,7 +118,7 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     create_outbound_message(sent_at: follow_up_time - 48.hours)
 
     travel_to follow_up_time do
-      assert_difference -> { @invoice.invoice_messages.count }, 1 do
+      assert_difference -> { @invoice.conversation_messages.count }, 1 do
         PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
       end
     end
@@ -129,10 +129,10 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
   test "rechecks account settings before reserving delivery" do
     @account.update!(automatic_invoice_reminders_enabled: false)
     InvoiceReminders::InvoiceFreshnessCheck.expects(:call).with(@invoice).returns(@invoice)
-    OutboundEmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
 
     travel_to follow_up_time do
-      assert_no_difference -> { @invoice.invoice_messages.count } do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
         PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
       end
     end
@@ -146,7 +146,7 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
       @invoice.update!(status: :paid, amount_due: 0, paid_on: Date.new(2026, 8, 3))
       invoice == @invoice
     end.returns(@invoice)
-    OutboundEmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
 
     travel_to follow_up_time do
       PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
@@ -161,7 +161,7 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
 
     travel_to follow_up_time do
       assert_enqueued_jobs 1, only: PaymentPromises::FollowUpJob do
-        assert_no_difference -> { @invoice.invoice_messages.count } do
+        assert_no_difference -> { @invoice.conversation_messages.count } do
           PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
         end
       end
@@ -171,12 +171,12 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
   end
 
   test "temporary Gmail failure retries with one pending message" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::TemporaryDeliveryError, "rate limited")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::TemporaryDeliveryError, "rate limited")
 
     travel_to follow_up_time do
       assert_enqueued_jobs 1, only: PaymentPromises::FollowUpJob do
-        assert_difference -> { @invoice.invoice_messages.count }, 1 do
+        assert_difference -> { @invoice.conversation_messages.count }, 1 do
           PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
         end
       end
@@ -193,7 +193,7 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     message = create_pending_follow_up(delivery_job_id: job.job_id)
 
     travel_to follow_up_time do
-      assert_no_difference -> { @invoice.invoice_messages.count } do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
         job.perform_now
       end
     end
@@ -204,11 +204,11 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
   end
 
   test "exhausted temporary Gmail retries fail the message and release the promise" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::TemporaryDeliveryError, "Gmail unavailable")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::TemporaryDeliveryError, "Gmail unavailable")
     job = PaymentPromises::FollowUpJob.new(@payment_promise.id)
     job.exception_executions[
-      [ OutboundEmailConnection::Errors::TemporaryDeliveryError ].to_s
+      [ EmailConnection::Errors::TemporaryDeliveryError ].to_s
     ] = 4
 
     travel_to follow_up_time do
@@ -250,7 +250,7 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
 
   test "a duplicate job does not bypass a pending delivery retry" do
     message = create_pending_follow_up(delivery_job_id: "another-job")
-    OutboundEmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
 
     travel_to follow_up_time do
       PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
@@ -261,8 +261,8 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
   end
 
   test "a permanent Gmail failure records a terminal failed follow-up" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::PermanentDeliveryError, "invalid recipient")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::PermanentDeliveryError, "invalid recipient")
 
     travel_to follow_up_time do
       assert_no_enqueued_jobs only: PaymentPromises::FollowUpJob do
@@ -277,8 +277,8 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
   end
 
   test "an ambiguous Gmail failure is not retried" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::AmbiguousDeliveryError, "response lost")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::AmbiguousDeliveryError, "response lost")
 
     travel_to follow_up_time do
       assert_no_enqueued_jobs only: PaymentPromises::FollowUpJob do
@@ -293,8 +293,8 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
   end
 
   test "does not record delivery as sent without a provider message ID" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns(
-      OutboundEmailConnection::Delivery::Result.new(
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns(
+      EmailConnection::Delivery::Result.new(
         provider_message_id: nil,
         provider_thread_id: "unconfirmed-thread"
       )
@@ -316,7 +316,7 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     message.update!(status: :failed, failure_reason: "Delivery confirmation timed out.")
     @account.update!(automatic_invoice_reminders_enabled: false)
     InvoiceReminders::InvoiceFreshnessCheck.expects(:call).never
-    OutboundEmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).never
 
     travel_to follow_up_time do
       PaymentPromises::FollowUpJob.perform_now(@payment_promise.id)
@@ -329,8 +329,9 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     def create_promise
       PaymentPromise.record!(
         invoice: @invoice,
-        source_message: @invoice.invoice_messages.create!(
+        source_message: @invoice.conversation_messages.create!(
           account: @account,
+          conversation: Conversation.for_invoice!(invoice: @invoice),
           direction: :inbound,
           kind: :customer_reply,
           status: :received,
@@ -347,8 +348,9 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     end
 
     def create_outbound_message(sent_at:)
-      @invoice.invoice_messages.create!(
+      @invoice.conversation_messages.create!(
         account: @account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
         direction: :outbound,
         kind: :invoice_resend,
         status: :sent,
@@ -363,8 +365,9 @@ class PaymentPromises::FollowUpJobTest < ActiveJob::TestCase
     end
 
     def create_pending_follow_up(delivery_job_id:)
-      @invoice.invoice_messages.create!(
+      @invoice.conversation_messages.create!(
         account: @account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
         direction: :outbound,
         kind: :promise_follow_up,
         status: :pending,

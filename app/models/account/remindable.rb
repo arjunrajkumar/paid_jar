@@ -4,7 +4,7 @@ module Account::Remindable
   def enqueue_invoice_reminders
     return unless automatic_invoice_reminders_enabled?
 
-    delivery_availability = OutboundEmailConnection::DeliveryAvailability.call(account: self)
+    delivery_availability = EmailConnection::DeliveryAvailability.call(account: self)
     return unless delivery_availability.ready?
 
     invoice_schedules.find_each do |schedule|

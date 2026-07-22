@@ -50,7 +50,7 @@ class InvoiceReminders::StageDecision
 
   def call
     connection_result = delivery_availability ||
-      OutboundEmailConnection::DeliveryAvailability.call(account: invoice.account)
+      EmailConnection::DeliveryAvailability.call(account: invoice.account)
     return skipped(connection_result.reason) unless connection_result.ready?
     return skipped(:disabled_account) unless invoice.account.automatic_invoice_reminders_enabled?
     return skipped(:not_outstanding) unless invoice.outstanding?
@@ -60,7 +60,7 @@ class InvoiceReminders::StageDecision
     return skipped(:suppressed_stage, stage:) if stage_suppressed?(stage)
 
     reminder = reminder_for(stage)
-    unless reminder.nil? || reminder.invoice_message.delivery_owned_by?(delivery_job_id)
+    unless reminder.nil? || reminder.conversation_message.delivery_owned_by?(delivery_job_id)
       return skipped(:duplicate_stage, stage:)
     end
 
@@ -108,12 +108,12 @@ class InvoiceReminders::StageDecision
     end
 
     def reminder_for(stage)
-      invoice.invoice_reminders.includes(:invoice_message).for_stage(stage).first
+      invoice.invoice_reminders.includes(:conversation_message).for_stage(stage).first
     end
 
     def stage_due?(stage, reminder:)
       return true if stage.due_for?(invoice, on:)
-      return false unless reminder&.invoice_message&.delivery_owned_by?(delivery_job_id)
+      return false unless reminder&.conversation_message&.delivery_owned_by?(delivery_job_id)
 
       stage.due_for?(invoice, on: reminder.created_at.in_time_zone.to_date)
     end
@@ -121,9 +121,9 @@ class InvoiceReminders::StageDecision
     def suppression_reason_for(invoice)
       return :active_payment_promise if invoice.payment_promises.status_active.exists?
 
-      recently_contacted = invoice.invoice_messages
+      recently_contacted = invoice.conversation_messages
         .successful_outbound
-        .sent_after(InvoiceMessage::OUTBOUND_CONTACT_COOLDOWN.ago)
+        .sent_after(ConversationMessage::OUTBOUND_CONTACT_COOLDOWN.ago)
         .exists?
       :recent_outbound_message if recently_contacted
     end

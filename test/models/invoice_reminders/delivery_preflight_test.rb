@@ -42,8 +42,9 @@ class InvoiceReminders::DeliveryPreflightTest < ActiveSupport::TestCase
     end
 
     def create_recent_message
-      @invoice.invoice_messages.create!(
+      @invoice.conversation_messages.create!(
         account: @invoice.account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
         direction: :outbound,
         kind: :invoice_resend,
         status: :sent,

@@ -23,16 +23,18 @@ class Invoice < ApplicationRecord
     -> { order(created_at: :desc, id: :desc) },
     dependent: :destroy,
     inverse_of: :invoice
-  has_many :invoice_messages,
+  has_many :conversation_messages,
     -> { order(created_at: :desc, id: :desc) },
     dependent: :destroy,
     inverse_of: :invoice
+  has_one :conversation, dependent: :destroy, inverse_of: :invoice
   attribute :provider_data, default: -> { {} }
   attribute :raw_data, default: -> { {} }
 
   enum :status, STATUSES, prefix: true, validate: true
 
   before_validation :set_completed_on
+  after_update :synchronize_conversation_customer, if: :saved_change_to_customer_id?
 
   validates :external_id, presence: true
   validates :external_id, uniqueness: { scope: :invoice_source_id }
@@ -65,7 +67,7 @@ class Invoice < ApplicationRecord
       .else(8)
 
     eager_load(:customer)
-      .preload(invoice_reminders: :invoice_message)
+      .preload(invoice_reminders: :conversation_message)
       .order(priority.asc, Customer.arel_table[:name].asc, arel_table[:id].asc)
   end
 
@@ -109,6 +111,11 @@ class Invoice < ApplicationRecord
   end
 
   private
+    def synchronize_conversation_customer
+      association(:conversation).reset
+      conversation&.update!(customer:)
+    end
+
     def set_completed_on
       if status_paid?
         self.completed_on = paid_on

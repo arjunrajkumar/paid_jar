@@ -11,10 +11,10 @@ class PaymentPromise < ApplicationRecord
   belongs_to :account, inverse_of: :payment_promises
   belongs_to :invoice, inverse_of: :payment_promises
   belongs_to :source_message,
-    class_name: "InvoiceMessage",
+    class_name: "ConversationMessage",
     inverse_of: :payment_promise
   belongs_to :follow_up_message,
-    class_name: "InvoiceMessage",
+    class_name: "ConversationMessage",
     inverse_of: :payment_promise_follow_up,
     optional: true
 

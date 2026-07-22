@@ -63,17 +63,17 @@ class InvoiceReminders::ManualDeliveryReservation
 
       return if owned_pending_message
       skipped(:outbound_delivery_in_progress) if
-        invoice.invoice_messages.direction_outbound.status_pending.exists?
+        invoice.conversation_messages.direction_outbound.status_pending.exists?
     end
 
     def delivery_availability
-      @delivery_availability ||= OutboundEmailConnection::DeliveryAvailability.call(
+      @delivery_availability ||= EmailConnection::DeliveryAvailability.call(
         account: invoice.account
       )
     end
 
     def owned_pending_message
-      @owned_pending_message ||= invoice.invoice_messages
+      @owned_pending_message ||= invoice.conversation_messages
         .direction_outbound
         .kind_manual_reminder
         .status_pending
@@ -81,17 +81,18 @@ class InvoiceReminders::ManualDeliveryReservation
     end
 
     def reserve_new_message(mail_message:)
-      return if invoice.invoice_messages.direction_outbound.status_pending.exists?
+      return if invoice.conversation_messages.direction_outbound.status_pending.exists?
 
-      invoice.invoice_messages.create!(
+      invoice.conversation_messages.create!(
         {
           account: invoice.account,
+          conversation: Conversation.for_invoice!(invoice:),
           direction: :outbound,
           kind: :manual_reminder,
           status: :pending,
           delivery_job_id:,
           delivery_attempted_at: Time.current
-        }.merge(InvoiceMessages::Content.from_mail(mail_message).attributes)
+        }.merge(ConversationMessages::Content.from_mail(mail_message).attributes)
       )
     end
 

@@ -7,11 +7,11 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     @invoice = invoices(:xero_invoice)
     @invoice.account.update!(automatic_invoice_reminders_enabled: true)
     InvoiceReminders::InvoiceFreshnessCheck.stubs(:call).returns(@invoice)
-    @delivery_result = OutboundEmailConnection::Delivery::Result.new(
+    @delivery_result = EmailConnection::Delivery::Result.new(
       provider_message_id: "gmail-message-123",
       provider_thread_id: "gmail-thread-456"
     )
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns(@delivery_result)
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns(@delivery_result)
   end
 
   test "limits concurrency to one job for each invoice" do
@@ -53,7 +53,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       assert_no_emails do
         assert_difference [
           -> { @invoice.invoice_reminders.count },
-          -> { @invoice.invoice_messages.count }
+          -> { @invoice.conversation_messages.count }
         ], 1 do
           InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
         end
@@ -70,7 +70,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     assert_equal "gmail-thread-456", reminder.provider_thread_id
     assert_nil reminder.failure_reason
 
-    message = reminder.invoice_message
+    message = reminder.conversation_message
     assert_predicate message, :direction_outbound?
     assert_predicate message, :kind_scheduled_reminder?
     assert_equal [ "billing@paymentreminder.example" ], [ message.from_address ]
@@ -98,7 +98,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "does not mark delivery sent without a provider message ID" do
-    unconfirmed_result = OutboundEmailConnection::Delivery::Result.new(
+    unconfirmed_result = EmailConnection::Delivery::Result.new(
       provider_message_id: nil,
       provider_thread_id: "gmail-thread-without-message"
     )
@@ -108,7 +108,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
     end
 
-    message = @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7").invoice_message
+    message = @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7").conversation_message
     assert_predicate message, :status_failed?
     assert_equal "Email provider did not confirm delivery.", message.failure_reason
     assert_nil message.provider_thread_id
@@ -236,7 +236,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       assert_no_difference -> { @invoice.invoice_reminders.count } do
-        assert_no_difference -> { @invoice.invoice_messages.count } do
+        assert_no_difference -> { @invoice.conversation_messages.count } do
           InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
         end
       end
@@ -534,7 +534,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   test "uses an additional customer email added after the reminder was queued" do
     @invoice.customer.update!(email: nil)
     delivered_message = nil
-    OutboundEmailConnection::Gmail::Delivery.any_instance.expects(:deliver).with do |message|
+    EmailConnection::Gmail::Delivery.any_instance.expects(:deliver).with do |message|
       delivered_message = message
       true
     end.returns("gmail-message-456")
@@ -629,10 +629,10 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "uses the current Gmail connection belonging to the invoice account" do
-    connection = outbound_email_connections(:paid_jar_gmail)
+    connection = email_connections(:paid_jar_gmail)
     delivery = mock
     delivery.expects(:deliver).returns("gmail-account-message")
-    OutboundEmailConnection::Gmail::Delivery.expects(:new).with(
+    EmailConnection::Gmail::Delivery.expects(:new).with(
       account: @invoice.account,
       connection:
     ).returns(delivery)
@@ -646,9 +646,9 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "missing Gmail connection is skipped without a receipt" do
-    @invoice.account.outbound_email_connection.destroy!
+    @invoice.account.email_connection.destroy!
     Rails.logger.expects(:warn).with(
-      "invoice_reminder.skipped reason=missing_outbound_email_connection " \
+      "invoice_reminder.skipped reason=missing_email_connection " \
         "account_id=#{@invoice.account_id} invoice_id=#{@invoice.id} stage_key=pre_due_7"
     )
 
@@ -660,9 +660,9 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "inactive Gmail connection is skipped without a receipt" do
-    @invoice.account.outbound_email_connection.update!(status: :disconnected)
+    @invoice.account.email_connection.update!(status: :disconnected)
     Rails.logger.expects(:warn).with(
-      "invoice_reminder.skipped reason=missing_outbound_email_connection " \
+      "invoice_reminder.skipped reason=missing_email_connection " \
         "account_id=#{@invoice.account_id} invoice_id=#{@invoice.id} stage_key=pre_due_7"
     )
 
@@ -674,8 +674,8 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "revoked Gmail authorization records a failed receipt" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::AuthenticationError, "invalid_grant")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::AuthenticationError, "invalid_grant")
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
@@ -687,8 +687,8 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "permanent Gmail failure records a failed receipt without retry" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::PermanentDeliveryError, "invalid recipient")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::PermanentDeliveryError, "invalid recipient")
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
@@ -702,8 +702,8 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "ambiguous Gmail failure records failure without risking a duplicate retry" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::AmbiguousDeliveryError, "response lost")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::AmbiguousDeliveryError, "response lost")
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
@@ -717,13 +717,13 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "temporary Gmail failure retries with one pending delivery record" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::TemporaryDeliveryError, "rate limited")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::TemporaryDeliveryError, "rate limited")
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       assert_difference [
         -> { @invoice.invoice_reminders.count },
-        -> { @invoice.invoice_messages.count }
+        -> { @invoice.conversation_messages.count }
       ], 1 do
         assert_enqueued_jobs 1, only: InvoiceReminders::SendJob do
           InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
@@ -750,14 +750,14 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       assert_no_difference -> { @invoice.invoice_reminders.count } do
-        assert_no_difference -> { @invoice.invoice_messages.count } do
+        assert_no_difference -> { @invoice.conversation_messages.count } do
           job.perform_now
         end
       end
     end
 
     assert_equal reminder.id, @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7").id
-    assert_predicate reminder.invoice_message.reload, :status_sent?
+    assert_predicate reminder.conversation_message.reload, :status_sent?
     assert_equal "gmail-message-123", reminder.provider_message_id
     assert_equal "gmail-thread-456", reminder.provider_thread_id
   end
@@ -775,7 +775,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
     end
 
-    assert_predicate reminder.invoice_message.reload, :status_pending?
+    assert_predicate reminder.conversation_message.reload, :status_pending?
   end
 
   test "does not send a queued reminder after another outbound message contacts the invoice" do
@@ -839,10 +839,10 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "exhausted temporary Gmail retries record a failed receipt" do
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
-      .raises(OutboundEmailConnection::Errors::TemporaryDeliveryError, "Gmail unavailable")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(EmailConnection::Errors::TemporaryDeliveryError, "Gmail unavailable")
     job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
-    job.exception_executions[[ OutboundEmailConnection::Errors::TemporaryDeliveryError ].to_s] = 4
+    job.exception_executions[[ EmailConnection::Errors::TemporaryDeliveryError ].to_s] = 4
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
@@ -869,7 +869,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
         category:,
         day_offset:,
         stage_key:,
-        invoice_message: create_message(status:, sent_at:, delivery_job_id:)
+        conversation_message: create_message(status:, sent_at:, delivery_job_id:)
       )
     end
 
@@ -881,8 +881,9 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       received_at: nil,
       delivery_job_id: nil
     )
-      @invoice.invoice_messages.create!(
+      @invoice.conversation_messages.create!(
         account: @invoice.account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
         direction:,
         kind:,
         status:,

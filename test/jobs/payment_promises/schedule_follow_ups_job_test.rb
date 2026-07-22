@@ -42,8 +42,9 @@ class PaymentPromises::ScheduleFollowUpsJobTest < ActiveJob::TestCase
     def create_promise(invoice: @invoice, promised_on:, source_id:)
       PaymentPromise.record!(
         invoice:,
-        source_message: invoice.invoice_messages.create!(
+        source_message: invoice.conversation_messages.create!(
           account: invoice.account,
+          conversation: Conversation.for_invoice!(invoice:),
           direction: :inbound,
           kind: :customer_reply,
           status: :received,

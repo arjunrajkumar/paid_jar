@@ -22,6 +22,6 @@ production:
   schedule_payment_promise_follow_ups:
     class: PaymentPromises::ScheduleFollowUpsJob
     schedule: every hour at minute 20
-  reconcile_pending_invoice_messages:
-    class: InvoiceMessages::ReconcilePendingDeliveriesJob
+  reconcile_pending_conversation_messages:
+    class: ConversationMessages::ReconcilePendingDeliveriesJob
     schedule: every hour at minute 40

@@ -78,7 +78,7 @@ class PaymentPromises::FollowUpDecision
     return skipped(:disabled_account, invoice:, message:) unless account.automatic_invoice_reminders_enabled?
 
     availability = delivery_availability ||
-      OutboundEmailConnection::DeliveryAvailability.call(account:)
+      EmailConnection::DeliveryAvailability.call(account:)
     return skipped(availability.reason, invoice:, message:) unless availability.ready?
 
     if invoice.customer.reminder_email_addresses.empty?
@@ -87,7 +87,7 @@ class PaymentPromises::FollowUpDecision
 
     unless message
       return skipped(:recent_outbound_message, invoice:) if recently_contacted?(invoice)
-      if invoice.invoice_messages.direction_outbound.status_pending.lock.exists?
+      if invoice.conversation_messages.direction_outbound.status_pending.lock.exists?
         return skipped(:outbound_delivery_in_progress, invoice:)
       end
     end
@@ -121,9 +121,9 @@ class PaymentPromises::FollowUpDecision
     end
 
     def recently_contacted?(invoice)
-      invoice.invoice_messages
+      invoice.conversation_messages
         .successful_outbound
-        .sent_after(InvoiceMessage::OUTBOUND_CONTACT_COOLDOWN.ago)
+        .sent_after(ConversationMessage::OUTBOUND_CONTACT_COOLDOWN.ago)
         .exists?
     end
 

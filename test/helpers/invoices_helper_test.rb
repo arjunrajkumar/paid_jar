@@ -69,7 +69,7 @@ class InvoicesHelperTest < ActionView::TestCase
 
     assert_equal "Sent Jul 15, 2026", invoice_reminder_attempt_label(
       InvoiceReminder.new(
-        invoice_message: InvoiceMessage.new(
+        conversation_message: ConversationMessage.new(
           direction: :outbound,
           kind: :scheduled_reminder,
           status: :sent,
@@ -79,7 +79,7 @@ class InvoicesHelperTest < ActionView::TestCase
     )
     assert_equal "Failed Jul 16, 2026", invoice_reminder_attempt_label(
       InvoiceReminder.new(
-        invoice_message: InvoiceMessage.new(
+        conversation_message: ConversationMessage.new(
           direction: :outbound,
           kind: :scheduled_reminder,
           status: :failed

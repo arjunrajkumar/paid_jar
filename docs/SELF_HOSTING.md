@@ -241,7 +241,7 @@ The four critical recurring workflows publish expected-schedule check-ins when S
 - `schedule-invoice-reminders`
 - `refresh-invoice-sources`
 - `schedule-payment-promise-follow-ups`
-- `reconcile-pending-invoice-messages`
+- `reconcile-pending-conversation-messages`
 
 Configure alerts for missed and failed check-ins as well as application exceptions. Also monitor
 queue depth, database availability/capacity, provider webhook failures, SMTP bounces/complaints,

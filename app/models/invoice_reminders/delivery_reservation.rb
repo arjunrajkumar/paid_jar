@@ -49,7 +49,7 @@ class InvoiceReminders::DeliveryReservation
         next
       end
 
-      if decision.reminder && !reminder.invoice_message.refresh_delivery_attempt!(
+      if decision.reminder && !reminder.conversation_message.refresh_delivery_attempt!(
         job_id: delivery_job_id,
         mail_message:
       )
@@ -94,21 +94,22 @@ class InvoiceReminders::DeliveryReservation
     end
 
     def reserve_new_reminder(decision, mail_message:)
-      return if invoice.invoice_messages.direction_outbound.status_pending.lock.exists?
+      return if invoice.conversation_messages.direction_outbound.status_pending.lock.exists?
 
-      message = invoice.invoice_messages.create!(
+      message = invoice.conversation_messages.create!(
         {
           account: invoice.account,
+          conversation: Conversation.for_invoice!(invoice:),
           direction: :outbound,
           kind: :scheduled_reminder,
           status: :pending,
           delivery_job_id:,
           delivery_attempted_at: Time.current
-        }.merge(InvoiceMessages::Content.from_mail(mail_message).attributes)
+        }.merge(ConversationMessages::Content.from_mail(mail_message).attributes)
       )
       invoice.invoice_reminders.create!(
         account: invoice.account,
-        invoice_message: message,
+        conversation_message: message,
         invoice_schedule: decision.stage,
         category: decision.stage.category,
         day_offset: decision.stage.day_offset,

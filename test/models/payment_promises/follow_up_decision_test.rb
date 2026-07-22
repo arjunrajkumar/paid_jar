@@ -74,7 +74,7 @@ class PaymentPromises::FollowUpDecisionTest < ActiveSupport::TestCase
       decision = for_delivery(delivery_job_id: "owner-job")
       assert_predicate decision, :ready?
       assert_equal message, decision.message
-      assert_equal outbound_email_connections(:paid_jar_gmail), decision.connection
+      assert_equal email_connections(:paid_jar_gmail), decision.connection
     end
   end
 
@@ -93,8 +93,9 @@ class PaymentPromises::FollowUpDecisionTest < ActiveSupport::TestCase
     def create_promise
       PaymentPromise.record!(
         invoice: @invoice,
-        source_message: @invoice.invoice_messages.create!(
+        source_message: @invoice.conversation_messages.create!(
           account: @account,
+          conversation: Conversation.for_invoice!(invoice: @invoice),
           direction: :inbound,
           kind: :customer_reply,
           status: :received,
@@ -111,9 +112,10 @@ class PaymentPromises::FollowUpDecisionTest < ActiveSupport::TestCase
     end
 
     def create_follow_up_message(attributes)
-      @invoice.invoice_messages.create!(
+      @invoice.conversation_messages.create!(
         {
           account: @account,
+          conversation: Conversation.for_invoice!(invoice: @invoice),
           direction: :outbound,
           kind: :promise_follow_up,
           from_address: "billing@paymentreminder.example",

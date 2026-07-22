@@ -6,6 +6,7 @@ class Customer < ApplicationRecord
   belongs_to :invoice_source, inverse_of: :customers
   belongs_to :customer_segment, inverse_of: :customers
   has_many :invoices, dependent: :destroy, inverse_of: :customer
+  has_many :conversations, dependent: :nullify, inverse_of: :customer
   has_many :additional_email_addresses,
     -> { order(:id) },
     class_name: "CustomerEmailAddress",

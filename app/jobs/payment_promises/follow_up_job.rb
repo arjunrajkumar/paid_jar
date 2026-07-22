@@ -1,7 +1,7 @@
 class PaymentPromises::FollowUpJob < ApplicationJob
   queue_as :default
 
-  retry_on OutboundEmailConnection::Errors::TemporaryDeliveryError,
+  retry_on EmailConnection::Errors::TemporaryDeliveryError,
     wait: :polynomially_longer,
     attempts: 5 do |job, error|
       job.send(:record_exhausted_delivery_failure, error)
@@ -77,7 +77,7 @@ class PaymentPromises::FollowUpJob < ApplicationJob
     end
 
     def deliver_follow_up(payment_promise:, reservation:)
-      delivery_result = InvoiceMessages::ProviderDelivery.call(
+      delivery_result = ConversationMessages::ProviderDelivery.call(
         account: payment_promise.account,
         connection: reservation.connection,
         mail_message: reservation.mail_message,

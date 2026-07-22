@@ -6,25 +6,25 @@ class InvoiceReminders::StageDecisionTest < ActiveSupport::TestCase
     @invoice.account.update!(automatic_invoice_reminders_enabled: true)
   end
 
-  test "returns the current stage and outbound connection when delivery is allowed" do
+  test "returns the current stage and email connection when delivery is allowed" do
     travel_to Time.zone.local(2026, 7, 24, 12) do
       decision = decide
 
       assert_predicate decision, :deliverable?
       assert_equal invoice_schedules(:normal_pre_due_7), decision.stage
-      assert_equal outbound_email_connections(:paid_jar_gmail), decision.connection
+      assert_equal email_connections(:paid_jar_gmail), decision.connection
       assert_nil decision.reminder
       assert_nil decision.reason
     end
   end
 
-  test "returns the outbound connection configuration reason" do
-    @invoice.account.outbound_email_connection.destroy!
+  test "returns the email connection configuration reason" do
+    @invoice.account.email_connection.destroy!
 
     decision = decide
 
     assert_not_predicate decision, :deliverable?
-    assert_equal "missing_outbound_email_connection", decision.reason
+    assert_equal "missing_email_connection", decision.reason
   end
 
   test "rejects a disabled account and a paid invoice" do
@@ -146,7 +146,7 @@ class InvoiceReminders::StageDecisionTest < ActiveSupport::TestCase
       message = create_message(status:, delivery_job_id:)
       @invoice.invoice_reminders.create!(
         account: @invoice.account,
-        invoice_message: message,
+        conversation_message: message,
         invoice_schedule: stage,
         category: stage.category,
         day_offset: stage.day_offset,
@@ -164,8 +164,9 @@ class InvoiceReminders::StageDecisionTest < ActiveSupport::TestCase
       provider_message_id: nil,
       delivery_job_id: nil
     )
-      @invoice.invoice_messages.create!(
+      @invoice.conversation_messages.create!(
         account: @invoice.account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
         direction:,
         kind:,
         status:,

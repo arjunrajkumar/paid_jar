@@ -9,7 +9,7 @@ class InvoiceReminderResource < Madmin::Resource
 
   attribute :account, form: false, index: true
   attribute :invoice, form: false, index: true
-  attribute :invoice_message, form: false
+  attribute :conversation_message, form: false
   attribute :invoice_schedule, form: false
 
   def self.display_name(record) = "#{record.stage_key.humanize} reminder ##{record.id}"

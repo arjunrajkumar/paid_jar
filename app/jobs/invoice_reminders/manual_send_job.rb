@@ -1,7 +1,7 @@
 class InvoiceReminders::ManualSendJob < ApplicationJob
   queue_as :default
 
-  retry_on OutboundEmailConnection::Errors::TemporaryDeliveryError,
+  retry_on EmailConnection::Errors::TemporaryDeliveryError,
     wait: :polynomially_longer,
     attempts: 5 do |job, error|
       job.send(:record_exhausted_failure, error)
@@ -43,7 +43,7 @@ class InvoiceReminders::ManualSendJob < ApplicationJob
 
   private
     def deliver(invoice:, reservation:)
-      delivery_result = InvoiceMessages::ProviderDelivery.call(
+      delivery_result = ConversationMessages::ProviderDelivery.call(
         account: invoice.account,
         connection: reservation.connection,
         mail_message: reservation.mail_message,
@@ -51,7 +51,7 @@ class InvoiceReminders::ManualSendJob < ApplicationJob
         context: {
           account_id: invoice.account_id,
           invoice_id: invoice.id,
-          invoice_message_id: reservation.message.id
+          conversation_message_id: reservation.message.id
         }
       )
 
@@ -78,7 +78,7 @@ class InvoiceReminders::ManualSendJob < ApplicationJob
     end
 
     def cancel_owned_pending_delivery(invoice:, reason:)
-      message = invoice.invoice_messages
+      message = invoice.conversation_messages
         .direction_outbound
         .kind_manual_reminder
         .status_pending

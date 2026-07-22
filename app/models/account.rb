@@ -3,7 +3,7 @@ class Account < ApplicationRecord
   has_many :stripe_installation_claims,
     class_name: "InvoiceSources::Stripe::InstallationClaim",
     dependent: :nullify
-  has_one :outbound_email_connection, dependent: :destroy, inverse_of: :account
+  has_one :email_connection, dependent: :destroy, inverse_of: :account
   has_many :customers, dependent: :destroy
   has_many :invoices, dependent: :destroy
   has_many :payment_promises, dependent: :destroy, inverse_of: :account
@@ -11,7 +11,9 @@ class Account < ApplicationRecord
   has_many :invoice_reminder_suppressions,
     dependent: :destroy,
     inverse_of: :account
-  has_many :invoice_messages, dependent: :destroy, inverse_of: :account
+  has_many :conversation_messages, dependent: :destroy, inverse_of: :account
+  has_many :conversations, dependent: :destroy, inverse_of: :account
+  has_many :conversation_events, dependent: :delete_all, inverse_of: :account
   has_many :users, dependent: :destroy
   has_many :customer_segments, dependent: :destroy, inverse_of: :account
   has_many :platform_admin_events, dependent: :nullify, inverse_of: :account
@@ -29,8 +31,8 @@ class Account < ApplicationRecord
     presence: true,
     if: :automatic_invoice_reminders_enabled?
   validates :invoice_reminder_from_name, length: { maximum: 100 }, allow_blank: true
-  validate :active_outbound_email_connection_required, if: :automatic_invoice_reminders_enabled?
-  validate :sender_address_matches_outbound_connection, if: :automatic_invoice_reminders_enabled?
+  validate :active_email_connection_required, if: :automatic_invoice_reminders_enabled?
+  validate :sender_address_matches_email_connection, if: :automatic_invoice_reminders_enabled?
   normalizes :invoice_reminder_from_email,
     with: ->(value) { value.strip.downcase.presence }
 
@@ -53,24 +55,24 @@ class Account < ApplicationRecord
     true
   end
 
-  def outbound_email_ready?
-    outbound_email_connection&.active? &&
-      outbound_email_connection.sender_matches?(invoice_reminder_from_email)
+  def email_ready?
+    email_connection&.active? &&
+      email_connection.sender_matches?(invoice_reminder_from_email)
   end
 
   private
     def assign_external_account_id
       self.external_account_id ||= ExternalIdSequence.next
     end
-    def active_outbound_email_connection_required
-      return if outbound_email_ready?
+    def active_email_connection_required
+      return if email_ready?
 
       errors.add(:automatic_invoice_reminders_enabled, "requires an active Gmail connection")
     end
 
-    def sender_address_matches_outbound_connection
-      return if outbound_email_connection.blank? || invoice_reminder_from_email.blank?
-      return if outbound_email_connection.sender_matches?(invoice_reminder_from_email)
+    def sender_address_matches_email_connection
+      return if email_connection.blank? || invoice_reminder_from_email.blank?
+      return if email_connection.sender_matches?(invoice_reminder_from_email)
 
       errors.add(:invoice_reminder_from_email, "must match the connected Gmail account")
     end

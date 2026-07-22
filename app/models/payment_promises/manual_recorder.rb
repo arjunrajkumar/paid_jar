@@ -19,7 +19,7 @@ class PaymentPromises::ManualRecorder
     raise ArgumentError, "Payment promises can only be recorded for an outstanding invoice." unless invoice.outstanding?
 
     PaymentPromise.transaction do
-      source_message = invoice.invoice_messages.create!(source_message_attributes)
+      source_message = invoice.conversation_messages.create!(source_message_attributes)
       PaymentPromise.record!(invoice:, source_message:, promised_on:)
     end
   end
@@ -30,6 +30,7 @@ class PaymentPromises::ManualRecorder
     def source_message_attributes
       {
         account: invoice.account,
+        conversation: Conversation.for_invoice!(invoice:),
         direction: :inbound,
         kind: :customer_reply,
         status: :received,

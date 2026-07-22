@@ -25,8 +25,8 @@ class RecurringJobMonitoringTest < ActiveJob::TestCase
 
   test "configures the pending delivery reconciler monitor for its hourly schedule" do
     assert_monitor_configuration(
-      InvoiceMessages::ReconcilePendingDeliveriesJob,
-      slug: "reconcile-pending-invoice-messages",
+      ConversationMessages::ReconcilePendingDeliveriesJob,
+      slug: "reconcile-pending-conversation-messages",
       interval: 1,
       unit: :hour,
       checkin_margin: 10,

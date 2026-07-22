@@ -405,13 +405,13 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
 
   private
     def connect_gmail(account, email:)
-      account.build_outbound_email_connection.connect_gmail!(
+      account.build_email_connection.connect_gmail!(
         email:,
         name: "Billing Team",
         access_token: "access-token",
         refresh_token: "refresh-token",
         expires_at: 1.hour.from_now,
-        scopes: [ "email", "profile", OutboundEmailConnection::Gmailable::SEND_SCOPE ]
+        scopes: [ "email", "profile", EmailConnection::Gmailable::SEND_SCOPE ]
       )
     end
 

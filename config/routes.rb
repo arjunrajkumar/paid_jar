@@ -31,7 +31,7 @@ Rails.application.routes.draw do
     resource :onboarding, only: %i[show update]
   end
 
-  scope module: :outbound_email_connections do
+  scope module: :email_connections do
     get "gmail/connect", to: "gmail_connections#new", as: :new_gmail_connection
     get "gmail/callback", to: "gmail_connections#create", as: :gmail_callback
     resource :gmail_connection, controller: :gmail_connections, only: :destroy do

@@ -66,10 +66,10 @@ namespace :madmin do
       post :record_payment_promise
     end
   end
-  resources :outbound_email_connections do
+  resources :email_connections do
     post :disconnect, on: :member
   end
-  resources :invoice_messages
+  resources :conversation_messages
   resources :invoice_reminders
   resources :invoice_reminder_suppressions
   root to: "dashboard#show"

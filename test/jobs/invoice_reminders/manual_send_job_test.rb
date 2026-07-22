@@ -20,17 +20,17 @@ class InvoiceReminders::ManualSendJobTest < ActiveJob::TestCase
   end
 
   test "delivers and records a manually requested reminder" do
-    delivery_result = OutboundEmailConnection::Delivery::Result.new(
+    delivery_result = EmailConnection::Delivery::Result.new(
       provider_message_id: "manual-provider-message",
       provider_thread_id: "manual-provider-thread"
     )
-    OutboundEmailConnection::Delivery.any_instance.expects(:deliver).returns(delivery_result)
+    EmailConnection::Delivery.any_instance.expects(:deliver).returns(delivery_result)
 
-    assert_difference -> { @invoice.invoice_messages.count }, 1 do
+    assert_difference -> { @invoice.conversation_messages.count }, 1 do
       InvoiceReminders::ManualSendJob.perform_now(@invoice.id)
     end
 
-    message = @invoice.invoice_messages.order(:id).last
+    message = @invoice.conversation_messages.order(:id).last
     assert_predicate message, :kind_manual_reminder?
     assert_predicate message, :status_sent?
     assert_equal "manual-provider-message", message.provider_message_id
@@ -39,12 +39,12 @@ class InvoiceReminders::ManualSendJobTest < ActiveJob::TestCase
   end
 
   test "records a confirmed provider failure" do
-    OutboundEmailConnection::Delivery.any_instance.expects(:deliver)
-      .raises(OutboundEmailConnection::Errors::PermanentDeliveryError, "invalid recipient")
+    EmailConnection::Delivery.any_instance.expects(:deliver)
+      .raises(EmailConnection::Errors::PermanentDeliveryError, "invalid recipient")
 
     InvoiceReminders::ManualSendJob.perform_now(@invoice.id)
 
-    message = @invoice.invoice_messages.order(:id).last
+    message = @invoice.conversation_messages.order(:id).last
     assert_predicate message, :kind_manual_reminder?
     assert_predicate message, :status_failed?
     assert_equal "invalid recipient", message.failure_reason

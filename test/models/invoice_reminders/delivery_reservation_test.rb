@@ -9,7 +9,7 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
   test "atomically reserves a pending message and reminder from the current stage" do
     travel_to reminder_time do
       assert_difference [
-        -> { @invoice.invoice_messages.count },
+        -> { @invoice.conversation_messages.count },
         -> { @invoice.invoice_reminders.count }
       ], 1 do
         @reservation = reserve
@@ -18,10 +18,11 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
 
     assert_predicate @reservation, :reserved?
     assert_equal invoice_schedules(:normal_pre_due_7), @reservation.stage
-    assert_equal outbound_email_connections(:paid_jar_gmail), @reservation.connection
+    assert_equal email_connections(:paid_jar_gmail), @reservation.connection
     assert_equal "Upcoming Payment Due: Invoice INV-001", @reservation.mail_message.subject
 
-    message = @reservation.reminder.invoice_message
+    message = @reservation.reminder.conversation_message
+    assert_equal Conversation.for_invoice!(invoice: @invoice), message.conversation
     assert_predicate message, :status_pending?
     assert_predicate message, :kind_scheduled_reminder?
     assert_equal "delivery-job-123", message.delivery_job_id
@@ -33,7 +34,7 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
     travel_to reminder_time do
       first = reserve
 
-      assert_no_difference -> { @invoice.invoice_messages.count } do
+      assert_no_difference -> { @invoice.conversation_messages.count } do
         assert_no_difference -> { @invoice.invoice_reminders.count } do
           second = reserve
 
@@ -51,7 +52,7 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
   test "returns the authoritative locked eligibility decision without creating delivery" do
     @invoice.update!(status: :paid, amount_due: 0, paid_on: Date.current)
 
-    assert_no_difference -> { @invoice.invoice_messages.count } do
+    assert_no_difference -> { @invoice.conversation_messages.count } do
       @reservation = reserve
     end
 
@@ -75,8 +76,9 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
   end
 
   test "does not reserve while another outbound delivery is pending" do
-    @invoice.invoice_messages.create!(
+    @invoice.conversation_messages.create!(
       account: @invoice.account,
+      conversation: Conversation.for_invoice!(invoice: @invoice),
       direction: :outbound,
       kind: :invoice_resend,
       status: :pending,
@@ -110,8 +112,9 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
     end
 
     def create_recent_message
-      @invoice.invoice_messages.create!(
+      @invoice.conversation_messages.create!(
         account: @invoice.account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
         direction: :outbound,
         kind: :invoice_resend,
         status: :sent,

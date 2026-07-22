@@ -95,12 +95,12 @@ ordinary user, and operator behavior exposed through the platform-admin panel.
   reminders. The OAuth scope is send-only.
 - **Available:** each account has persisted reminder stages and tones for each debtor rating. The
   hourly scheduler finds invoices due for a stage and sends through the account's Gmail connection.
-- **Available:** delivery is recorded in an invoice-message ledger before sending and finalized with
+- **Available:** delivery is recorded in a conversation-message ledger before sending and finalized with
   the provider message/thread identifier or a failure reason. Temporary provider errors use bounded
   retries, and pending deliveries older than two hours are reconciled to failed.
 - **Available:** users can independently opt in to emails when a reminder succeeds and when the last
   overdue stage requires manual follow-up.
-- **Available:** an active payment promise or a successful outbound invoice message in the previous
+- **Available:** an active payment promise or a successful outbound conversation message in the previous
   48 hours suppresses an otherwise-due automatic stage. The suppression is persisted so the same
   stage is not retried later.
 
@@ -157,19 +157,30 @@ then records the promise transactionally. It does not pretend that an email was 
 
 ### Conversation and reply types
 
-`InvoiceMessage` supports these kinds:
+The application has a latent, provider-neutral conversation foundation. A `Conversation` groups one
+logical accounts-receivable case, with one canonical conversation for each invoice and support for
+account-only unmatched conversations. Every conversation message belongs to a conversation, while
+provider thread identifiers remain on individual messages so multiple provider threads can belong
+to the same case.
+
+Conversation creation, resolution, and reopening are recorded as immutable audit facts with system,
+user, or future AI actor attribution. This event ledger does not execute actions or change invoices,
+promises, or email delivery state.
+
+`ConversationMessage` supports these kinds:
 
 - `scheduled_reminder` and `manual_reminder` for outbound collection messages;
 - `promise_follow_up` for an overdue payment-promise follow-up;
-- `customer_reply` for an inbound customer message;
+- `customer_reply` for the manually recorded inbound source of a payment promise;
+- `customer_email` for a future unmatched inbound email;
 - `due_date_answer`, `payment_status_answer`, `invoice_resend`, and
   `dispute_acknowledgement` for future assistant responses.
 
 Only scheduled reminders, operator-initiated manual reminders, promise follow-ups, and manually
 recorded customer replies currently have complete producers. Gmail is authorized with send-only
-access, so there is no inbound mailbox reader, reply parser, AI classification/response pipeline, or
-customer conversation UI. The other message kinds are schema/domain vocabulary, not shipped user
-features.
+access, so there is no inbound mailbox reader, reply parser, automatic email understanding,
+AI classification/response pipeline, or customer conversation inbox. The conversation records,
+events, and other message kinds are durable domain foundations, not shipped user features.
 
 ### Other latent operations
 
@@ -196,7 +207,7 @@ A platform admin can browse all records across all tenants, including:
 - customers, additional recipient addresses, debtor segments, and imported invoices;
 - Xero and Stripe invoice sources, sync status/errors, and webhook events;
 - Gmail connection status and configured sender identity;
-- schedules, reminders, suppressions, invoice-message delivery state, and payment promises;
+- schedules, reminders, suppressions, conversation-message delivery state, and payment promises;
 - notification subscriptions and sessions.
 
 Sensitive values are deliberately omitted from the admin resources: decrypted OAuth access and
@@ -346,7 +357,7 @@ privacy, security, or deployment decisions:
 - Exact-date scheduling has no catch-up, and a failed scheduled stage is not automatically retried
   after its bounded job retries. The platform manual-reminder path provides an operator escape hatch
   without changing that policy.
-- Operator-sent manual reminders are visible in the global invoice-message ledger but do not appear
+- Operator-sent manual reminders are visible in the global conversation-message ledger but do not appear
   in the ordinary user's scheduled reminder-history component.
 - Unexpected Gmail delivery exceptions are currently recorded as terminal failures, as required by
   existing tests; changing retry classification needs a deliberate reliability policy.

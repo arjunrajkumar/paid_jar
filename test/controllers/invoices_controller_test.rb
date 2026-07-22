@@ -83,8 +83,9 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
       due_on: Date.new(2026, 7, 20)
     )
 
-    sent_message = invoice.invoice_messages.create!(
+    sent_message = invoice.conversation_messages.create!(
       account:,
+      conversation: Conversation.for_invoice!(invoice:),
       direction: :outbound,
       kind: :scheduled_reminder,
       status: :sent,
@@ -92,14 +93,15 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     )
     invoice.invoice_reminders.create!(
       account:,
-      invoice_message: sent_message,
+      conversation_message: sent_message,
       category: :pre_due,
       day_offset: 7,
       stage_key: "pre_due_7",
       created_at: Time.zone.local(2026, 7, 13, 9)
     )
-    failed_message = invoice.invoice_messages.create!(
+    failed_message = invoice.conversation_messages.create!(
       account:,
+      conversation: Conversation.for_invoice!(invoice:),
       direction: :outbound,
       kind: :scheduled_reminder,
       status: :failed,
@@ -107,7 +109,7 @@ class InvoicesControllerTest < ActionDispatch::IntegrationTest
     )
     invoice.invoice_reminders.create!(
       account:,
-      invoice_message: failed_message,
+      conversation_message: failed_message,
       category: :pre_due,
       day_offset: 1,
       stage_key: "pre_due_1",

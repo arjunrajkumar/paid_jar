@@ -185,6 +185,53 @@ class AccountTest < ActiveSupport::TestCase
     assert_includes account.errors[:base], "Good Debtor on-time rate must stay above the Bad Debtor on-time rate"
   end
 
+  test "destroys an account with a complete conversation audit lifecycle" do
+    account = accounts(:paid_jar)
+    invoice = invoices(:xero_invoice)
+    conversation = Conversation.for_invoice!(invoice:)
+    reminder_message = invoice.conversation_messages.create!(
+      account:,
+      conversation:,
+      direction: :outbound,
+      kind: :scheduled_reminder,
+      status: :sent,
+      sent_at: Time.current,
+      to_addresses: [],
+      cc_addresses: []
+    )
+    reminder = invoice.invoice_reminders.create!(
+      account:,
+      conversation_message: reminder_message,
+      category: :pre_due,
+      stage_key: "pre_due_7",
+      day_offset: 7
+    )
+    source_message = invoice.conversation_messages.create!(
+      account:,
+      conversation:,
+      direction: :inbound,
+      kind: :customer_reply,
+      status: :received,
+      received_at: Time.current,
+      to_addresses: [],
+      cc_addresses: []
+    )
+    payment_promise = PaymentPromise.record!(
+      invoice:,
+      source_message:,
+      promised_on: Date.current + 1.day
+    )
+    conversation.resolve!
+    event_ids = conversation.conversation_events.ids
+
+    assert_nothing_raised { account.destroy! }
+    assert_not Conversation.exists?(conversation.id)
+    assert_not ConversationEvent.where(id: event_ids).exists?
+    assert_not ConversationMessage.where(id: [ reminder_message.id, source_message.id ]).exists?
+    assert_not InvoiceReminder.exists?(reminder.id)
+    assert_not PaymentPromise.exists?(payment_promise.id)
+  end
+
   test "refreshes every customer payer segment" do
     account = Account.create!(name: "Segment Refresh Account")
     source = account.invoice_sources.create!(

@@ -46,8 +46,9 @@ class PaymentPromiseMailerTest < ActionMailer::TestCase
 
   private
     def create_source_message
-      @invoice.invoice_messages.create!(
+      @invoice.conversation_messages.create!(
         account: @account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
         direction: :inbound,
         kind: :customer_reply,
         status: :received,

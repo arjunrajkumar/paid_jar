@@ -364,7 +364,7 @@ sentry:
 - [ ] Confirm the `schedule-invoice-reminders` monitor appears after the hourly reminder scheduler first runs.
 - [ ] Confirm the `refresh-invoice-sources` monitor appears after the six-hour invoice-source scheduler first runs.
 - [ ] Confirm the `schedule-payment-promise-follow-ups` monitor appears after the hourly payment-promise scheduler first runs.
-- [ ] Confirm the `reconcile-pending-invoice-messages` monitor appears after the hourly pending-delivery reconciler first runs.
+- [ ] Confirm the `reconcile-pending-conversation-messages` monitor appears after the hourly pending-delivery reconciler first runs.
 - [ ] Configure Sentry notifications for missed, timed-out, and error check-ins on all four monitors.
 - [ ] Configure issue alerts for new and regressed production errors.
 - [ ] Configure a threshold alert for repeated Gmail authentication failures (`provider:gmail`, `operation:invoice_reminder_delivery`).

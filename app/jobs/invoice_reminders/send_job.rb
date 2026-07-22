@@ -1,7 +1,7 @@
 class InvoiceReminders::SendJob < ApplicationJob
   queue_as :default
 
-  retry_on OutboundEmailConnection::Errors::TemporaryDeliveryError,
+  retry_on EmailConnection::Errors::TemporaryDeliveryError,
     wait: :polynomially_longer,
     attempts: 5 do |job, error|
       job.send(:record_exhausted_temporary_failure, error)
@@ -107,14 +107,14 @@ class InvoiceReminders::SendJob < ApplicationJob
 
     def record_delivery_result(reminder:, delivery_result:)
       if delivery_result.confirmed?
-        reminder.invoice_message.mark_delivery_sent!(
+        reminder.conversation_message.mark_delivery_sent!(
           job_id:,
           sent_at: Time.current,
           provider_message_id: delivery_result.provider_message_id,
           provider_thread_id: delivery_result.provider_thread_id
         )
       else
-        reminder.invoice_message.mark_delivery_failed!(
+        reminder.conversation_message.mark_delivery_failed!(
           job_id:,
           failure_reason: delivery_result.failure_reason
         )
@@ -126,7 +126,7 @@ class InvoiceReminders::SendJob < ApplicationJob
     end
 
     def deliver_email(invoice:, connection:, mail_message:)
-      InvoiceMessages::ProviderDelivery.call(
+      ConversationMessages::ProviderDelivery.call(
         account: invoice.account,
         connection:,
         mail_message:,
@@ -141,7 +141,7 @@ class InvoiceReminders::SendJob < ApplicationJob
     end
 
     def send_email(invoice:, connection:, mail_message:)
-      OutboundEmailConnection::Delivery.new(
+      EmailConnection::Delivery.new(
         account: invoice.account,
         connection:
       ).deliver(mail_message)

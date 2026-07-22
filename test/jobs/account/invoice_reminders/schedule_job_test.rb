@@ -200,7 +200,7 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
         invoice:,
         stage: other_stage,
         status: :sent,
-        sent_at: InvoiceMessage::OUTBOUND_CONTACT_COOLDOWN.ago - 1.second
+        sent_at: ConversationMessage::OUTBOUND_CONTACT_COOLDOWN.ago - 1.second
       )
 
       assert_enqueued_with(
@@ -300,7 +300,7 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
         invoice:,
         kind: :due_date_answer,
         status: :sent,
-        sent_at: InvoiceMessage::OUTBOUND_CONTACT_COOLDOWN.ago
+        sent_at: ConversationMessage::OUTBOUND_CONTACT_COOLDOWN.ago
       )
 
       assert_enqueued_with(
@@ -387,13 +387,13 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       name: "Other Custom Schedule Account",
       invoice_reminder_from_email: "reminders@other.example"
     )
-    other_account.create_outbound_email_connection!(
+    other_account.create_email_connection!(
       provider: :gmail,
       connected_email: "reminders@other.example",
       access_token: "access-token",
       refresh_token: "refresh-token",
       token_expires_at: 1.hour.from_now,
-      scopes: [ OutboundEmailConnection::Gmailable::SEND_SCOPE ],
+      scopes: [ EmailConnection::Gmailable::SEND_SCOPE ],
       status: :active
     )
     other_account.update!(automatic_invoice_reminders_enabled: true)
@@ -433,7 +433,7 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       category: :pre_due,
       day_offset: 3,
       stage_key: "pre_due_3",
-      invoice_message: create_message(
+      conversation_message: create_message(
         invoice:,
         status: :sent,
         sent_at: reminder_on - 1.day
@@ -482,7 +482,7 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
         category: stage.category,
         day_offset: stage.day_offset,
         stage_key: stage.key,
-        invoice_message: create_message(
+        conversation_message: create_message(
           invoice:,
           status:,
           sent_at: status.to_sym == :sent ? sent_at || Time.current : nil
@@ -498,8 +498,9 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       sent_at: nil,
       received_at: nil
     )
-      invoice.invoice_messages.create!(
+      invoice.conversation_messages.create!(
         account: invoice.account,
+        conversation: Conversation.for_invoice!(invoice:),
         direction:,
         kind:,
         status:,

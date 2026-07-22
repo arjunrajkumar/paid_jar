@@ -82,8 +82,9 @@ class InvoiceReminderNotificationMailerTest < ActionMailer::TestCase
 
   private
     def create_reminder(category:, day_offset:, tone:)
-      message = @invoice.invoice_messages.create!(
+      message = @invoice.conversation_messages.create!(
         account: @invoice.account,
+        conversation: Conversation.for_invoice!(invoice: @invoice),
         direction: :outbound,
         kind: :scheduled_reminder,
         status: :sent,
@@ -92,7 +93,7 @@ class InvoiceReminderNotificationMailerTest < ActionMailer::TestCase
 
       @invoice.invoice_reminders.create!(
         account: @invoice.account,
-        invoice_message: message,
+        conversation_message: message,
         category:,
         day_offset:,
         stage_key: "#{category}_#{day_offset}",

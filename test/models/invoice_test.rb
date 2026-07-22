@@ -80,6 +80,23 @@ class InvoiceTest < ActiveSupport::TestCase
     assert_includes invoice.errors[:invoice_source], "must match customer invoice source"
   end
 
+  test "synchronizes an existing conversation when the invoice customer changes" do
+    invoice = invoices(:xero_invoice)
+    conversation = Conversation.for_invoice!(invoice:)
+    replacement_customer = invoice.invoice_source.customers.create!(
+      account: invoice.account,
+      external_id: "replacement-conversation-customer",
+      name: "Replacement Conversation Customer"
+    )
+    assert_equal invoice.customer, invoice.conversation.customer
+
+    invoice.update!(customer_id: replacement_customer.id)
+
+    assert_equal replacement_customer, invoice.conversation.customer
+    assert_equal replacement_customer, conversation.reload.customer
+    assert_predicate conversation, :valid?
+  end
+
   test "classifies canonical invoice statuses" do
     open = Invoice.new(status: "open", amount_due: 100)
     paid = Invoice.new(status: "paid", amount_due: 0, amount_paid: 100)

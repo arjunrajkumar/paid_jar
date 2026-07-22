@@ -26,7 +26,7 @@ class InvoiceResource < Madmin::Resource
   attribute :payment_promises, form: false
   attribute :invoice_reminders, form: false
   attribute :invoice_reminder_suppressions, form: false
-  attribute :invoice_messages, form: false
+  attribute :conversation_messages, form: false
 
   scope :outstanding
   scope :paid

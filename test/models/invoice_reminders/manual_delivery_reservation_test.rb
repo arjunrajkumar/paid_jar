@@ -8,15 +8,18 @@ class InvoiceReminders::ManualDeliveryReservationTest < ActiveSupport::TestCase
   end
 
   test "reserves a manual reminder while automatic reminders are disabled" do
-    result = reserve
+    assert_difference -> { @invoice.conversation_messages.count }, 1 do
+      @result = reserve
+    end
 
-    assert_predicate result, :reserved?
-    assert_equal outbound_email_connections(:paid_jar_gmail), result.connection
-    assert_equal "manual_reminder", result.message.kind
-    assert_predicate result.message, :status_pending?
-    assert_equal "manual-reminder-job", result.message.delivery_job_id
-    assert_equal [ "customer@example.com" ], result.message.to_addresses
-    assert_match(/INV-001/, result.message.subject)
+    assert_predicate @result, :reserved?
+    assert_equal email_connections(:paid_jar_gmail), @result.connection
+    assert_equal Conversation.for_invoice!(invoice: @invoice), @result.message.conversation
+    assert_equal "manual_reminder", @result.message.kind
+    assert_predicate @result.message, :status_pending?
+    assert_equal "manual-reminder-job", @result.message.delivery_job_id
+    assert_equal [ "customer@example.com" ], @result.message.to_addresses
+    assert_match(/INV-001/, @result.message.subject)
   end
 
   test "does not reserve a reminder for a settled invoice" do

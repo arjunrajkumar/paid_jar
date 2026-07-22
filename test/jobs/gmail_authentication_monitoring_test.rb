@@ -8,8 +8,8 @@ class GmailAuthenticationMonitoringTest < ActiveJob::TestCase
   end
 
   test "reports a handled Gmail authentication failure to Sentry" do
-    authentication_error = OutboundEmailConnection::Errors::AuthenticationError.new("invalid_grant")
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).raises(authentication_error)
+    authentication_error = EmailConnection::Errors::AuthenticationError.new("invalid_grant")
+    EmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).raises(authentication_error)
 
     Sentry.expects(:capture_exception).with(
       authentication_error,

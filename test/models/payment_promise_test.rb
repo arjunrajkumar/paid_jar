@@ -328,9 +328,10 @@ class PaymentPromiseTest < ActiveSupport::TestCase
     end
 
     def build_message(attributes = {})
-      InvoiceMessage.new(
+      ConversationMessage.new(
         {
           account: @invoice.account,
+          conversation: Conversation.for_invoice!(invoice: @invoice),
           invoice: @invoice,
           direction: :inbound,
           kind: :customer_reply,

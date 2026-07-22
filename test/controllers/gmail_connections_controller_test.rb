@@ -2,52 +2,52 @@ require "test_helper"
 
 class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
   setup do
-    OutboundEmailConnection::Gmail::Configuration.any_instance.stubs(:configured?).returns(true)
+    EmailConnection::Gmail::Configuration.any_instance.stubs(:configured?).returns(true)
   end
 
   test "callback connects Gmail only to the initiating account" do
     account = sign_up_and_complete
     other_account = Account.create!(name: "Other Account")
     client = FakeGmailOauthClient.new
-    OutboundEmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+    EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
 
     get new_gmail_connection_url(script_name: account.slug)
     get gmail_callback_url(script_name: account.slug), params: { code: "auth-code", state: client.state }
 
-    connection = account.reload.outbound_email_connection
+    connection = account.reload.email_connection
     assert_redirected_to account_settings_url(script_name: account.slug)
     assert_predicate connection, :active?
     assert_equal "billing@example.com", connection.connected_email
-    assert_nil other_account.reload.outbound_email_connection
+    assert_nil other_account.reload.email_connection
   end
 
   test "callback cannot connect Gmail through another account's state" do
     account = sign_up_and_complete(email_address: "owner-state@example.com")
     other_account = Account.create!(name: "Other State Account")
     client = FakeGmailOauthClient.new
-    OutboundEmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+    EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
 
     get new_gmail_connection_url(script_name: account.slug)
     get gmail_callback_url(script_name: other_account.slug), params: { code: "auth-code", state: client.state }
 
-    assert_nil account.reload.outbound_email_connection
-    assert_nil other_account.reload.outbound_email_connection
+    assert_nil account.reload.email_connection
+    assert_nil other_account.reload.email_connection
     assert_equal "Gmail connection could not be verified.", flash[:alert]
   end
 
   test "reconnection updates tokens and preserves the existing refresh token" do
     account = sign_up_and_complete(email_address: "owner-reconnect@example.com")
-    connection = account.create_outbound_email_connection!(
+    connection = account.create_email_connection!(
       provider: :gmail,
       connected_email: "billing@example.com",
       access_token: "old-access",
       refresh_token: "old-refresh",
       token_expires_at: 1.minute.from_now,
-      scopes: [ OutboundEmailConnection::Gmailable::SEND_SCOPE ],
+      scopes: [ EmailConnection::Gmailable::SEND_SCOPE ],
       status: :active
     )
     client = FakeGmailOauthClient.new(refresh_token: nil)
-    OutboundEmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+    EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
 
     get new_gmail_connection_url(script_name: account.slug)
     get gmail_callback_url(script_name: account.slug), params: { code: "auth-code", state: client.state }
@@ -78,7 +78,7 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
       message.to == [ "owner-test-email@example.com" ] &&
         message.subject == "PaymentReminder Gmail connection test"
     end.returns("test-message-id")
-    OutboundEmailConnection::Delivery.stubs(:new).returns(delivery)
+    EmailConnection::Delivery.stubs(:new).returns(delivery)
 
     post test_gmail_connection_url(script_name: account.slug)
 
@@ -90,8 +90,8 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
     account = sign_up_and_complete(email_address: "member-gmail@example.com")
     connection = connect_gmail(account)
     account.users.owner.sole.update!(role: :member)
-    OutboundEmailConnection::Gmail::OauthClient.expects(:new).never
-    OutboundEmailConnection::Delivery.expects(:new).never
+    EmailConnection::Gmail::OauthClient.expects(:new).never
+    EmailConnection::Delivery.expects(:new).never
 
     get new_gmail_connection_url(script_name: account.slug)
     assert_redirected_to root_url(script_name: nil)
@@ -107,14 +107,14 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
   test "callback is rejected when the initiating administrator was demoted" do
     account = sign_up_and_complete(email_address: "demoted-gmail@example.com")
     client = FakeGmailOauthClient.new
-    OutboundEmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+    EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
     get new_gmail_connection_url(script_name: account.slug)
     account.users.owner.sole.update!(role: :member)
 
     get gmail_callback_url(script_name: account.slug), params: { code: "auth-code", state: client.state }
 
     assert_redirected_to root_url(script_name: nil)
-    assert_nil account.reload.outbound_email_connection
+    assert_nil account.reload.email_connection
   end
 
   private
@@ -127,13 +127,13 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
     end
 
     def connect_gmail(account)
-      account.build_outbound_email_connection.connect_gmail!(
+      account.build_email_connection.connect_gmail!(
         email: "billing@example.com",
         name: "Billing Team",
         access_token: "access-token",
         refresh_token: "refresh-token",
         expires_at: 1.hour.from_now,
-        scopes: [ "email", "profile", OutboundEmailConnection::Gmailable::SEND_SCOPE ]
+        scopes: [ "email", "profile", EmailConnection::Gmailable::SEND_SCOPE ]
       )
     end
 
@@ -158,7 +158,7 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
           "access_token" => "access-token",
           "refresh_token" => @refresh_token,
           "expires_in" => 3600,
-          "scope" => "email profile #{OutboundEmailConnection::Gmailable::SEND_SCOPE}"
+          "scope" => "email profile #{EmailConnection::Gmailable::SEND_SCOPE}"
         }
       end
 

@@ -5,12 +5,12 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     @invoice = invoices(:xero_invoice)
   end
 
-  test "belongs to an account invoice and invoice message" do
+  test "belongs to an account invoice and conversation message" do
     reminder = build_reminder
 
     assert_equal @invoice.account, reminder.account
     assert_equal @invoice, reminder.invoice
-    assert_equal @invoice, reminder.invoice_message.invoice
+    assert_equal @invoice, reminder.conversation_message.invoice
   end
 
   test "records a sent reminder receipt by default" do
@@ -23,7 +23,7 @@ class InvoiceReminderTest < ActiveSupport::TestCase
 
   test "records a failed reminder receipt" do
     reminder = build_reminder(
-      invoice_message: build_message(status: :failed, sent_at: nil, failure_reason: "delivery failed")
+      conversation_message: build_message(status: :failed, sent_at: nil, failure_reason: "delivery failed")
     )
 
     assert reminder.save
@@ -100,10 +100,10 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     other_invoice = @invoice.dup
     other_invoice.external_id = "invoice-reminder-message-other-invoice"
     other_invoice.save!
-    reminder = build_reminder(invoice_message: build_message(invoice: other_invoice))
+    reminder = build_reminder(conversation_message: build_message(invoice: other_invoice))
 
     assert_not reminder.valid?
-    assert_includes reminder.errors[:invoice_message], "must belong to the same invoice"
+    assert_includes reminder.errors[:conversation_message], "must belong to the same invoice"
   end
 
   test "requires an outbound scheduled reminder message" do
@@ -114,17 +114,17 @@ class InvoiceReminderTest < ActiveSupport::TestCase
       sent_at: nil,
       received_at: Time.current
     )
-    reminder = build_reminder(invoice_message: inbound_message)
+    reminder = build_reminder(conversation_message: inbound_message)
 
     assert_not reminder.valid?
-    assert_includes reminder.errors[:invoice_message], "must be an outbound scheduled reminder"
+    assert_includes reminder.errors[:conversation_message], "must be an outbound scheduled reminder"
   end
 
-  test "allows an invoice message to describe only one reminder" do
+  test "allows a conversation message to describe only one reminder" do
     first = build_reminder
     first.save!
     duplicate = build_reminder(
-      invoice_message: first.invoice_message,
+      conversation_message: first.conversation_message,
       category: :overdue,
       day_offset: 3,
       stage_key: "overdue_3",
@@ -132,7 +132,7 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     )
 
     assert_not duplicate.valid?
-    assert_includes duplicate.errors[:invoice_message_id], "has already been taken"
+    assert_includes duplicate.errors[:conversation_message_id], "has already been taken"
   end
 
   test "requires its invoice schedule to belong to the same account" do
@@ -168,7 +168,7 @@ class InvoiceReminderTest < ActiveSupport::TestCase
 
   test "fails a pending stage delivery only for its owning job" do
     reminder = build_reminder(
-      invoice_message: build_message(
+      conversation_message: build_message(
         status: :pending,
         sent_at: nil,
         delivery_job_id: "owner-job",
@@ -183,7 +183,7 @@ class InvoiceReminderTest < ActiveSupport::TestCase
       delivery_job_id: "other-job",
       failure_reason: "Should not win"
     )
-    assert_predicate reminder.invoice_message.reload, :status_pending?
+    assert_predicate reminder.conversation_message.reload, :status_pending?
 
     assert InvoiceReminder.fail_owned_delivery_for_stage!(
       invoice: @invoice,
@@ -191,7 +191,7 @@ class InvoiceReminderTest < ActiveSupport::TestCase
       delivery_job_id: "owner-job",
       failure_reason: "Retries exhausted"
     )
-    assert_predicate reminder.invoice_message.reload, :status_failed?
+    assert_predicate reminder.conversation_message.reload, :status_failed?
     assert_equal "Retries exhausted", reminder.failure_reason
   end
 
@@ -204,7 +204,7 @@ class InvoiceReminderTest < ActiveSupport::TestCase
         {
           account:,
           invoice:,
-          invoice_message: build_message(invoice:, account:),
+          conversation_message: build_message(invoice:, account:),
           category: :pre_due,
           stage_key: "pre_due_7",
           day_offset: 7
@@ -213,9 +213,10 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     end
 
     def build_message(invoice: @invoice, account: invoice.account, **attributes)
-      InvoiceMessage.new(
+      ConversationMessage.new(
         {
           account:,
+          conversation: Conversation.for_invoice!(invoice:),
           invoice:,
           direction: :outbound,
           kind: :scheduled_reminder,
