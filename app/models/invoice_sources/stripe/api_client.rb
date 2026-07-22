@@ -7,7 +7,7 @@ require "uri"
 module InvoiceSources
   class Stripe
     class ApiClient
-      class Error < StandardError; end
+      class Error < InvoiceSources::ProviderError; end
       class AuthorizationError < Error; end
 
       OPEN_TIMEOUT = 5.seconds

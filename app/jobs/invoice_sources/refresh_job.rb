@@ -1,15 +1,14 @@
 class InvoiceSources::RefreshJob < ApplicationJob
   queue_as :default
 
-  retry_on InvoiceSources::Stripe::ApiClient::Error,
-    InvoiceSources::Xero::OauthClient::Error,
+  retry_on InvoiceSources::ProviderError,
     wait: :polynomially_longer,
     attempts: 5
 
   discard_on ActiveJob::DeserializationError
 
   def perform(invoice_source)
-    return if invoice_source.disconnected?
+    return unless invoice_source.refreshable?
 
     invoice_source.sync_invoices!
   end

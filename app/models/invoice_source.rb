@@ -45,6 +45,8 @@ class InvoiceSource < ApplicationRecord
     error: "error"
   }
 
+  scope :scheduled_refresh_candidates, -> { where(status: %i[active error]) }
+
   validates :provider, :status, presence: true
   validates :external_account_id, presence: true
   validates :provider, uniqueness: { scope: :account_id }
@@ -87,6 +89,10 @@ class InvoiceSource < ApplicationRecord
 
   def connected?
     provider_adapter.connected?
+  end
+
+  def refreshable?
+    provider_adapter.refreshable?
   end
 
   def expired?

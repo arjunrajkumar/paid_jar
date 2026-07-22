@@ -1,0 +1,131 @@
+require "test_helper"
+
+class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
+  setup do
+    @invoice = invoices(:xero_invoice)
+    @invoice.account.update!(automatic_invoice_reminders_enabled: true)
+  end
+
+  test "atomically reserves a pending message and reminder from the current stage" do
+    travel_to reminder_time do
+      assert_difference [
+        -> { @invoice.invoice_messages.count },
+        -> { @invoice.invoice_reminders.count }
+      ], 1 do
+        @reservation = reserve
+      end
+    end
+
+    assert_predicate @reservation, :reserved?
+    assert_equal invoice_schedules(:normal_pre_due_7), @reservation.stage
+    assert_equal outbound_email_connections(:paid_jar_gmail), @reservation.connection
+    assert_equal "Upcoming Payment Due: Invoice INV-001", @reservation.mail_message.subject
+
+    message = @reservation.reminder.invoice_message
+    assert_predicate message, :status_pending?
+    assert_predicate message, :kind_scheduled_reminder?
+    assert_equal "delivery-job-123", message.delivery_job_id
+    assert_equal [ "customer@example.com" ], message.to_addresses
+    assert_match "friendly reminder", message.body
+  end
+
+  test "reuses only the pending delivery owned by the same job" do
+    travel_to reminder_time do
+      first = reserve
+
+      assert_no_difference -> { @invoice.invoice_messages.count } do
+        assert_no_difference -> { @invoice.invoice_reminders.count } do
+          second = reserve
+
+          assert_predicate second, :reserved?
+          assert_equal first.reminder, second.reminder
+        end
+      end
+
+      foreign_job = reserve(delivery_job_id: "another-job")
+      assert_not_predicate foreign_job, :reserved?
+      assert_equal "duplicate_stage", foreign_job.reason
+    end
+  end
+
+  test "returns the authoritative locked eligibility decision without creating delivery" do
+    @invoice.update!(status: :paid, amount_due: 0, paid_on: Date.current)
+
+    assert_no_difference -> { @invoice.invoice_messages.count } do
+      @reservation = reserve
+    end
+
+    assert_not_predicate @reservation, :reserved?
+    assert_equal "not_outstanding", @reservation.reason
+  end
+
+  test "persists a durable suppression instead of reserving delivery" do
+    travel_to reminder_time do
+      create_recent_message
+
+      assert_difference -> { @invoice.invoice_reminder_suppressions.count }, 1 do
+        @reservation = reserve
+      end
+    end
+
+    assert_not_predicate @reservation, :reserved?
+    assert_equal "recent_outbound_message", @reservation.reason
+    assert_predicate @invoice.invoice_reminder_suppressions.last,
+      :reason_recent_outbound_message?
+  end
+
+  test "does not reserve while another outbound delivery is pending" do
+    @invoice.invoice_messages.create!(
+      account: @invoice.account,
+      direction: :outbound,
+      kind: :invoice_resend,
+      status: :pending,
+      delivery_job_id: "invoice-resend-job",
+      delivery_attempted_at: Time.current,
+      from_address: "billing@paymentreminder.example",
+      to_addresses: [ "customer@example.com" ],
+      cc_addresses: [],
+      subject: "Invoice INV-001",
+      body: "Here is the invoice."
+    )
+
+    travel_to reminder_time do
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        @reservation = reserve
+      end
+    end
+
+    assert_not_predicate @reservation, :reserved?
+    assert_equal "outbound_delivery_in_progress", @reservation.reason
+  end
+
+  private
+    def reserve(delivery_job_id: "delivery-job-123")
+      InvoiceReminders::DeliveryReservation.call(
+        invoice: @invoice.reload,
+        category: :pre_due,
+        day_offset: 7,
+        delivery_job_id:
+      )
+    end
+
+    def create_recent_message
+      @invoice.invoice_messages.create!(
+        account: @invoice.account,
+        direction: :outbound,
+        kind: :invoice_resend,
+        status: :sent,
+        sent_at: 1.hour.ago,
+        provider_message_id: "delivery-reservation-recent",
+        from_address: "billing@paymentreminder.example",
+        to_addresses: [ "customer@example.com" ],
+        cc_addresses: [],
+        subject: "Invoice INV-001",
+        body: "Here is the invoice."
+      )
+    end
+
+    def reminder_time
+      Time.zone.local(2026, 7, 24, 12)
+    end
+end

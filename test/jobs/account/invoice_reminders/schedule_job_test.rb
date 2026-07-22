@@ -200,7 +200,7 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
         invoice:,
         stage: other_stage,
         status: :sent,
-        sent_at: InvoiceMessage::FOLLOW_UP_COOLDOWN.ago - 1.second
+        sent_at: InvoiceMessage::OUTBOUND_CONTACT_COOLDOWN.ago - 1.second
       )
 
       assert_enqueued_with(
@@ -228,6 +228,65 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
         Account::InvoiceReminders::ScheduleJob.perform_now
       end
+
+      suppression = invoice.invoice_reminder_suppressions.find_by!(stage_key: "pre_due_3")
+      assert_predicate suppression, :reason_recent_outbound_message?
+    end
+  end
+
+  test "a stage suppressed by the 48 hour rule stays skipped after the window expires" do
+    reminder_on = Date.new(2026, 11, 17)
+    invoice = nil
+
+    travel_to reminder_on.in_time_zone.change(hour: 10) do
+      customer = create_customer(payer_segment: :good_debtor)
+      invoice = create_invoice(customer:, due_on: reminder_on + 3.days)
+      create_message(
+        invoice:,
+        kind: :invoice_resend,
+        status: :sent,
+        sent_at: 47.hours.ago
+      )
+
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+
+    assert_equal 1, invoice.invoice_reminder_suppressions.count
+  end
+
+  test "an active payment promise permanently suppresses an ordinary stage" do
+    reminder_on = Date.new(2026, 11, 17)
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      customer = create_customer(payer_segment: :good_debtor)
+      invoice = create_invoice(customer:, due_on: reminder_on + 3.days)
+      source_message = create_message(
+        invoice:,
+        direction: :inbound,
+        kind: :customer_reply,
+        status: :received,
+        received_at: Time.current
+      )
+      PaymentPromise.record!(
+        invoice:,
+        source_message:,
+        promised_on: reminder_on + 5.days
+      )
+
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+
+      suppression = invoice.invoice_reminder_suppressions.find_by!(stage_key: "pre_due_3")
+      assert_predicate suppression, :reason_active_payment_promise?
     end
   end
 
@@ -241,7 +300,7 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
         invoice:,
         kind: :due_date_answer,
         status: :sent,
-        sent_at: InvoiceMessage::FOLLOW_UP_COOLDOWN.ago
+        sent_at: InvoiceMessage::OUTBOUND_CONTACT_COOLDOWN.ago
       )
 
       assert_enqueued_with(

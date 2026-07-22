@@ -27,11 +27,12 @@ class OutboundEmailConnection::Gmail::Delivery
   rescue Google::Apis::AuthorizationError => error
     connection.mark_errored!(error)
     raise OutboundEmailConnection::Errors::AuthenticationError, error.message
-  rescue Google::Apis::RateLimitError,
-    Google::Apis::RequestTimeOutError,
+  rescue Google::Apis::RateLimitError => error
+    raise OutboundEmailConnection::Errors::TemporaryDeliveryError, error.message
+  rescue Google::Apis::RequestTimeOutError,
     Google::Apis::ServerError,
     Google::Apis::TransmissionError => error
-    raise OutboundEmailConnection::Errors::TemporaryDeliveryError, error.message
+    raise OutboundEmailConnection::Errors::AmbiguousDeliveryError, error.message
   rescue Google::Apis::ClientError => error
     classify_client_error!(error)
   end

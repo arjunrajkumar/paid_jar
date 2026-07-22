@@ -118,6 +118,10 @@ module InvoiceSources
       source.active? && source.external_account_id.present?
     end
 
+    def refreshable?
+      (source.active? || source.error?) && source.external_account_id.present?
+    end
+
     def livemode?
       source.provider_data.fetch("livemode", true)
     end

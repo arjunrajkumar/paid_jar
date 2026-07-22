@@ -1,0 +1,26 @@
+<h1>Payment status follow-up</h1>
+
+<p>Hello <%= @customer.name %>,</p>
+
+<p>
+  You mentioned that payment for invoice <%= @invoice_reference %> would be made by <%= @promised_on %>.
+  Our records still show this invoice as outstanding. Could you confirm the payment status?
+</p>
+
+<h2>Invoice details</h2>
+
+<ul>
+  <li><strong>Invoice:</strong> <%= @invoice_reference %></li>
+  <li><strong>Due date:</strong> <%= @due_date %></li>
+  <li><strong>Amount due:</strong> <%= @amount_due %></li>
+  <li><strong>Promised payment date:</strong> <%= @promised_on %></li>
+</ul>
+
+<% if @online_invoice_url.present? %>
+  <p><%= link_to "View Invoice", @online_invoice_url %></p>
+<% end %>
+
+<p>
+  Thank you,<br>
+  <%= @account.name %>
+</p>

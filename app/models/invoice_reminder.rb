@@ -39,6 +39,26 @@ class InvoiceReminder < ApplicationRecord
   validate :invoice_schedule_matches_account
   validate :stage_key_matches_category_and_day_offset
 
+  def self.for_stage(stage)
+    where(stage_key: stage.key).or(where(invoice_schedule: stage))
+  end
+
+  def self.fail_owned_delivery_for_stage!(
+    invoice:,
+    stage_key:,
+    delivery_job_id:,
+    failure_reason:
+  )
+    message = includes(:invoice_message)
+      .find_by(invoice:, stage_key:)
+      &.invoice_message
+
+    message&.mark_delivery_failed!(
+      job_id: delivery_job_id,
+      failure_reason:
+    ) || false
+  end
+
   private
     def account_matches_invoice
       return if account.blank? || invoice.blank? || account == invoice.account

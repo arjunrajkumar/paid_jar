@@ -31,7 +31,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "a duplicate job released after delivery does not send again" do
-    InvoiceReminders::SendJob.any_instance.expects(:send_email).once.returns(true)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).once.returns(@delivery_result)
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       assert_enqueued_jobs 2, only: InvoiceReminders::SendJob do
@@ -95,6 +95,23 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     reminder = @invoice.invoice_reminders.find_by!(stage_key: "overdue_3")
     assert_predicate reminder, :status_failed?
     assert_nil reminder.sent_at
+  end
+
+  test "does not mark delivery sent without a provider message ID" do
+    unconfirmed_result = OutboundEmailConnection::Delivery::Result.new(
+      provider_message_id: nil,
+      provider_thread_id: "gmail-thread-without-message"
+    )
+    InvoiceReminders::SendJob.any_instance.stubs(:send_email).returns(unconfirmed_result)
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+    end
+
+    message = @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7").invoice_message
+    assert_predicate message, :status_failed?
+    assert_equal "Email provider did not confirm delivery.", message.failure_reason
+    assert_nil message.provider_thread_id
   end
 
   test "records the failure reason when sending raises an error" do
@@ -210,6 +227,22 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     end
   end
 
+  test "the locked reservation catches reminders disabled during invoice refresh" do
+    InvoiceReminders::InvoiceFreshnessCheck.expects(:call).with do |invoice|
+      @invoice.account.update!(automatic_invoice_reminders_enabled: false)
+      invoice == @invoice
+    end.returns(@invoice)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        assert_no_difference -> { @invoice.invoice_messages.count } do
+          InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+        end
+      end
+    end
+  end
+
   test "refreshes a Stripe invoice and does not send when the provider reports it paid" do
     invoice = create_stripe_invoice
     InvoiceReminders::InvoiceFreshnessCheck.expects(:call).with do |refreshed_invoice|
@@ -266,6 +299,18 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     end
   end
 
+  test "does not permanently suppress a queued stage that is no longer due" do
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
+      @invoice.update!(due_on: @invoice.due_on + 1.day)
+      create_message(kind: :invoice_resend, status: :sent, sent_at: Time.current)
+
+      perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+    end
+
+    assert_not @invoice.invoice_reminder_suppressions.exists?(stage_key: "pre_due_7")
+  end
+
   test "does not send a queued stage absent from the customer's current policy" do
     travel_to Time.zone.local(2026, 7, 24, 12) do
       InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
@@ -282,19 +327,14 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     travel_to Time.zone.local(2026, 7, 24, 12) do
       InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
       @invoice.customer.update!(customer_segment: customer_segments(:bad_debtor_segment))
-      current_stage = @invoice.account.invoice_schedules.find_by!(
-        kind: :bad_debtor,
-        category: :pre_due,
-        day_offset: 7
-      )
-      InvoiceReminders::SendJob.any_instance.expects(:send_email).with(
-        invoice: @invoice,
-        stage: current_stage
-      ).returns(true)
+      InvoiceReminders::SendJob.any_instance.expects(:send_email).once.returns(@delivery_result)
 
       assert_difference -> { @invoice.invoice_reminders.count }, 1 do
         perform_enqueued_jobs(only: InvoiceReminders::SendJob)
       end
+
+      assert_predicate @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7"),
+        :tone_direct?
     end
   end
 
@@ -309,10 +349,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     travel_to Time.zone.local(2026, 7, 24, 12) do
       InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
       schedule.update!(tone: "firm")
-      InvoiceReminders::SendJob.any_instance.expects(:send_email).with(
-        invoice: @invoice,
-        stage: schedule
-      ).returns(true)
+      InvoiceReminders::SendJob.any_instance.expects(:send_email).once.returns(@delivery_result)
 
       assert_difference -> { @invoice.invoice_reminders.count }, 1 do
         perform_enqueued_jobs(only: InvoiceReminders::SendJob)
@@ -348,10 +385,11 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       day_offset: 7,
       tone: "friendly"
     )
+    delivery_result = @delivery_result
     job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
     job.define_singleton_method(:send_email) do |**|
       schedule.destroy!
-      true
+      delivery_result
     end
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
@@ -434,15 +472,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
 
   test "does not trust a queued final tone" do
     subscribe_to(:invoice_reminder_stopped)
-    current_stage = @invoice.account.invoice_schedules.find_by!(
-      kind: @invoice.customer.payer_segment,
-      category: :pre_due,
-      day_offset: 7
-    )
-    InvoiceReminders::SendJob.any_instance.expects(:send_email).with(
-      invoice: @invoice,
-      stage: current_stage
-    ).returns(true)
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).once.returns(@delivery_result)
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
       assert_no_emails do
@@ -671,6 +701,21 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     assert_equal "invalid recipient", reminder.failure_reason
   end
 
+  test "ambiguous Gmail failure records failure without risking a duplicate retry" do
+    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
+      .raises(OutboundEmailConnection::Errors::AmbiguousDeliveryError, "response lost")
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+      end
+    end
+
+    reminder = @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7")
+    assert_predicate reminder, :status_failed?
+    assert_equal "response lost", reminder.failure_reason
+  end
+
   test "temporary Gmail failure retries with one pending delivery record" do
     OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
       .raises(OutboundEmailConnection::Errors::TemporaryDeliveryError, "rate limited")
@@ -693,16 +738,14 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "a temporary-delivery retry reuses its pending message and reminder" do
+    job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
     reminder = create_reminder(
       category: :pre_due,
       day_offset: 7,
       stage_key: "pre_due_7",
-      status: :pending
+      status: :pending,
+      delivery_job_id: job.job_id
     )
-    job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
-    job.exception_executions[
-      [ OutboundEmailConnection::Errors::TemporaryDeliveryError ].to_s
-    ] = 1
     job.expects(:send_email).once.returns(@delivery_result)
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
@@ -745,6 +788,53 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
       assert_no_difference -> { @invoice.invoice_reminders.count } do
         perform_enqueued_jobs(only: InvoiceReminders::SendJob)
       end
+
+      suppression = @invoice.invoice_reminder_suppressions.find_by!(stage_key: "pre_due_7")
+      assert_predicate suppression, :reason_recent_outbound_message?
+    end
+  end
+
+  test "does not send a queued reminder after the customer makes a payment promise" do
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
+      source_message = create_message(
+        direction: :inbound,
+        kind: :customer_reply,
+        status: :received,
+        received_at: Time.current
+      )
+      PaymentPromise.record!(
+        invoice: @invoice,
+        source_message:,
+        promised_on: Date.current + 2.days
+      )
+
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+      end
+
+      suppression = @invoice.invoice_reminder_suppressions.find_by!(stage_key: "pre_due_7")
+      assert_predicate suppression, :reason_active_payment_promise?
+    end
+  end
+
+  test "does not send a stage that was already suppressed" do
+    schedule = invoice_schedules(:normal_pre_due_7)
+    @invoice.invoice_reminder_suppressions.create!(
+      account: @invoice.account,
+      invoice_schedule: schedule,
+      category: schedule.category,
+      day_offset: schedule.day_offset,
+      stage_key: schedule.key,
+      reason: :recent_outbound_message,
+      suppressed_at: Time.current
+    )
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
     end
   end
 
@@ -766,27 +856,39 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   private
-    def create_reminder(category:, day_offset:, stage_key:, status:, sent_at: nil)
+    def create_reminder(
+      category:,
+      day_offset:,
+      stage_key:,
+      status:,
+      sent_at: nil,
+      delivery_job_id: nil
+    )
       @invoice.invoice_reminders.create!(
         account: @invoice.account,
         category:,
         day_offset:,
         stage_key:,
-        invoice_message: create_message(status:, sent_at:)
+        invoice_message: create_message(status:, sent_at:, delivery_job_id:)
       )
     end
 
     def create_message(
+      direction: :outbound,
       kind: :scheduled_reminder,
       status:,
-      sent_at: nil
+      sent_at: nil,
+      received_at: nil,
+      delivery_job_id: nil
     )
       @invoice.invoice_messages.create!(
         account: @invoice.account,
-        direction: :outbound,
+        direction:,
         kind:,
         status:,
         sent_at:,
+        received_at:,
+        delivery_job_id:,
         to_addresses: [],
         cc_addresses: []
       )

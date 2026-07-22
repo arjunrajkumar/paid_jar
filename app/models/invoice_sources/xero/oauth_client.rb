@@ -6,7 +6,7 @@ require "uri"
 module InvoiceSources
   class Xero
     class OauthClient
-      class Error < StandardError; end
+      class Error < InvoiceSources::ProviderError; end
 
       INVOICES_PAGE_SIZE = 1_000
 

@@ -1,0 +1,18 @@
+Payment status follow-up
+
+Hello <%= @customer.name %>,
+
+You mentioned that payment for invoice <%= @invoice_reference %> would be made by <%= @promised_on %>. Our records still show this invoice as outstanding. Could you confirm the payment status?
+
+Invoice details
+Invoice: <%= @invoice_reference %>
+Due date: <%= @due_date %>
+Amount due: <%= @amount_due %>
+Promised payment date: <%= @promised_on %>
+
+<% if @online_invoice_url.present? %>
+View Invoice: <%= @online_invoice_url %>
+
+<% end %>
+Thank you,
+<%= @account.name %>

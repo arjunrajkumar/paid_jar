@@ -101,6 +101,43 @@ class InvoiceSourceTest < ActiveSupport::TestCase
     assert_not_includes InvoiceSource.connected_for(account), source
   end
 
+  test "active and errored Xero sources with credentials are refreshable" do
+    source = invoice_sources(:xero)
+
+    assert_predicate source, :refreshable?
+
+    source.update!(status: :error)
+
+    assert_predicate source, :refreshable?
+  end
+
+  test "pending disconnected and credential-less Xero sources are not refreshable" do
+    source = invoice_sources(:xero)
+
+    source.update!(status: :pending)
+    assert_not_predicate source, :refreshable?
+
+    source.update!(status: :disconnected)
+    assert_not_predicate source, :refreshable?
+
+    source.update!(status: :error, refresh_token: nil)
+    assert_not_predicate source, :refreshable?
+  end
+
+  test "active and errored Stripe sources are refreshable without OAuth tokens" do
+    source = accounts(:paid_jar).invoice_sources.create!(
+      provider: :stripe,
+      status: :active,
+      external_account_id: "acct_refreshable"
+    )
+
+    assert_predicate source, :refreshable?
+
+    source.update!(status: :error)
+
+    assert_predicate source, :refreshable?
+  end
+
   test "available sources include supported providers and current connections" do
     source = accounts(:paid_jar).invoice_sources.create!(
       provider: :stripe,

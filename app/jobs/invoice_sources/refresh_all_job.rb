@@ -14,8 +14,8 @@ class InvoiceSources::RefreshAllJob < ApplicationJob
   )
 
   def perform
-    InvoiceSource.find_each do |invoice_source|
-      InvoiceSources::RefreshJob.perform_later(invoice_source) if invoice_source.connected?
+    InvoiceSource.scheduled_refresh_candidates.find_each do |invoice_source|
+      InvoiceSources::RefreshJob.perform_later(invoice_source) if invoice_source.refreshable?
     end
   end
 end

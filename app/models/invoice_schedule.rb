@@ -5,6 +5,9 @@ class InvoiceSchedule < ApplicationRecord
 
   belongs_to :account, inverse_of: :invoice_schedules
   has_many :invoice_reminders, dependent: :nullify, inverse_of: :invoice_schedule
+  has_many :invoice_reminder_suppressions,
+    dependent: :nullify,
+    inverse_of: :invoice_schedule
 
   enum :kind, KINDS, prefix: true, validate: true
   enum :category, CATEGORIES, prefix: true, validate: true
@@ -23,6 +26,10 @@ class InvoiceSchedule < ApplicationRecord
 
   def invoice_due_on_for(reminder_on:)
     category_pre_due? ? reminder_on + day_offset.days : reminder_on - day_offset.days
+  end
+
+  def due_for?(invoice, on: Date.current)
+    invoice.due_on == invoice_due_on_for(reminder_on: on)
   end
 
   def terminal?

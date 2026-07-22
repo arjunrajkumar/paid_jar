@@ -89,6 +89,23 @@ class OutboundEmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
     assert_predicate connection.reload, :active?
   end
 
+  test "classifies a lost Gmail response as ambiguous rather than safely retryable" do
+    connection = outbound_email_connections(:paid_jar_gmail)
+    service = mock
+    service.stubs(:authorization=)
+    service.stubs(:send_user_message).raises(Google::Apis::TransmissionError.new("connection lost"))
+
+    assert_raises OutboundEmailConnection::Errors::AmbiguousDeliveryError do
+      OutboundEmailConnection::Gmail::Delivery.new(
+        account: connection.account,
+        connection:,
+        service:
+      ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
+    end
+
+    assert_predicate connection.reload, :active?
+  end
+
   private
     def gmail_client_error(reason)
       Google::Apis::ClientError.new(

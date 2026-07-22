@@ -35,6 +35,30 @@ class InvoiceSources::RefreshJobTest < ActiveJob::TestCase
     InvoiceSources::RefreshJob.perform_now(source)
   end
 
+  test "skips a pending source" do
+    source = Account.create!(name: "Pending Refresh").invoice_sources.create!(
+      provider: :stripe,
+      status: :pending,
+      external_account_id: "acct_pending_refresh"
+    )
+
+    InvoiceSource.any_instance.expects(:sync_invoices!).never
+
+    InvoiceSources::RefreshJob.perform_now(source)
+  end
+
+  test "skips an errored source without the credentials required to recover" do
+    source = Account.create!(name: "Unrecoverable Refresh").invoice_sources.create!(
+      provider: :xero,
+      status: :error,
+      external_account_id: "tenant_unrecoverable_refresh"
+    )
+
+    InvoiceSource.any_instance.expects(:sync_invoices!).never
+
+    InvoiceSources::RefreshJob.perform_now(source)
+  end
+
   test "retries provider sync failures" do
     InvoiceSource.any_instance.expects(:sync_invoices!).raises(InvoiceSources::Xero::OauthClient::Error, "provider unavailable")
 

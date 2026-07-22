@@ -19,3 +19,9 @@ production:
   schedule_invoice_reminders:
     class: Account::InvoiceReminders::ScheduleJob
     schedule: every hour
+  schedule_payment_promise_follow_ups:
+    class: PaymentPromises::ScheduleFollowUpsJob
+    schedule: every hour at minute 20
+  reconcile_pending_invoice_messages:
+    class: InvoiceMessages::ReconcilePendingDeliveriesJob
+    schedule: every hour at minute 40

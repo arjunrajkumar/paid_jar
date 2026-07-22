@@ -46,6 +46,12 @@ module InvoiceSources
       source.active? && source.external_account_id.present? && source.refresh_token.present?
     end
 
+    def refreshable?
+      (source.active? || source.error?) &&
+        source.external_account_id.present? &&
+        source.refresh_token.present?
+    end
+
     def refresh_access_token!
       token_set = oauth_client.refresh_token(refresh_token: source.refresh_token)
 

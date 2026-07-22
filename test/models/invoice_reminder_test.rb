@@ -166,6 +166,35 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     end
   end
 
+  test "fails a pending stage delivery only for its owning job" do
+    reminder = build_reminder(
+      invoice_message: build_message(
+        status: :pending,
+        sent_at: nil,
+        delivery_job_id: "owner-job",
+        delivery_attempted_at: Time.current
+      )
+    )
+    reminder.save!
+
+    assert_not InvoiceReminder.fail_owned_delivery_for_stage!(
+      invoice: @invoice,
+      stage_key: "pre_due_7",
+      delivery_job_id: "other-job",
+      failure_reason: "Should not win"
+    )
+    assert_predicate reminder.invoice_message.reload, :status_pending?
+
+    assert InvoiceReminder.fail_owned_delivery_for_stage!(
+      invoice: @invoice,
+      stage_key: "pre_due_7",
+      delivery_job_id: "owner-job",
+      failure_reason: "Retries exhausted"
+    )
+    assert_predicate reminder.invoice_message.reload, :status_failed?
+    assert_equal "Retries exhausted", reminder.failure_reason
+  end
+
   private
     def build_reminder(attributes = {})
       invoice = attributes.fetch(:invoice, @invoice)

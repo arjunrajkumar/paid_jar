@@ -23,6 +23,28 @@ class RecurringJobMonitoringTest < ActiveJob::TestCase
     )
   end
 
+  test "configures the pending delivery reconciler monitor for its hourly schedule" do
+    assert_monitor_configuration(
+      InvoiceMessages::ReconcilePendingDeliveriesJob,
+      slug: "reconcile-pending-invoice-messages",
+      interval: 1,
+      unit: :hour,
+      checkin_margin: 10,
+      max_runtime: 30
+    )
+  end
+
+  test "configures the payment promise scheduler monitor for its hourly schedule" do
+    assert_monitor_configuration(
+      PaymentPromises::ScheduleFollowUpsJob,
+      slug: "schedule-payment-promise-follow-ups",
+      interval: 1,
+      unit: :hour,
+      checkin_margin: 10,
+      max_runtime: 30
+    )
+  end
+
   test "reports a successful reminder scheduler execution" do
     monitor_config = Account::InvoiceReminders::ScheduleJob.sentry_monitor_config
     check_ins = sequence("check-ins")

@@ -12,7 +12,14 @@ class Invoice < ApplicationRecord
   belongs_to :account, inverse_of: :invoices
   belongs_to :invoice_source, inverse_of: :invoices
   belongs_to :customer, inverse_of: :invoices
+  has_many :payment_promises,
+    dependent: :destroy,
+    inverse_of: :invoice
   has_many :invoice_reminders,
+    -> { order(created_at: :desc, id: :desc) },
+    dependent: :destroy,
+    inverse_of: :invoice
+  has_many :invoice_reminder_suppressions,
     -> { order(created_at: :desc, id: :desc) },
     dependent: :destroy,
     inverse_of: :invoice

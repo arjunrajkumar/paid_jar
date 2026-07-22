@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_21_100000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -89,6 +89,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_21_100000) do
     t.text "body"
     t.json "cc_addresses", null: false
     t.datetime "created_at", null: false
+    t.datetime "delivery_attempted_at"
+    t.string "delivery_job_id", collation: "utf8mb4_0900_bin"
     t.string "direction", null: false
     t.text "failure_reason"
     t.string "from_address"
@@ -105,8 +107,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_21_100000) do
     t.index ["account_id", "provider_message_id"], name: "index_invoice_messages_on_provider_message", unique: true
     t.index ["account_id", "provider_thread_id"], name: "index_invoice_messages_on_provider_thread"
     t.index ["account_id"], name: "index_invoice_messages_on_account_id"
+    t.index ["delivery_job_id"], name: "index_invoice_messages_on_delivery_job_id"
     t.index ["invoice_id", "direction", "status", "sent_at"], name: "index_invoice_messages_on_outbound_delivery"
     t.index ["invoice_id"], name: "index_invoice_messages_on_invoice_id"
+    t.index ["status", "delivery_attempted_at"], name: "index_invoice_messages_on_pending_delivery_age"
+  end
+
+  create_table "invoice_reminder_suppressions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.string "category", null: false
+    t.datetime "created_at", null: false
+    t.integer "day_offset", null: false
+    t.bigint "invoice_id", null: false
+    t.bigint "invoice_schedule_id"
+    t.string "reason", null: false
+    t.string "stage_key", null: false
+    t.datetime "suppressed_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_invoice_reminder_suppressions_on_account_id"
+    t.index ["invoice_id", "invoice_schedule_id"], name: "index_reminder_suppressions_on_invoice_and_schedule", unique: true
+    t.index ["invoice_id", "stage_key"], name: "index_reminder_suppressions_on_invoice_and_stage", unique: true
+    t.index ["invoice_id"], name: "index_invoice_reminder_suppressions_on_invoice_id"
+    t.index ["invoice_schedule_id"], name: "index_invoice_reminder_suppressions_on_invoice_schedule_id"
+    t.check_constraint "`day_offset` > 0", name: "invoice_reminder_suppressions_day_offset_positive"
   end
 
   create_table "invoice_reminders", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
@@ -256,6 +279,27 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_21_100000) do
     t.index ["provider", "status"], name: "index_outbound_email_connections_on_provider_and_status"
   end
 
+  create_table "payment_promises", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.bigint "active_invoice_id"
+    t.datetime "created_at", null: false
+    t.bigint "follow_up_message_id"
+    t.date "follow_up_on", null: false
+    t.bigint "invoice_id", null: false
+    t.date "promised_on", null: false
+    t.bigint "source_message_id", null: false
+    t.string "status", default: "active", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_payment_promises_on_account_id"
+    t.index ["active_invoice_id"], name: "index_payment_promises_on_active_invoice_id", unique: true
+    t.index ["follow_up_message_id"], name: "index_payment_promises_on_follow_up_message_id", unique: true
+    t.index ["invoice_id", "status", "follow_up_on"], name: "index_payment_promises_on_invoice_status_and_follow_up"
+    t.index ["invoice_id"], name: "index_payment_promises_on_invoice_id"
+    t.index ["source_message_id"], name: "index_payment_promises_on_source_message_id", unique: true
+    t.index ["status", "follow_up_on"], name: "index_payment_promises_on_due_follow_up"
+    t.check_constraint "((`status` = _utf8mb4'active') and (`active_invoice_id` is not null) and (`active_invoice_id` = `invoice_id`)) or ((`status` <> _utf8mb4'active') and (`active_invoice_id` is null))", name: "payment_promises_active_invoice_matches_status"
+  end
+
   create_table "sessions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "identity_id", null: false
@@ -306,6 +350,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_21_100000) do
   add_foreign_key "external_identities", "identities", on_delete: :cascade
   add_foreign_key "invoice_messages", "accounts"
   add_foreign_key "invoice_messages", "invoices"
+  add_foreign_key "invoice_reminder_suppressions", "accounts"
+  add_foreign_key "invoice_reminder_suppressions", "invoice_schedules", on_delete: :nullify
+  add_foreign_key "invoice_reminder_suppressions", "invoices"
   add_foreign_key "invoice_reminders", "accounts"
   add_foreign_key "invoice_reminders", "invoice_messages"
   add_foreign_key "invoice_reminders", "invoice_schedules", on_delete: :nullify
@@ -319,6 +366,11 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_21_100000) do
   add_foreign_key "magic_links", "identities"
   add_foreign_key "notification_subscriptions", "users", on_delete: :cascade
   add_foreign_key "outbound_email_connections", "accounts"
+  add_foreign_key "payment_promises", "accounts"
+  add_foreign_key "payment_promises", "invoice_messages", column: "follow_up_message_id"
+  add_foreign_key "payment_promises", "invoice_messages", column: "source_message_id"
+  add_foreign_key "payment_promises", "invoices"
+  add_foreign_key "payment_promises", "invoices", column: "active_invoice_id"
   add_foreign_key "sessions", "identities"
   add_foreign_key "stripe_installation_claims", "accounts", on_delete: :nullify
   add_foreign_key "users", "accounts"
