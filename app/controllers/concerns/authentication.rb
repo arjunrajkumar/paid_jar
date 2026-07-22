@@ -5,6 +5,7 @@ module Authentication
     before_action :require_authentication
     helper_method :authenticated?
     helper_method :email_address_pending_authentication
+    helper_method :platform_admin_impersonating?
 
     etag { Current.identity.id if authenticated? }
 
@@ -77,9 +78,14 @@ module Authentication
       end
     end
 
-    def set_current_session(session)
-      Current.session = session
-      cookies.signed.permanent[:session_token] = { value: session.signed_id, httponly: true, same_site: :lax }
+    def set_current_session(session_record)
+      Current.session = session_record
+      apply_platform_admin_impersonation
+      cookies.signed.permanent[:session_token] = {
+        value: session_record.signed_id,
+        httponly: true,
+        same_site: :lax
+      }
     end
 
     def terminate_session
@@ -89,6 +95,28 @@ module Authentication
 
     def session_token
       cookies[:session_token]
+    end
+
+    def platform_admin_impersonating?
+      Current.identity&.platform_admin? &&
+        Current.user&.id == session[:platform_admin_impersonated_user_id]
+    end
+
+    def apply_platform_admin_impersonation
+      user_id = session[:platform_admin_impersonated_user_id]
+      return if user_id.blank?
+
+      unless Current.identity&.platform_admin?
+        session.delete(:platform_admin_impersonated_user_id)
+        return
+      end
+
+      if impersonated_user = User.active.find_by(id: user_id)
+        Current.user = impersonated_user
+        Current.account = impersonated_user.account
+      else
+        session.delete(:platform_admin_impersonated_user_id)
+      end
     end
 
     def redirect_authenticated_user

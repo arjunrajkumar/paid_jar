@@ -191,6 +191,53 @@ module InvoiceSources
       assert fake_client.refresh_token_called
     end
 
+    test "reloads a locked source before deciding whether to rotate its refresh token" do
+      stale_source = InvoiceSource.find(invoice_sources(:xero).id)
+      stale_source.update!(
+        access_token: "stale-access-token",
+        refresh_token: "stale-refresh-token",
+        expires_at: 1.minute.ago
+      )
+      current_source = InvoiceSource.find(stale_source.id)
+      current_source.update!(
+        access_token: "access-token",
+        refresh_token: "refresh-token",
+        expires_at: 30.minutes.from_now
+      )
+      fake_client = FakeXeroClient.new
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      InvoiceSources::Xero.new(stale_source).sync_invoices!
+
+      assert_not fake_client.refresh_token_called
+      assert_equal "access-token", stale_source.reload.access_token
+      assert_equal "refresh-token", stale_source.refresh_token
+    end
+
+    test "marks the source errored when token rotation fails before invoice sync" do
+      source = invoice_sources(:xero)
+      source.update!(
+        access_token: "old-token",
+        refresh_token: "old-refresh-token",
+        expires_at: 1.minute.ago,
+        last_error: nil
+      )
+      error = InvoiceSources::Xero::OauthClient::Error.new("Refresh token was rejected")
+      fake_client = FakeXeroClient.new(refresh_token_error: error)
+
+      InvoiceSources::Xero::OauthClient.stubs(:new).returns(fake_client)
+
+      raised_error = assert_raises InvoiceSources::Xero::OauthClient::Error do
+        InvoiceSources::Xero.new(source).sync_invoices!
+      end
+
+      assert_same error, raised_error
+      assert_predicate source.reload, :error?
+      assert_equal "Refresh token was rejected", source.last_error
+      assert_equal "old-refresh-token", source.refresh_token
+    end
+
     test "disconnect removes the remote connection before clearing local tokens" do
       source = invoice_sources(:xero)
       expires_at = source.expires_at

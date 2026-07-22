@@ -24,8 +24,25 @@
         <span>or continue with email</span>
       </div>
 
+      <% if @signup.errors.any? %>
+        <div class="auth-errors" role="alert" id="signup-errors">
+          <p>We couldn't start your signup:</p>
+          <ul>
+            <% @signup.errors.full_messages.each do |message| %>
+              <li><%= message %></li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
       <%= form_with model: @signup, url: signup_path, scope: "signup", class: "auth-form", data: { turbo: false } do |form| %>
-        <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username", placeholder: "you@company.com", class: "auth-input" %>
+        <%= form.email_field :email_address,
+              required: true,
+              autofocus: true,
+              autocomplete: "username",
+              placeholder: "you@company.com",
+              class: "auth-input",
+              aria: { invalid: @signup.errors[:email_address].any?, describedby: (@signup.errors.any? ? "signup-errors" : nil) } %>
 
         <button type="submit" class="auth-button">
           <span>Let's go</span>

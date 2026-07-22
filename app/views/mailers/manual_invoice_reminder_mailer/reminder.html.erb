@@ -1,0 +1,19 @@
+<h1>Payment reminder</h1>
+
+<p>Hello <%= @customer.name %>,</p>
+
+<p>
+  This is a reminder that invoice <strong><%= @invoice_reference %></strong> has an outstanding balance.
+  Please arrange payment or reply to the sender if payment has already been made.
+</p>
+
+<ul>
+  <li><strong>Due date:</strong> <%= @due_date %></li>
+  <li><strong>Outstanding amount:</strong> <%= @amount_due %></li>
+</ul>
+
+<% if @online_invoice_url.present? %>
+  <p><%= link_to "View invoice", @online_invoice_url %></p>
+<% end %>
+
+<p>Thank you,<br><%= @account.name %></p>

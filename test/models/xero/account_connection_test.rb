@@ -190,6 +190,43 @@ class Xero::AccountConnectionTest < ActiveSupport::TestCase
     end
   end
 
+  test "allows an allowlisted platform administrator with an exact active impersonated user" do
+    target_account, target_member = account_with_member(
+      owner_email: "platform-target-owner@example.com",
+      member_email: "platform-target-member@example.com"
+    )
+    PlatformAdminAccess.stubs(:allowed?).with(@identity).returns(true)
+
+    result = Xero::AccountConnection.new(
+      account: target_account,
+      identity: @identity,
+      authorization: @authorization,
+      platform_admin_impersonated_user: target_member
+    ).complete!
+
+    assert_equal target_account, result.invoice_source.account
+    assert_equal @identity, result.external_identity.identity
+  end
+
+  test "an ordinary identity cannot borrow another user's account access" do
+    target_account, target_member = account_with_member(
+      owner_email: "ordinary-target-owner@example.com",
+      member_email: "ordinary-target-member@example.com"
+    )
+    PlatformAdminAccess.stubs(:allowed?).with(@identity).returns(false)
+
+    assert_no_difference -> { target_account.invoice_sources.xero.count } do
+      assert_raises Xero::AccountConnection::ConnectionError do
+        Xero::AccountConnection.new(
+          account: target_account,
+          identity: @identity,
+          authorization: @authorization,
+          platform_admin_impersonated_user: target_member
+        ).complete!
+      end
+    end
+  end
+
   test "rolls back identity linking when the source cannot be connected" do
     InvoiceSources::Xero.any_instance.stubs(:connect_from_authorization!).raises("connection failed")
 
@@ -227,6 +264,23 @@ class Xero::AccountConnectionTest < ActiveSupport::TestCase
         connections: [ organization_connection ],
         authentication_event_id: "auth-event-account-connection"
       )
+    end
+
+    def account_with_member(owner_email:, member_email:)
+      account = Account.create_with_owner(
+        account: { name: "Impersonation target" },
+        owner: {
+          name: "Target Owner",
+          identity: Identity.create!(email_address: owner_email)
+        }
+      )
+      member = account.users.create!(
+        name: "Target Member",
+        role: :member,
+        identity: Identity.create!(email_address: member_email)
+      )
+
+      [ account, member ]
     end
 
     def organization_connection(

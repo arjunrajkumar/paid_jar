@@ -1,0 +1,10 @@
+<aside class="app-flash app-flash--warning" role="status">
+  <span>
+    Platform admin: acting as <strong><%= Current.user.name %></strong>
+    in <strong><%= Current.account.name %></strong>.
+  </span>
+  <%= button_to "Stop acting as user",
+    madmin_impersonation_path(script_name: nil),
+    method: :delete,
+    class: "app-inline-button" %>
+</aside>

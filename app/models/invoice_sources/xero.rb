@@ -33,13 +33,17 @@ module InvoiceSources
     end
 
     def sync_invoices!
-      ensure_access_token!
-      InvoiceSync.new(source, client: oauth_client).sync!
+      with_provider_error_state do
+        ensure_access_token!
+        InvoiceSync.new(source, client: oauth_client).sync!
+      end
     end
 
     def sync_invoice!(external_id:)
-      ensure_access_token!
-      InvoiceSync.new(source, client: oauth_client).sync_invoice_by_id!(external_id)
+      with_provider_error_state do
+        ensure_access_token!
+        InvoiceSync.new(source, client: oauth_client).sync_invoice_by_id!(external_id)
+      end
     end
 
     def connected?
@@ -53,17 +57,10 @@ module InvoiceSources
     end
 
     def refresh_access_token!
-      token_set = oauth_client.refresh_token(refresh_token: source.refresh_token)
-
-      source.update!(
-        access_token: token_set.fetch("access_token"),
-        refresh_token: token_set.fetch("refresh_token"),
-        expires_at: Time.current + token_set.fetch("expires_in").to_i.seconds,
-        scopes: token_set["scope"].present? ? token_set["scope"].to_s.split : source.scopes,
-        raw_token_data: InvoiceSource.sanitized_token_data(token_set),
-        status: :active,
-        last_error: nil
-      )
+      source.with_lock do
+        source.reload
+        refresh_access_token_without_lock!
+      end
     end
 
     def disconnect!
@@ -82,6 +79,27 @@ module InvoiceSources
     end
 
     private
+      def refresh_access_token_without_lock!
+        token_set = oauth_client.refresh_token(refresh_token: source.refresh_token)
+
+        source.update!(
+          access_token: token_set.fetch("access_token"),
+          refresh_token: token_set.fetch("refresh_token"),
+          expires_at: Time.current + token_set.fetch("expires_in").to_i.seconds,
+          scopes: token_set["scope"].present? ? token_set["scope"].to_s.split : source.scopes,
+          raw_token_data: InvoiceSource.sanitized_token_data(token_set),
+          status: :active,
+          last_error: nil
+        )
+      end
+
+      def with_provider_error_state
+        yield
+      rescue OauthClient::Error => error
+        source.update!(status: :error, last_error: error.message)
+        raise
+      end
+
       def connection_id!
         connection_id = saved_connection_id || legacy_connection_id
         return connection_id if connection_id.present?
@@ -117,7 +135,10 @@ module InvoiceSources
       end
 
       def ensure_access_token!
-        refresh_access_token! if source.expired?
+        source.with_lock do
+          source.reload
+          refresh_access_token_without_lock! if source.expired?
+        end
       end
 
       def oauth_client

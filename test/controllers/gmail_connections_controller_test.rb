@@ -86,6 +86,37 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Test email sent.", flash[:notice]
   end
 
+  test "members cannot mutate the Gmail connection" do
+    account = sign_up_and_complete(email_address: "member-gmail@example.com")
+    connection = connect_gmail(account)
+    account.users.owner.sole.update!(role: :member)
+    OutboundEmailConnection::Gmail::OauthClient.expects(:new).never
+    OutboundEmailConnection::Delivery.expects(:new).never
+
+    get new_gmail_connection_url(script_name: account.slug)
+    assert_redirected_to root_url(script_name: nil)
+
+    post test_gmail_connection_url(script_name: account.slug)
+    assert_redirected_to root_url(script_name: nil)
+
+    delete gmail_connection_url(script_name: account.slug)
+    assert_redirected_to root_url(script_name: nil)
+    assert_predicate connection.reload, :active?
+  end
+
+  test "callback is rejected when the initiating administrator was demoted" do
+    account = sign_up_and_complete(email_address: "demoted-gmail@example.com")
+    client = FakeGmailOauthClient.new
+    OutboundEmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+    get new_gmail_connection_url(script_name: account.slug)
+    account.users.owner.sole.update!(role: :member)
+
+    get gmail_callback_url(script_name: account.slug), params: { code: "auth-code", state: client.state }
+
+    assert_redirected_to root_url(script_name: nil)
+    assert_nil account.reload.outbound_email_connection
+  end
+
   private
     def sign_up_and_complete(email_address: "owner-gmail@example.com")
       post signup_url, params: { signup: { email_address: } }

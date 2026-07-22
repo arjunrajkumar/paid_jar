@@ -7,10 +7,11 @@ module Xero
 
     Result = Data.define(:external_identity, :invoice_source)
 
-    def initialize(account:, identity:, authorization:)
+    def initialize(account:, identity:, authorization:, platform_admin_impersonated_user: nil)
       @account = account
       @identity = identity
       @authorization = authorization
+      @platform_admin_impersonated_user = platform_admin_impersonated_user
     end
 
     def complete!
@@ -35,12 +36,19 @@ module Xero
     end
 
     private
-      attr_reader :account, :identity, :authorization
+      attr_reader :account, :identity, :authorization, :platform_admin_impersonated_user
 
       def validate_active_membership!
         return if identity.users.active.exists?(account_id: account.id)
+        return if exact_platform_admin_impersonation?
 
         raise ConnectionError, "You no longer have access to that PaymentReminder account."
+      end
+
+      def exact_platform_admin_impersonation?
+        identity.platform_admin? &&
+          platform_admin_impersonated_user&.active? &&
+          platform_admin_impersonated_user.account_id == account.id
       end
 
       def sole_current_organization_connection!

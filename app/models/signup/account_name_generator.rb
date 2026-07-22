@@ -40,7 +40,7 @@ class Signup::AccountNameGenerator
     end
 
     def nth_account_name_regex
-      @nth_account_name_regex ||= /\A#{prefix}\s+(1st|2nd|3rd|\d+th)\s+#{SUFFIX}/i
+      @nth_account_name_regex ||= /\A#{prefix}\s+(\d+)(?:st|nd|rd|th)\s+#{SUFFIX}\z/i
     end
 
     def prefix

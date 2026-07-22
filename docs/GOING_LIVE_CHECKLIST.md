@@ -1,6 +1,6 @@
 # PaymentReminder external going-live checklist
 
-Last reviewed: 20 July 2026
+Last reviewed: 22 July 2026
 
 This checklist covers work that must be completed outside the PaymentReminder repository before the hosted service is opened to customers. It focuses on provider dashboards, DNS, public policies, credentials, webhooks, backups, and monitoring.
 
@@ -328,6 +328,12 @@ See [Stripe App distribution options](https://docs.stripe.com/stripe-apps/distri
 ### Production accounts and access
 
 - [ ] Enable MFA on Cloudflare, AWS, Google Cloud, Xero Developer, Stripe, GitHub, Docker Hub, and the hosting provider.
+- [ ] Add only the intended operator email address(es) to
+  `platform_admin.email_addresses` in encrypted Rails credentials (or
+  `PLATFORM_ADMIN_EMAIL_ADDRESSES` in the runtime environment).
+- [ ] Sign in with an allowlisted identity and confirm `/madmin` opens without an account prefix.
+- [ ] Sign in as an ordinary account owner and confirm `/madmin` is denied.
+- [ ] Perform a reversible operator action and confirm it appears in the platform-admin event ledger.
 - [ ] Store recovery codes in the password manager.
 - [ ] Remove unused owners, API keys, OAuth clients, webhook endpoints, registry tokens, and SSH keys.
 - [ ] Ensure billing and security notifications for every provider go to a monitored address.
@@ -357,7 +363,9 @@ sentry:
 - [ ] Deploy the application and verify a test exception reaches the correct Sentry project and `production` environment.
 - [ ] Confirm the `schedule-invoice-reminders` monitor appears after the hourly reminder scheduler first runs.
 - [ ] Confirm the `refresh-invoice-sources` monitor appears after the six-hour invoice-source scheduler first runs.
-- [ ] Configure Sentry notifications for missed, timed-out, and error check-ins on both monitors.
+- [ ] Confirm the `schedule-payment-promise-follow-ups` monitor appears after the hourly payment-promise scheduler first runs.
+- [ ] Confirm the `reconcile-pending-invoice-messages` monitor appears after the hourly pending-delivery reconciler first runs.
+- [ ] Configure Sentry notifications for missed, timed-out, and error check-ins on all four monitors.
 - [ ] Configure issue alerts for new and regressed production errors.
 - [ ] Configure a threshold alert for repeated Gmail authentication failures (`provider:gmail`, `operation:invoice_reminder_delivery`).
 - [ ] Configure alerts for repeated Xero OAuth and Stripe App authentication/API retry failures.
@@ -381,6 +389,8 @@ Complete this in production before opening signup broadly:
 - [ ] A Xero demo organization can connect, import invoices, and deliver a verified webhook update.
 - [ ] A live Stripe account can install the App with only `invoice_read` and `event_read`, import invoices, deliver a verified App webhook update, and uninstall cleanly from Stripe.
 - [ ] The production job worker processes queued mail and scheduled refresh jobs.
+- [ ] The platform administrator can see the test account, user, customer, invoice, source, and
+  delivery records globally, while an ordinary account owner cannot enter `/madmin`.
 - [ ] External monitoring and provider alerts reach the intended operator.
 - [ ] A database restore and Rails master-key recovery have been rehearsed.
 - [ ] Record the date, operator, and evidence for each completed provider test.

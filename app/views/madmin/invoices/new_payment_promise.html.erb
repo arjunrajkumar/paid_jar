@@ -1,0 +1,26 @@
+<%= content_for :title, "Record payment promise" %>
+
+<header class="header">
+  <h1>
+    <%= link_to InvoiceResource.display_name(@record), InvoiceResource.show_path(@record) %>
+    / Record payment promise
+  </h1>
+</header>
+
+<%= form_with url: record_payment_promise_madmin_invoice_path(@record),
+  scope: :payment_promise,
+  method: :post do |form| %>
+  <div class="field-unit">
+    <%= form.label :promised_on, "Customer promised to pay on" %>
+    <%= form.date_field :promised_on, value: @promised_on, required: true %>
+  </div>
+
+  <div class="field-unit">
+    <%= form.label :note, "Operator note" %>
+    <%= form.text_area :note, rows: 6 %>
+  </div>
+
+  <div class="form-actions">
+    <%= form.submit "Record payment promise", class: "btn btn-primary" %>
+  </div>
+<% end %>

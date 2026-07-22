@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_22_140000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -19,7 +19,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
   create_table "accounts", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.boolean "automatic_invoice_reminders_enabled", default: false, null: false
     t.datetime "created_at", null: false
-    t.bigint "external_account_id"
+    t.bigint "external_account_id", null: false
     t.string "invoice_reminder_from_email"
     t.string "invoice_reminder_from_name"
     t.string "name", null: false
@@ -40,10 +40,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
   create_table "customer_segments", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.datetime "created_at", null: false
-    t.integer "minimum_payment_history"
     t.integer "on_time_rate"
     t.string "payer_segment", null: false
-    t.integer "typical_delay_days"
     t.datetime "updated_at", null: false
     t.index ["account_id", "payer_segment"], name: "index_customer_segments_on_account_id_and_payer_segment", unique: true
     t.index ["account_id"], name: "index_customer_segments_on_account_id"
@@ -215,7 +213,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
     t.string "contact_name"
     t.datetime "created_at", null: false
     t.string "currency"
-    t.bigint "customer_id"
+    t.bigint "customer_id", null: false
     t.date "due_on"
     t.string "external_id", null: false
     t.bigint "invoice_source_id", null: false
@@ -300,6 +298,22 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
     t.check_constraint "((`status` = _utf8mb4'active') and (`active_invoice_id` is not null) and (`active_invoice_id` = `invoice_id`)) or ((`status` <> _utf8mb4'active') and (`active_invoice_id` is null))", name: "payment_promises_active_invoice_matches_status"
   end
 
+  create_table "platform_admin_events", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id"
+    t.string "action", null: false
+    t.string "actor_email_address", null: false
+    t.bigint "actor_identity_id"
+    t.datetime "created_at", null: false
+    t.json "metadata", null: false
+    t.bigint "target_id"
+    t.string "target_type"
+    t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "index_platform_admin_events_on_account_id"
+    t.index ["action", "created_at"], name: "index_platform_admin_events_on_action_and_created_at"
+    t.index ["actor_identity_id"], name: "index_platform_admin_events_on_actor_identity_id"
+    t.index ["target_type", "target_id"], name: "index_platform_admin_events_on_target_type_and_target_id"
+  end
+
   create_table "sessions", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.datetime "created_at", null: false
     t.bigint "identity_id", null: false
@@ -371,6 +385,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_120000) do
   add_foreign_key "payment_promises", "invoice_messages", column: "source_message_id"
   add_foreign_key "payment_promises", "invoices"
   add_foreign_key "payment_promises", "invoices", column: "active_invoice_id"
+  add_foreign_key "platform_admin_events", "accounts", on_delete: :nullify
+  add_foreign_key "platform_admin_events", "identities", column: "actor_identity_id", on_delete: :nullify
   add_foreign_key "sessions", "identities"
   add_foreign_key "stripe_installation_claims", "accounts", on_delete: :nullify
   add_foreign_key "users", "accounts"

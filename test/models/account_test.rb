@@ -134,6 +134,14 @@ class AccountTest < ActiveSupport::TestCase
     assert_equal sequence_value_before, sequence.reload.value
   end
 
+  test "requires an external account id after creation" do
+    account = Account.create!(name: "Account Missing External ID")
+    account.external_account_id = nil
+
+    assert_not account.valid?
+    assert_includes account.errors[:external_account_id], "can't be blank"
+  end
+
   test "requires a name" do
     account = Account.new
 

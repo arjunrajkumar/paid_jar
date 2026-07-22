@@ -1,5 +1,7 @@
 module InvoiceSources
   class RefreshesController < ApplicationController
+    require_account_admin
+
     before_action :set_invoice_source
 
     def create

@@ -4,6 +4,10 @@ class Identity < ApplicationRecord
   has_many :external_identities, dependent: :destroy
   has_many :users, dependent: :nullify
   has_many :accounts, through: :users
+  has_many :platform_admin_events,
+    foreign_key: :actor_identity_id,
+    dependent: :nullify,
+    inverse_of: :actor_identity
 
   before_destroy :deactivate_users, prepend: true
 
@@ -16,6 +20,10 @@ class Identity < ApplicationRecord
     magic_links.create!(attributes).tap do |magic_link|
       MagicLinkMailer.sign_in_instructions(magic_link).deliver_later
     end
+  end
+
+  def platform_admin?
+    PlatformAdminAccess.allowed?(self)
   end
 
   private

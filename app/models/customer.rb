@@ -16,6 +16,7 @@ class Customer < ApplicationRecord
 
   validates :external_id, :name, presence: true
   validates :external_id, uniqueness: { scope: :invoice_source_id }
+  validate :invoice_source_matches_account
   validate :customer_segment_matches_account
 
   delegate :payer_segment, to: :customer_segment
@@ -39,6 +40,12 @@ class Customer < ApplicationRecord
       return if account.blank? || customer_segment.blank? || customer_segment.account == account
 
       errors.add(:customer_segment, "must belong to the customer account")
+    end
+
+    def invoice_source_matches_account
+      return if account.blank? || invoice_source.blank? || invoice_source.account == account
+
+      errors.add(:invoice_source, "must belong to the customer account")
     end
 
     def normalize_reminder_email_address(email_address)

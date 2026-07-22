@@ -1,6 +1,7 @@
 module StripeApp
   class OnboardingsController < ApplicationController
     SESSION_KEY = :stripe_installation_claim_token
+    AccountSelectionError = Class.new(StandardError)
 
     disallow_account_scope
     allow_unauthenticated_access only: :show
@@ -14,19 +15,21 @@ module StripeApp
       return render_invalid_claim unless @claim
 
       session[:return_to_after_authenticating] = stripe_app_onboarding_url unless authenticated?
-      @administered_account = administered_account
+      @administered_accounts = administered_accounts
     end
 
     def update
       claim = active_claim || raise(InvoiceSources::Stripe::InstallationClaim::Error)
-      account = administered_account
-      raise InvoiceSources::Stripe::InstallationClaim::Error unless account
+      account = selected_administered_account
       source = claim.consume!(account:)
       session.delete(SESSION_KEY)
       queue_initial_refresh(source)
 
       redirect_to account_settings_url(script_name: account.slug),
         notice: "Stripe connected. Your invoices are syncing now."
+    rescue AccountSelectionError
+      redirect_to stripe_app_onboarding_path,
+        alert: "Choose a PaymentReminder account you administer."
     rescue InvoiceSources::Stripe::InstallationClaim::Error,
       InvoiceSources::Stripe::ConnectionError,
       InvoiceSources::Stripe::ApiClient::Error => error
@@ -54,10 +57,27 @@ module StripeApp
         render :invalid, status: :unprocessable_entity
       end
 
-      def administered_account
-        return unless Current.identity
+      def administered_accounts
+        return Account.none unless Current.identity
 
-        Current.identity.users.admin.includes(:account).first&.account
+        accounts = Account.where(id: Current.identity.users.admin.select(:account_id))
+        accounts = accounts.or(Account.where(id: exact_impersonated_account.id)) if exact_impersonated_account
+        accounts.order(:name, :id)
+      end
+
+      def selected_administered_account
+        account = administered_accounts.find_by(id: params[:account_id])
+        return account if account
+
+        raise AccountSelectionError
+      end
+
+      def exact_impersonated_account
+        return unless platform_admin_impersonating?
+        return unless Current.user&.active?
+        return unless Current.account&.id == Current.user.account_id
+
+        Current.account
       end
 
       def queue_initial_refresh(source)

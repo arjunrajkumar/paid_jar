@@ -56,9 +56,9 @@
       account. It does not let PaymentReminder read, modify, or delete existing messages in your
       mailbox. When a reminder is due, PaymentReminder generates the recipient, sender, subject,
       and message body from your settings and invoice data and transmits that message to Google for
-      delivery. We store a delivery record such as the invoice, reminder stage, date, status,
-      provider message identifier, and any delivery error; we do not store a separate copy of the
-      generated message body in the reminder history.
+      delivery. We store the generated message content in the delivery ledger, including the sender,
+      recipients, subject, and message body, alongside the invoice, reminder stage, date, status,
+      provider message identifier, and any delivery error.
     </p>
 
     <h3>Technical information and cookies</h3>

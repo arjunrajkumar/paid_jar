@@ -1,4 +1,5 @@
 Rails.application.routes.draw do
+  draw :madmin
   root "landing#index"
   get "privacy", to: "pages#privacy", as: :privacy
   get "terms", to: "pages#terms", as: :terms

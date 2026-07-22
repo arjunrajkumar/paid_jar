@@ -39,6 +39,7 @@ class InvoiceSources::Webhooks::EventTest < ActiveSupport::TestCase
 
   test "process stores failure and reraises" do
     event = InvoiceSources::Webhooks::Event.create!(event_attributes)
+    source = event.invoice_source
 
     InvoiceSource.any_instance.expects(:sync_invoice!).raises(InvoiceSources::Xero::OauthClient::Error, "provider unavailable")
 
@@ -48,6 +49,8 @@ class InvoiceSources::Webhooks::EventTest < ActiveSupport::TestCase
 
     assert_predicate event.reload, :failed?
     assert_equal "provider unavailable", event.last_error
+    assert_predicate source.reload, :error?
+    assert_equal "provider unavailable", source.last_error
   end
 
   private

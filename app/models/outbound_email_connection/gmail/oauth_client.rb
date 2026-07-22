@@ -4,6 +4,9 @@ require "openssl"
 require "uri"
 
 class OutboundEmailConnection::Gmail::OauthClient
+  OPEN_TIMEOUT = 5
+  READ_TIMEOUT = 10
+
   attr_reader :config
 
   def initialize(config: OutboundEmailConnection::Gmail::Configuration.new)
@@ -53,7 +56,13 @@ class OutboundEmailConnection::Gmail::OauthClient
     end
 
     def request_json(uri, request)
-      response = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https") do |http|
+      response = Net::HTTP.start(
+        uri.hostname,
+        uri.port,
+        use_ssl: uri.scheme == "https",
+        open_timeout: OPEN_TIMEOUT,
+        read_timeout: READ_TIMEOUT
+      ) do |http|
         http.request(request)
       end
       payload = JSON.parse(response.body.presence || "{}")

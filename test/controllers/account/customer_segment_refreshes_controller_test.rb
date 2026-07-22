@@ -17,6 +17,17 @@ class Account::CustomerSegmentRefreshesControllerTest < ActionDispatch::Integrat
     assert_equal "Debtor ratings refreshed.", flash[:notice]
   end
 
+  test "create requires an account administrator" do
+    account = sign_up_and_complete(email_address: "member-segment-refresh@example.com")
+    account.users.owner.sole.update!(role: :member)
+    Account.any_instance.expects(:refresh_customer_segments!).never
+
+    post account_customer_segment_refresh_url(script_name: account.slug)
+
+    assert_redirected_to root_url(script_name: nil)
+    assert_equal "You need to be an account owner or administrator to do that.", flash[:alert]
+  end
+
   private
     def sign_up_and_complete(email_address: "owner-segment-refresh@example.com", full_name: "Owner Person")
       post signup_url, params: { signup: { email_address: email_address } }

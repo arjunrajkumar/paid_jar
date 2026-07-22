@@ -53,6 +53,9 @@ class InvoiceSources::Webhooks::Event < ApplicationRecord
       end
     end
   rescue => error
+    if error.is_a?(InvoiceSources::ProviderError)
+      invoice_source.update!(status: :error, last_error: error.message)
+    end
     update!(status: :failed, last_error: error.message)
     raise
   end

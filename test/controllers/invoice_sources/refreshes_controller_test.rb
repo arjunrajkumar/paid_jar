@@ -43,6 +43,19 @@ class InvoiceSources::RefreshesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Connect an invoice source first.", flash[:alert]
   end
 
+  test "create requires an account administrator" do
+    account = sign_up_and_complete(email_address: "member-source-refresh@example.com")
+    source = create_xero_source(account)
+    account.users.owner.sole.update!(role: :member)
+
+    assert_no_enqueued_jobs do
+      post invoice_source_refresh_url(source, script_name: account.slug)
+    end
+
+    assert_redirected_to root_url(script_name: nil)
+    assert_equal "You need to be an account owner or administrator to do that.", flash[:alert]
+  end
+
   private
     def create_xero_source(account)
       account.invoice_sources.create!(

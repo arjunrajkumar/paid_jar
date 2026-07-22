@@ -252,6 +252,20 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 50, other_account.customer_segment(:bad_debtor).on_time_rate
   end
 
+  test "update requires an account administrator" do
+    account = sign_up_and_complete(email_address: "member-settings@example.com")
+    account.users.owner.sole.update!(role: :member)
+    original_rate = account.customer_segment(:good_debtor).on_time_rate
+
+    patch account_settings_url(script_name: account.slug), params: {
+      account: { customer_segments_attributes: debtor_rating_attributes(account) }
+    }
+
+    assert_redirected_to root_url(script_name: nil)
+    assert_equal "You need to be an account owner or administrator to do that.", flash[:alert]
+    assert_equal original_rate, account.customer_segment(:good_debtor).reload.on_time_rate
+  end
+
   test "update enables automatic invoice reminders for the current account" do
     account = sign_up_and_complete(email_address: "owner-reminder-settings@example.com")
     connect_gmail(account, email: "billing@example.com")
@@ -331,6 +345,31 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
 
     assert_not_predicate current_user.notification_subscriptions.find_by!(event: :invoice_reminder).reload, :email?
     assert_not_predicate current_user.notification_subscriptions.find_by!(event: :invoice_reminder_stopped).reload, :email?
+  end
+
+  test "notification preferences remain personal and use the exact scoped membership" do
+    first_account = sign_up_and_complete(email_address: "multi-notifications@example.com")
+    identity = first_account.users.owner.sole.identity
+    second_account = Account.create_with_owner(
+      account: { name: "Second Notifications Account" },
+      owner: { name: "Owner Person", identity: }
+    )
+    first_user = first_account.users.owner.sole
+    second_user = second_account.users.owner.sole
+
+    patch account_notification_preferences_url(script_name: second_account.slug), params: {
+      notifications: { invoice_reminder: "1" }
+    }
+
+    assert_redirected_to account_settings_url(script_name: second_account.slug)
+    assert_predicate second_user.notification_subscriptions.find_by!(event: :invoice_reminder), :email?
+    assert_nil first_user.notification_subscriptions.find_by(event: :invoice_reminder)
+
+    second_user.update!(role: :member)
+    patch account_notification_preferences_url(script_name: second_account.slug)
+
+    assert_redirected_to account_settings_url(script_name: second_account.slug)
+    assert_not_predicate second_user.notification_subscriptions.find_by!(event: :invoice_reminder).reload, :email?
   end
 
   test "update renders invalid debtor rating rules" do

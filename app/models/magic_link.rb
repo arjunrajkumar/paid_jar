@@ -15,12 +15,14 @@ class MagicLink < ApplicationRecord
 
   class << self
     def consume(code)
-      active.find_by(code: Code.sanitize(code))&.consume
+      transaction do
+        active.lock.find_by(code: Code.sanitize(code))&.consume
+      end
     end
   end
 
   def consume
-    destroy
+    destroy!
     self
   end
 

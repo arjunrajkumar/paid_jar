@@ -1,0 +1,16 @@
+Payment reminder
+
+Hello <%= @customer.name %>,
+
+This is a reminder that invoice <%= @invoice_reference %> has an outstanding balance.
+Please arrange payment or reply to the sender if payment has already been made.
+
+Due date: <%= @due_date %>
+Outstanding amount: <%= @amount_due %>
+<% if @online_invoice_url.present? %>
+
+View invoice: <%= @online_invoice_url %>
+<% end %>
+
+Thank you,
+<%= @account.name %>

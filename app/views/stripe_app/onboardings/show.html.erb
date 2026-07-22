@@ -12,8 +12,16 @@
         Stripe verified this account. Sign in or create a PaymentReminder account to finish connecting it.
       </p>
 
-      <% if authenticated? && @administered_account %>
+      <% if authenticated? && @administered_accounts.any? %>
         <%= form_with url: stripe_app_onboarding_path, method: :patch, class: "auth-form" do |form| %>
+          <%= form.label :account_id, "PaymentReminder account" %>
+          <%= form.collection_select :account_id,
+            @administered_accounts,
+            :id,
+            :name,
+            {},
+            required: true,
+            class: "auth-input" %>
           <%= form.submit "Finish connecting Stripe", class: "auth-button" %>
         <% end %>
       <% elsif authenticated? %>

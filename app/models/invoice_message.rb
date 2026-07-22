@@ -8,6 +8,7 @@ class InvoiceMessage < ApplicationRecord
   KINDS = {
     customer_reply: "customer_reply",
     scheduled_reminder: "scheduled_reminder",
+    manual_reminder: "manual_reminder",
     due_date_answer: "due_date_answer",
     payment_status_answer: "payment_status_answer",
     invoice_resend: "invoice_resend",

@@ -1,5 +1,7 @@
 module InvoiceSources
   class StripeConnectionsController < ApplicationController
+    require_account_admin only: :new
+
     before_action :ensure_stripe_configured
 
     def new
@@ -55,7 +57,21 @@ module InvoiceSources
         )
         raise ActiveRecord::RecordNotFound if account_id.blank?
 
-        Current.identity.users.admin.find_by!(account_id:).account
+        administered_install_account(account_id) || raise(ActiveRecord::RecordNotFound)
+      end
+
+      def administered_install_account(account_id)
+        Current.identity.users.admin.find_by(account_id:)&.account ||
+          exact_impersonated_account(account_id)
+      end
+
+      def exact_impersonated_account(account_id)
+        return unless platform_admin_impersonating?
+        return unless Current.user&.active?
+        return unless Current.user.account_id == account_id.to_i
+        return unless Current.account&.id == Current.user.account_id
+
+        Current.account
       end
 
       def verify_install_signature!

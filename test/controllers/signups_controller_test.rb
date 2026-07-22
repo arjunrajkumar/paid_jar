@@ -32,6 +32,23 @@ class SignupsControllerTest < ActionDispatch::IntegrationTest
     assert JSON.parse(response.body).fetch("pending_authentication_token").present?
   end
 
+  test "create renders validation errors for invalid html signup" do
+    assert_no_difference -> { Identity.count } do
+      post signup_url, params: { signup: { email_address: "not-an-email" } }
+    end
+
+    assert_response :unprocessable_entity
+    assert_select "[role='alert']", text: /Email address is invalid/
+    assert_select "input[name='signup[email_address]'][value='not-an-email']"
+  end
+
+  test "create returns validation errors for invalid json signup" do
+    post signup_url(format: :json), params: { signup: { email_address: "not-an-email" } }
+
+    assert_response :unprocessable_entity
+    assert_includes JSON.parse(response.body).fetch("errors"), "Email address is invalid"
+  end
+
   test "completes signup after verification code" do
     post signup_url, params: { signup: { email_address: "owner@example.com" } }
 

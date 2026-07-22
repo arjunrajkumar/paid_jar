@@ -48,8 +48,19 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
 
     get new_xero_connection_url(script_name: inaccessible_account.slug)
 
-    assert_redirected_to root_url
+    assert_redirected_to root_url(script_name: nil)
     assert_equal "Choose a PaymentReminder account you can access.", flash[:alert]
+  end
+
+  test "connect requires an account administrator" do
+    account = sign_up_and_complete(email_address: "member-xero-connect@example.com")
+    account.users.owner.sole.update!(role: :member)
+    InvoiceSources::Xero::OauthClient.expects(:new).never
+
+    get new_xero_connection_url(script_name: account.slug)
+
+    assert_redirected_to root_url(script_name: nil)
+    assert_equal "You need to be an account owner or administrator to do that.", flash[:alert]
   end
 
   test "connect redirects to scoped Settings when credentials are missing" do
@@ -130,6 +141,44 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to account_settings_url(script_name: origin_account.slug)
   end
 
+  test "platform administrator impersonating a member can connect that exact account" do
+    platform_account = sign_up_and_complete(email_address: "platform-xero@example.com")
+    target_account = add_account(
+      identity: Identity.create!(email_address: "target-xero-owner@example.com"),
+      name: "Platform Xero Target"
+    )
+    target_member = target_account.users.create!(
+      name: "Target Member",
+      role: :member,
+      identity: Identity.create!(email_address: "target-xero-member@example.com")
+    )
+    PlatformAdminAccess.stubs(:allowed?).returns(true)
+    post impersonate_madmin_user_url(target_member, script_name: nil)
+    fake_client = FakeXeroClient.new
+
+    with_xero_client(fake_client) do
+      get new_xero_connection_url(script_name: target_account.slug)
+      stub_completed_authorization(
+        authorization_result(
+          tenant_id: "tenant-platform-xero",
+          tenant_name: "Platform Xero Ltd",
+          connection_id: "connection-platform-xero"
+        ),
+        nonce: fake_client.authorization_options.fetch(:nonce)
+      )
+
+      get xero_callback_url(script_name: nil), params: {
+        code: "auth-code",
+        state: fake_client.state
+      }
+    end
+
+    assert_empty platform_account.invoice_sources.xero
+    assert_redirected_to account_settings_url(script_name: target_account.slug)
+    assert_nil flash[:alert]
+    assert_equal "tenant-platform-xero", target_account.invoice_sources.xero.sole.external_account_id
+  end
+
   test "an account-scoped callback for another account is rejected before token exchange" do
     first_account = sign_up_and_complete(email_address: "scoped-callback-owner@example.com")
     identity = first_account.users.owner.sole.identity
@@ -173,7 +222,26 @@ class XeroConnectionsControllerTest < ActionDispatch::IntegrationTest
     assert_empty first_account.invoice_sources.xero
     assert_empty origin_account.invoice_sources.xero
     assert_empty identity.external_identities.xero
-    assert_redirected_to root_url
+    assert_redirected_to root_url(script_name: nil)
+  end
+
+  test "callback rejects an administrator demoted after authorization started" do
+    account = sign_up_and_complete(email_address: "demoted-xero-owner@example.com")
+    fake_client = FakeXeroClient.new
+
+    with_xero_client(fake_client) do
+      get new_xero_connection_url(script_name: account.slug)
+      account.users.owner.sole.update!(role: :member)
+      Xero::Authorization.expects(:new).never
+
+      get xero_callback_url, params: {
+        code: "auth-code",
+        state: fake_client.state
+      }
+    end
+
+    assert_empty account.invoice_sources.xero
+    assert_redirected_to root_url(script_name: account.slug)
   end
 
   test "invalid state consumes the account-bound attempt before token exchange" do

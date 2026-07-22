@@ -51,10 +51,10 @@ module StripeApp
 
       assert_response :success
       assert_select "form[action=?]", stripe_app_onboarding_path
-      assert_select "input[name=account_id]", count: 0
+      assert_select "select[name=account_id] option[value=?]", account.id.to_s, account.name
 
       assert_difference -> { account.invoice_sources.stripe.count }, 1 do
-        patch stripe_app_onboarding_url
+        patch stripe_app_onboarding_url, params: { account_id: account.id }
       end
 
       source = account.invoice_sources.stripe.sole
@@ -75,10 +75,10 @@ module StripeApp
       claim, token = issue_claim
       remember_claim(token)
 
-      patch stripe_app_onboarding_url
+      patch stripe_app_onboarding_url, params: { account_id: account.id }
       clear_enqueued_jobs
 
-      patch stripe_app_onboarding_url
+      patch stripe_app_onboarding_url, params: { account_id: account.id }
 
       assert_redirected_to stripe_app_onboarding_url
       assert_equal "This Stripe connection link is no longer valid. Start again from Stripe.", flash[:alert]
@@ -93,7 +93,7 @@ module StripeApp
       remember_claim(token)
 
       get stripe_app_onboarding_url
-      patch stripe_app_onboarding_url
+      patch stripe_app_onboarding_url, params: { account_id: account.id }
       assert_redirected_to account_settings_url(script_name: account.slug)
 
       delete session_url
@@ -115,11 +115,78 @@ module StripeApp
       assert_select "p", text: /owner or administrator/
       assert_select "form", count: 0
 
-      patch stripe_app_onboarding_url
+      patch stripe_app_onboarding_url, params: { account_id: account.id }
 
       assert_redirected_to stripe_app_onboarding_url
       assert_predicate claim.reload, :active?
       assert_empty account.invoice_sources.stripe
+      assert_no_enqueued_jobs only: InvoiceSources::RefreshJob
+    end
+
+    test "owner chooses which administered account receives the Stripe claim" do
+      first_account = sign_up_and_complete(email_address: "multi-stripe-owner@example.com")
+      second_account = add_account(first_account.users.owner.sole.identity, name: "Second Stripe Business")
+      claim, token = issue_claim
+      remember_claim(token)
+
+      get stripe_app_onboarding_url
+
+      assert_response :success
+      assert_select "select[name=account_id]" do
+        assert_select "option[value=?]", first_account.id.to_s, first_account.name
+        assert_select "option[value=?]", second_account.id.to_s, second_account.name
+      end
+
+      patch stripe_app_onboarding_url, params: { account_id: second_account.id }
+
+      assert_redirected_to account_settings_url(script_name: second_account.slug)
+      assert_empty first_account.invoice_sources.stripe
+      assert_equal second_account, claim.reload.account
+      assert_equal 1, second_account.invoice_sources.stripe.count
+    end
+
+    test "platform administrator impersonating a member can select that exact account" do
+      platform_account = sign_up_and_complete(email_address: "platform-stripe-claim@example.com")
+      target_account = add_account(
+        Identity.create!(email_address: "target-claim-owner@example.com"),
+        name: "Platform Claim Target"
+      )
+      target_member = target_account.users.create!(
+        name: "Target Member",
+        role: :member,
+        identity: Identity.create!(email_address: "target-claim-member@example.com")
+      )
+      PlatformAdminAccess.stubs(:allowed?).returns(true)
+      post impersonate_madmin_user_url(target_member, script_name: nil)
+      claim, token = issue_claim
+      remember_claim(token)
+
+      get stripe_app_onboarding_url
+
+      assert_response :success
+      assert_select "select[name=account_id] option[value=?]", target_account.id.to_s, target_account.name
+
+      patch stripe_app_onboarding_url, params: { account_id: target_account.id }
+
+      assert_redirected_to account_settings_url(script_name: target_account.slug)
+      assert_empty platform_account.invoice_sources.stripe
+      assert_equal target_account, claim.reload.account
+      assert_equal 1, target_account.invoice_sources.stripe.count
+    end
+
+    test "tampered account selection cannot consume the Stripe claim" do
+      administered_account = sign_up_and_complete(email_address: "tampered-stripe-owner@example.com")
+      inaccessible_account = Account.create!(name: "Inaccessible Stripe Business")
+      claim, token = issue_claim
+      remember_claim(token)
+
+      patch stripe_app_onboarding_url, params: { account_id: inaccessible_account.id }
+
+      assert_redirected_to stripe_app_onboarding_url
+      assert_equal "Choose a PaymentReminder account you administer.", flash[:alert]
+      assert_predicate claim.reload, :active?
+      assert_empty administered_account.invoice_sources.stripe
+      assert_empty inaccessible_account.invoice_sources.stripe
       assert_no_enqueued_jobs only: InvoiceSources::RefreshJob
     end
 
@@ -138,7 +205,8 @@ module StripeApp
 
       assert_response :success
       assert_select "form[action=?]", stripe_app_onboarding_path
-      assert_select "input[name=account_id]", count: 0
+      account = Identity.find_by!(email_address: "new-stripe-owner@example.com").accounts.first
+      assert_select "select[name=account_id] option[value=?]", account.id.to_s, account.name
     end
 
     private
@@ -156,6 +224,13 @@ module StripeApp
           stripe_user_id: "usr_123",
           livemode: false,
           request_digest: SecureRandom.hex(32)
+        )
+      end
+
+      def add_account(identity, name:)
+        Account.create_with_owner(
+          account: { name: },
+          owner: { name: "Owner Person", identity: }
         )
       end
 

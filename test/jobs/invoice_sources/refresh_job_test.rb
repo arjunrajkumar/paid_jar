@@ -14,6 +14,30 @@ class InvoiceSources::RefreshJobTest < ActiveJob::TestCase
     InvoiceSources::RefreshJob.perform_now(invoice_sources(:xero))
   end
 
+  test "shares a per-source concurrency limit with webhook processing" do
+    source = invoice_sources(:xero)
+    event = InvoiceSources::Webhooks::Event.create!(
+      invoice_source: source,
+      provider: :xero,
+      provider_event_id: "xero-event-concurrency",
+      event_type: "UPDATE",
+      resource_type: "invoice",
+      resource_id: "invoice-123",
+      payload: { "event" => { "resourceId" => "invoice-123" } }
+    )
+
+    refresh_job = InvoiceSources::RefreshJob.new(source)
+    webhook_job = InvoiceSources::Webhooks::ProcessJob.new(event)
+
+    assert_predicate refresh_job, :concurrency_limited?
+    assert_predicate webhook_job, :concurrency_limited?
+    assert_equal refresh_job.concurrency_key, webhook_job.concurrency_key
+    assert_equal 1, InvoiceSources::RefreshJob.concurrency_limit
+    assert_equal 1, InvoiceSources::Webhooks::ProcessJob.concurrency_limit
+    assert_equal 15.minutes, InvoiceSources::RefreshJob.concurrency_duration
+    assert_equal 15.minutes, InvoiceSources::Webhooks::ProcessJob.concurrency_duration
+  end
+
   test "skips disconnected source" do
     source = accounts(:paid_jar).invoice_sources.create!(
       provider: :stripe,

@@ -8,6 +8,8 @@ class PagesControllerTest < ActionDispatch::IntegrationTest
     assert_select "title", text: "Privacy Policy | PaymentReminder"
     assert_select "h1", text: "PaymentReminder Privacy Policy"
     assert_select "a[href='#{terms_path}']", text: "Terms of Service"
+    assert_select "p", text: /store the generated message content in the delivery ledger/
+    assert_select "p", { text: /do not store a separate copy of the generated message body/, count: 0 }
   end
 
   test "terms of service is public" do

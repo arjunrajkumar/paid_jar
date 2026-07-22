@@ -1,417 +1,231 @@
 # PaymentReminder
 
-AI accounts-receivable inbox that gets freelancers and small teams paid faster — run by you or your agent.
+Self-hosted accounts receivable for freelancers and small teams.
 
-## Tech Stack
+PaymentReminder connects to Xero or Stripe, turns imported invoices into a prioritized
+receivables list, and sends scheduled reminders from each account's own Gmail address. A
+separate platform-admin console gives the person operating the installation a view across every
+account.
+
+![PaymentReminder receivables list](docs/ui-north-star/after-home-inbox.png)
+
+PaymentReminder is working, early-stage software. The invoice-sync and outbound-reminder flows
+are implemented; the broader AI inbox, inbound email reading, and automated reply handling are
+not built yet. See the [capability audit](docs/CAPABILITY_AUDIT.md) for the exact current boundary.
+
+## What it does
+
+- Creates isolated accounts with email-code authentication or Xero sign-in.
+- Imports invoices from Xero or Stripe and builds local customers from the contact details embedded
+  in those invoices, without writing accounting records or moving money.
+- Prioritizes receivables and rates customers as Good, Normal, or Bad debtors from completed
+  payment history.
+- Lets account owners and admins manage reminder recipients, debtor thresholds, Gmail delivery,
+  and sender identity; each user controls their own notification preferences.
+- Schedules debtor-specific reminders before and after an invoice is due, with durable delivery
+  history, idempotency, retries, and fresh provider checks before sending.
+- Tracks payment promises and follow-ups in the domain; platform administrators can operate that
+  flow while the customer-facing capture UI is still to be built.
+- Supports multiple accounts and users while keeping every normal application request scoped to
+  the selected account.
+- Gives the installation operator a protected Madmin console for all accounts, users, providers,
+  invoices, reminders, promises, and failures, with a dedicated ledger for Madmin mutations.
+
+Not yet exposed to ordinary users: team invitations and role management, account switching,
+one-off reminders, payment-promise capture, customer and invoice detail pages, search, an inbound
+conversation inbox, Gmail reply ingestion, or AI-generated replies. These are documented as
+latent or not built—not presented as shipped features.
+
+## Run it locally
+
+### Requirements
 
 - Ruby 3.4.5
-- Rails 8.1.3
 - MySQL 8
-- Hotwire: Turbo and Stimulus
-- Importmap for JavaScript
-- Propshaft for assets
-- Solid Cache, Solid Queue, and Solid Cable
-- Puma web server
-- Kamal and Docker for deployment
-- Minitest, Capybara, and Selenium for testing
+- Bundler
+- A modern browser
 
-## Development
+Node.js 22 and the Stripe CLI are only needed when changing or uploading the Stripe App package.
+Google, Xero, Stripe, SES, and Sentry credentials are optional for basic local development.
 
-This app uses Ruby 3.4.5 and Rails 8.1.3.
+### Setup
+
+Fork the repository on GitHub, then clone your fork:
 
 ```bash
-bin/setup
-bin/rails db:prepare
-bin/rails server
+git clone https://github.com/YOUR_GITHUB_USERNAME/payment_reminder.git
+cd payment_reminder
+bin/setup --skip-server
 ```
 
-## AI-assisted setup
+`bin/setup` installs the gems, prepares the database, and clears old temporary files. Without
+`--skip-server`, it starts `bin/dev` for you.
 
-If you use a local coding agent like Codex or Claude Code, you can clone this repo, open the folder in the agent, and paste this:
-
-```text
-Please set up PaymentReminder locally.
-
-1. Read README.md and AGENTS.md first.
-2. Make sure Ruby 3.4.5 is active. If the system Ruby is used by mistake, switch to the project Ruby with mise, asdf, rbenv, or the local tool available on this machine.
-3. Run bin/setup.
-4. Run bin/rails db:prepare.
-5. Run bin/rails test and tell me whether it passes.
-6. If I want Xero connected, help me configure Rails credentials with:
-
-   xero:
-     client_id: my-xero-client-id
-     client_secret: my-xero-client-secret
-     webhook_signing_key: my-xero-webhook-signing-key
-
-   If I want Stripe connected, help me configure Rails credentials with:
-
-   stripe:
-     app_id: my-stripe-app-id
-     install_url: https://marketplace.stripe.com/apps/install/link/my-install-link
-     signing_secrets:
-       - absec_my-stripe-app-signing-secret
-     secret_keys:
-       live: sk_live_my-stripe-platform-key
-       test: sk_test_my-stripe-platform-key
-     webhook_signing_secrets:
-       live:
-         - whsec_my-live-stripe-app-webhook-secret
-       test:
-         - whsec_my-test-stripe-app-webhook-secret
-
-   If I want Gmail delivery for invoice reminders, follow the Gmail section in this README and help me configure Rails credentials with:
-
-   google:
-     client_id: my-google-oauth-client-id
-     client_secret: my-google-oauth-client-secret
-
-   Do not ask me to paste secrets into chat. Open the credentials editor and wait while I type them locally.
-7. Start the app with bin/rails server and tell me the localhost URL.
-```
-
-This gives the agent enough context to install dependencies, prepare the database, verify the app, and guide credential setup without requiring a long manual checklist.
-
-## Production launch
-
-Before opening the hosted service to customers, complete the [external going-live checklist](docs/GOING_LIVE_CHECKLIST.md) for DNS, Amazon SES, Google OAuth verification, Xero, Stripe, backups, and monitoring.
-
-## Error and scheduled-job monitoring
-
-PaymentReminder supports optional [Sentry for Rails](https://docs.sentry.io/platforms/ruby/guides/rails/). Set `SENTRY_DSN` in the production runtime to enable exception reporting. No events are sent when the variable is absent.
-
-The official Kamal deployment reads the DSN from encrypted Rails credentials. Add it with `bin/rails credentials:edit`:
-
-```yaml
-sentry:
-  dsn: https://your-sentry-dsn
-```
-
-Self-hosters using another deployment system can inject `SENTRY_DSN` directly. `SENTRY_TRACES_SAMPLE_RATE` controls performance sampling and defaults to `0.05`. Default PII collection is disabled; do not add OAuth tokens, email contents, or customer financial data to Sentry context.
-
-The Solid Queue worker reports expected-schedule check-ins for these critical recurring jobs:
-
-- `schedule-invoice-reminders`: every hour, with a 10-minute check-in grace period and a 30-minute maximum runtime.
-- `refresh-invoice-sources`: every six hours, with a 15-minute check-in grace period and a 15-minute maximum runtime.
-
-Sentry creates or updates these cron monitors when the jobs first run. Configure Sentry alerts for missed and failed check-ins as well as application issues. These monitors require the production Solid Queue process (`bin/jobs`) to be running; the Rails `/up` endpoint only checks the web process.
-
-## Xero
-
-Create a Xero OAuth 2.0 app and register all three redirect URIs:
-
-```text
-http://localhost:3000/xero/callback
-http://localhost:3000/signup/xero/callback
-http://localhost:3000/session/xero/callback
-```
-
-Then edit Rails credentials:
+The default development database connection expects MySQL's `/tmp/mysql.sock`, a `root` user,
+and no password. Use `DATABASE_URL` when your MySQL installation differs:
 
 ```bash
+DATABASE_URL=mysql2://root:password@127.0.0.1:3306/paid_jar_development \
+  bin/setup --skip-server
+```
+
+Prefix `bin/dev` with the same development URL when starting the server. Do not export that URL
+globally: Rails tests need a separate disposable test database.
+
+Before starting a permanent fork or adding provider secrets, replace the upstream encrypted
+credentials with a set owned by your fork. Contributors to the upstream installation should skip
+this replacement and obtain its existing key through the maintainer instead.
+
+```bash
+git rm config/credentials.yml.enc
 bin/rails credentials:edit
+git add config/credentials.yml.enc
 ```
 
-Add:
+Never commit the generated `config/master.key`; back it up securely. The
+[configuration guide](docs/CONFIGURATION.md) explains this one-time fork step and every supported
+setting.
 
-```yaml
-xero:
-  client_id: your-client-id
-  client_secret: your-client-secret
-  webhook_signing_key: your-webhook-signing-key
-```
-
-OAuth callback URLs are derived from `HOST`, which defaults to `http://localhost:3000` in development. Register `<HOST>/xero/callback`, `<HOST>/signup/xero/callback`, and `<HOST>/session/xero/callback` in Xero. For example, start a second local server with:
+Start the app:
 
 ```bash
-HOST=http://localhost:3001 bin/rails server -p 3001 -P tmp/pids/server-3001.pid
+bin/dev
 ```
 
-For local webhook testing, expose your local app with a tunnel and configure the Xero webhook delivery URL to:
-
-```text
-https://your-tunnel.example/invoice_sources/webhooks/xero
-```
-
-## Stripe
-
-The official hosted PaymentReminder service uses a public Stripe App with
-`stripe_api_access_type: platform`. The App requests only the `invoice_read` and `event_read`
-permissions. It reads invoice information from an existing Stripe account; it does not create
-accounts, move money, or modify Stripe data. Stripe Apps replace the legacy Connect Extension
-integration. See [Migrate from a Connect extension to a Stripe App](https://docs.stripe.com/stripe-apps/migrate-connect-extension)
-and [Stripe App permissions](https://docs.stripe.com/stripe-apps/reference/permissions).
-
-### Register the Stripe App and collect credentials
-
-Do not add placeholder values to Rails credentials. First register the App with Stripe and copy the
-real values from the Stripe account that owns it.
-
-1. Install the Stripe CLI and Apps plugin, then sign in:
-
-   ```bash
-   stripe login
-   stripe plugin install apps
-   ```
-
-2. For development, use a separate Stripe account and a globally unique test App ID, such as an ID
-   ending in `.test`. App IDs are global, so do not upload the final production ID from the
-   development account.
-3. For the production migration, sign the CLI into the same Stripe account that owns the legacy
-   Connect Extension. Verify the active Stripe account before uploading the final App ID.
-4. From the Stripe App package, upload the manifest:
-
-   ```bash
-   cd stripe-app
-   stripe apps upload
-   ```
-
-5. In **Stripe Dashboard → Developers → Apps → Payment Reminder**, collect:
-   - The App ID from the uploaded manifest.
-   - The App signing secret (`absec_...`) from the App's **Signing secret** dialog.
-   - The external-test install link while testing, and the public install link when publishing.
-6. In **Stripe Dashboard → Developers → API keys**, copy the publisher account's test
-   (`sk_test_...`) and live (`sk_live_...`) secret keys. These are server-side platform keys and
-   must never be placed in `stripe-app/`, JavaScript, or Git.
-7. Register the live and test webhook destinations described below, then copy each endpoint's
-   separate `whsec_...` signing secret.
-
-For local install-link testing, use a development manifest whose callback is:
-
-```text
-http://localhost:3000/stripe/callback
-```
-
-The production manifest must use the public HTTPS callback:
-
-```text
-https://app.paymentreminderemails.com/stripe/callback
-```
-
-After collecting the real values, edit Rails credentials:
+When using the database override above, start it with:
 
 ```bash
-bin/rails credentials:edit
+DATABASE_URL=mysql2://root:password@127.0.0.1:3306/paid_jar_development bin/dev
 ```
 
-Add:
+Open [http://localhost:3000/signup/new](http://localhost:3000/signup/new). The bare root currently
+redirects signed-out visitors to the upstream marketing site until a fork changes that branding
+behavior.
 
-```yaml
-stripe:
-  app_id: your-stripe-app-id
-  install_url: https://marketplace.stripe.com/apps/install/link/your-install-link
-  signing_secrets:
-    - absec_your-app-signing-secret
-  secret_keys:
-    live: sk_live_your-platform-key
-    test: sk_test_your-platform-key
-  webhook_signing_secrets:
-    live:
-      - whsec_your-live-webhook-secret
-    test:
-      - whsec_your-test-webhook-secret
-```
+In development, the verification screen displays the six-character code and Letter Opener captures
+sign-in email locally instead of sending it. Create an account, enter the code, and finish the owner
+profile.
 
-The legacy Connect Extension's OAuth `client_id`, OAuth client secret, and per-install access or
-refresh tokens are not used by this Stripe App flow.
+Read the [development guide](docs/DEVELOPMENT.md) for database troubleshooting, background-job
+behavior, the full test suite, Stripe App development, and an optional coding-agent setup prompt.
 
-Copy `install_url` exactly from the Stripe App's public or external-test install link. Stripe App
-requests to PaymentReminder are verified with an `absec_...` signing secret. Keep every active
-signing secret in `signing_secrets` during a rotation. PaymentReminder stores the verified Stripe
-account ID and uses the appropriate hosted platform key with the `Stripe-Account` header. It does
-not receive or store per-install Stripe OAuth access or refresh tokens.
+## Use the app
 
-The first release supports live mode and the developer account's ordinary test mode, not general
-Stripe Sandboxes. Keep `sandbox_install_compatible` false until isolated Sandbox keys, installs,
-and webhooks are supported end to end. The App's Stripe Settings onboarding view submits its signed
-account context to `POST <HOST>/stripe/app/onboarding_claims`; that endpoint must not accept an
-unsigned account ID. See [Stripe App install links](https://docs.stripe.com/stripe-apps/install-links)
-and [authenticate Stripe Dashboard requests](https://docs.stripe.com/stripe-apps/build-backend).
+1. Create an account with email, or configure Xero and use Xero signup.
+2. Open **Settings** in the account-scoped workspace.
+3. Connect Xero or install the Stripe App, then select **Resync** for the invoice source.
+4. Review imported receivables and add any extra reminder recipients.
+5. Connect Gmail, send the built-in test email, and choose the sender name.
+6. Review debtor thresholds, then explicitly enable the default automatic reminder sequences.
+7. In production, keep the Solid Queue worker running so syncs, webhooks, reminders, promise
+   follow-ups, and recurring maintenance are processed.
 
-The checked-in Stripe App manifest supplies `PAYMENT_REMINDER_ORIGIN` to the Settings view. For a
-separate external-test or local-preview backend, use a Stripe CLI extended manifest that overrides
-both that constant and `ui_extension.content_security_policy.connect-src`. Do not add staging,
-localhost, or placeholder redirect URIs to the production manifest.
+The receivables list starts empty: this repository does not ship demo invoices or seed customer
+data. Connect Xero or Stripe to populate it.
 
-Create separate live-mode and test-mode event destinations that listen to events on
-**Connected accounts**. Use these distinct URLs:
+Each account lives under a generated numeric path such as `/1`. Authorization still verifies the
+signed-in user's membership in that exact account; the path itself is not an access control.
+Account owners and admins can change account-wide settings, while members can view account data and
+manage their own notification preferences. Team management and an account switcher are not yet
+available in the regular UI.
 
-- Live mode: `<HOST>/invoice_sources/webhooks/stripe`
-- Test mode: `<HOST>/invoice_sources/webhooks/stripe/test`
+## Run your own instance
 
-Select:
+PaymentReminder is a Rails application, not a single self-contained appliance. A production
+installation needs:
 
-- `invoice.created`
-- `invoice.updated`
-- `invoice.finalized`
-- `invoice.paid`
-- `invoice.voided`
-- `invoice.marked_uncollectible`
-- `account.application.authorized`
-- `account.application.deauthorized`
+- the web process;
+- a separate `bin/jobs` Solid Queue process;
+- MySQL 8 for the primary, cache, queue, and cable databases;
+- stable Rails credentials and `RAILS_MASTER_KEY`;
+- HTTPS and a correct public `HOST`;
+- SMTP delivery when using email-code authentication or account notifications;
+- optional Xero, Stripe, and Google applications for their respective features.
 
-Store each destination's signing secret under the matching live or test credential. Stripe CLI,
-test-mode, live-mode, and future Sandbox destinations have different signing secrets. During a
-rotation, keep both active secrets in the appropriate array until Stripe no longer signs with the
-old value. The live URL verifies only `webhook_signing_secrets.live`; the test URL verifies only
-`webhook_signing_secrets.test`. See [Stripe App events](https://docs.stripe.com/stripe-apps/events) and
-[webhook signature verification](https://docs.stripe.com/webhooks/signature).
+The repository includes a production Dockerfile and Kamal configuration. The checked-in
+`config/deploy.yml`, hosted domains, image registry, server addresses, and Stripe manifest belong
+to the upstream installation: replace them before running any deployment command from a fork.
 
-For local webhook testing with the Stripe CLI:
+Start with the [self-hosting and operations guide](docs/SELF_HOSTING.md). It covers the fork
+checklist, required processes, Docker and Kamal, databases, secrets, upgrades, backups, health
+checks, and monitoring. The [going-live checklist](docs/GOING_LIVE_CHECKLIST.md) records the
+upstream hosted service's provider work; use it as a review aid, not as copy-paste configuration
+for another domain.
 
-```bash
-stripe listen \
-  --events invoice.created,invoice.updated,invoice.finalized,invoice.paid,invoice.voided,invoice.marked_uncollectible,account.application.authorized,account.application.deauthorized \
-  --forward-connect-to localhost:3000/invoice_sources/webhooks/stripe/test
-```
+## Configure integrations
 
-Use the `whsec_...` value printed by that command only for local CLI testing and store it under the
-test webhook credentials. After credentials are configured, sign in and open `/account/settings`
-to install Stripe. Installing authorizes access;
-uninstalling in **Stripe → Settings → Installed apps** revokes it and sends
-`account.application.deauthorized`.
+All provider integrations are optional independently, but they unlock different parts of the
+product:
 
-The credential example above configures the hosted public-App path. A self-hoster can instead
-create a private Stripe App under an account they control and install it from that account's Stripe
-Dashboard. A private App does not use the public `install_url`; it must hand off signed account
-context through its own Settings view and backend, and use its own App ID, platform keys, signing
-secrets, and webhook destinations. The official hosted App's install link and secrets are never
-distributed or shared. Turnkey multi-tenant self-hosted Stripe distribution is outside this
-release. See [Stripe App distribution](https://docs.stripe.com/stripe-apps/distribution-options)
-and [Stripe App settings](https://docs.stripe.com/stripe-apps/app-settings).
+| Integration | Purpose | Required for |
+| --- | --- | --- |
+| Xero | Read invoices and their embedded customer details; receive invoice webhooks | Xero-backed receivables |
+| Stripe App | Read invoices; consume connected-account events for supported public Apps | Stripe-backed receivables |
+| Gmail / Google Workspace | Send from an account-owned mailbox with `gmail.send` | Customer reminders |
+| SMTP / Amazon SES | Send installation-wide application email | Email-code authentication and notifications |
+| Sentry | Report application failures and recurring-job check-ins | Optional monitoring |
 
-## System email
+Create credentials owned by your fork, set the public host, and then register matching callback
+and webhook URLs with each provider. Use these guides:
 
-PaymentReminder uses installation-wide system email for sign-in codes and internal notifications. This is separate from account-owned Gmail delivery, which is only used to send invoice reminders to customers.
+- [Configuration and secrets](docs/CONFIGURATION.md)
+- [Xero, Stripe, Gmail, and system email](docs/INTEGRATIONS.md)
+- [Production operations and Sentry](docs/SELF_HOSTING.md)
 
-The official hosted installation uses [Amazon Simple Email Service (SES)](https://aws.amazon.com/ses/) with these defaults:
+Provider secrets from the official hosted service are never distributed with the source.
 
-- AWS Region: `us-east-1`
-- Sending domain: `paymentreminderemails.com`
-- From address: `PaymentReminder <support@paymentreminderemails.com>`
-- Application link host: `app.paymentreminderemails.com`
+## Platform administrator
 
-To configure Amazon SES for production:
+The global admin is designed for the app developer or hosted-service operator. It is separate from
+an account's `owner` or `admin` role and is mounted at the unscoped `/madmin` path.
 
-1. Open Amazon SES in the `us-east-1` Region and create a domain identity for `paymentreminderemails.com`.
-2. Enable Easy DKIM and publish the DNS records supplied by SES. Cloudflare users must set CNAME records to **DNS only**.
-3. Request production access if the SES account is still in the sandbox. While sandboxed, SES can only send to verified recipient addresses.
-4. From **SMTP settings**, create dedicated SMTP credentials for PaymentReminder. SES SMTP credentials are Region-specific and are not the same as regular AWS access keys.
-5. Open the Rails credentials editor:
+An allowlisted platform administrator can see every account, the users and identities under those
+accounts, customers, invoices, source connections, reminder history, payment promises, webhooks,
+sessions, failures, and other operational records. The console also provides explicit actions to
+impersonate an active user, manage access and roles, refresh sources and debtor ratings, run an
+account's reminder scheduler, send a one-off reminder, operate payment promises, disconnect
+providers, retry webhook processing, and revoke sessions or sign-in codes.
 
-```bash
-bin/rails credentials:edit
-```
+High-risk provider-owned records do not get unrestricted raw edit/delete controls, and platform
+admin access cannot bypass Xero, Stripe, or Google consent. Secrets and sensitive token material
+are omitted from the panel. Operator mutation requests that finish through the panel's normal
+redirect flow are written to an admin event ledger.
 
-6. Add the dedicated SES SMTP credentials. Do not use regular AWS access keys:
+See [Platform administration](docs/PLATFORM_ADMIN.md) for setup, the complete action list, safety
+boundaries, and the exact distinction between a platform operator and an account owner.
 
-```yaml
-ses:
-  smtp_username: your-ses-smtp-username
-  smtp_password: your-ses-smtp-password
-```
+## Documentation
 
-The application reads these values directly from encrypted Rails credentials when it generates a system email. Kamal only supplies `RAILS_MASTER_KEY` to the running containers, as it already does for the application's other encrypted credentials.
+- [Development](docs/DEVELOPMENT.md)—local setup, first run, tests, and Stripe App development.
+- [Configuration](docs/CONFIGURATION.md)—new-fork credentials, supported settings, and secrets.
+- [Integrations](docs/INTEGRATIONS.md)—Xero, Stripe, Gmail, system email, callbacks, and webhooks.
+- [Self-hosting and operations](docs/SELF_HOSTING.md)—Docker, Kamal, jobs, backups, upgrades, and
+  monitoring.
+- [Platform administration](docs/PLATFORM_ADMIN.md)—global visibility, support actions, and audit
+  controls.
+- [Capability audit](docs/CAPABILITY_AUDIT.md)—all available, latent, and not-built behavior plus
+  the verified runtime dependencies.
+- [Going-live checklist](docs/GOING_LIVE_CHECKLIST.md)—external launch work for the official hosted
+  installation.
+- [Security policy](SECURITY.md)—supported versions and private vulnerability reporting.
+- [Contributing](CONTRIBUTING.md)—development workflow and pull-request checks.
 
-Self-hosters can override `MAILER_HOST`, `MAILER_PROTOCOL`, `MAILER_DOMAIN`, `MAILER_FROM_ADDRESS`, `SES_SMTP_ADDRESS`, and `SES_SMTP_PORT`. The default SES endpoint is `email-smtp.us-east-1.amazonaws.com` on port `587` with STARTTLS.
+## Technology
 
-## Gmail reminder delivery
+PaymentReminder uses Ruby 3.4.5, Rails 8.1, MySQL 8, Hotwire, Importmap, Propshaft, Solid Cache,
+Solid Queue, Solid Cable, Puma, Thruster, Madmin, Minitest, Capybara, Selenium, Docker, and Kamal.
+It intentionally does not require Redis or a JavaScript build step for the Rails application.
 
-PaymentReminder can send customer invoice reminders from a Gmail or Google Workspace account owned by each PaymentReminder account. The connected address becomes the reminder `From` address; the sender name can be customized in Settings.
+## Contributing
 
-When upgrading an existing installation, apply the database changes first:
-
-```bash
-bin/rails db:migrate
-```
-
-The migration disables existing automatic reminders. Connect Gmail, send a test email, and then explicitly enable automatic reminders again so invoices are not sent from an unverified address.
-
-### 1. Create the Google OAuth application
-
-1. Create or select a project in the [Google Cloud Console](https://console.cloud.google.com/).
-2. Enable the [Gmail API](https://console.cloud.google.com/apis/library/gmail.googleapis.com).
-3. Configure the Google Auth Platform consent screen and audience:
-   - Choose **Internal** if the Google Cloud project and every sender belong to the same Google Workspace organization.
-   - Choose **External** for personal Gmail accounts or senders from different organizations. While the app is in Testing, add every Gmail account that will connect as a test user.
-4. Create an OAuth client with the **Web application** application type.
-5. Add the exact callback URL for every environment under **Authorized redirect URIs**.
-
-For local development, the callback is:
-
-```text
-http://localhost:3000/gmail/callback
-```
-
-For a production installation, replace the domain with the public HTTPS URL:
-
-```text
-https://payment-reminder.example/gmail/callback
-```
-
-PaymentReminder requests these scopes during connection:
-
-- `email`
-- `profile`
-- `https://www.googleapis.com/auth/gmail.send`
-
-The `gmail.send` scope is only used to send invoice reminders. It does not grant PaymentReminder access to read the connected mailbox.
-
-> [!IMPORTANT]
-> Google OAuth apps with an External audience and Testing status issue refresh tokens that expire after seven days when Gmail scopes are requested. That is useful for local testing, but not reliable for automatic reminders. For a long-running installation, publish the OAuth app to Production and complete Google's verification requirements if they apply to your audience.
-
-See Google's documentation for [OAuth app audiences and publishing status](https://support.google.com/cloud/answer/15549945?hl=en) and [OAuth verification](https://support.google.com/cloud/answer/13463073?hl=en).
-
-### 2. Add the Google credentials
-
-Open the Rails credentials editor:
-
-```bash
-bin/rails credentials:edit
-```
-
-Add the OAuth client credentials:
-
-```yaml
-google:
-  client_id: your-google-client-id
-  client_secret: your-google-client-secret
-```
-
-Do not commit decrypted credentials or share them in an issue. Preserve the Rails master key when backing up or moving an installation; it is required to decrypt saved OAuth tokens.
-
-OAuth callback URLs are generated as `<HOST>/gmail/callback`. `HOST` defaults to `http://localhost:3000` in development and must exactly match an authorized redirect URI in Google Cloud, including its scheme, host, port, path, and trailing slash behavior. For example, to use port 3001:
-
-```bash
-HOST=http://localhost:3001 bin/rails server -p 3001 -P tmp/pids/server-3001.pid
-```
-
-### 3. Connect and verify Gmail
-
-1. Start or restart PaymentReminder after saving the credentials.
-2. Sign in and open **Settings** (`/account/settings`).
-3. Select **Connect Gmail**, choose the address that should send reminders, and approve access.
-4. Select **Send test email** to verify delivery to the signed-in user's email address.
-5. Set the sender name, enable automatic invoice reminders, and save the reminder settings.
-
-Each PaymentReminder account has its own Gmail connection. Access and refresh tokens are encrypted at rest, and background jobs refresh access automatically. If Google access is revoked or can no longer be refreshed, automatic reminders are disabled until an account owner reconnects Gmail.
-
-Production installations must run the Solid Queue worker so scheduled reminders are processed:
-
-```bash
-bin/jobs
-```
-
-### Troubleshooting
-
-- **`redirect_uri_mismatch`**: Copy the callback generated from `HOST` into Google Cloud exactly. A different scheme, port, path, or trailing slash is a different URI to Google.
-- **Access blocked or denied**: For an External app in Testing, add the connecting Gmail address as a test user. Also confirm that the Gmail API is enabled and the consent screen includes the requested scopes.
-- **Gmail disconnects after seven days**: The Google OAuth app is likely External and still in Testing. Publish it to Production for long-lived refresh tokens.
-- **Connection shows an error**: Use **Reconnect Gmail** in Settings. This is normally required after the user revokes access, changes relevant Google security settings, or the refresh token expires.
-- **Google credentials are missing**: Confirm that `google.client_id` and `google.client_secret` exist in the Rails credentials for the environment running the app, then restart it.
-
-Connected Gmail is only used for customer invoice reminders. Sign-in links and internal notifications continue to use the installation-wide Action Mailer configuration, which production installations must configure separately.
+Issues and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and keep the
+project's tenant boundaries, provider permissions, delivery idempotency, and user-facing feature
+claims intact. Never include credentials, customer data, or provider payloads in an issue or test
+fixture. Report suspected vulnerabilities privately through [SECURITY.md](SECURITY.md), not in a
+public issue.
 
 ## License
 
-PaymentReminder is licensed under the GNU Affero General Public License v3.0. See [LICENSE](LICENSE).
+PaymentReminder is open-source software licensed under the [GNU Affero General Public License
+v3.0](LICENSE). If you modify and operate it as a network service, review the license before
+launching your fork.

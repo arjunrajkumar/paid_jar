@@ -1,4 +1,6 @@
 class Account::CustomerSegmentRefreshesController < ApplicationController
+  require_account_admin
+
   def create
     Current.account.refresh_customer_segments!
 

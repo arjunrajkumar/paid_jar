@@ -1,4 +1,6 @@
 class Account::SettingsController < ApplicationController
+  require_account_admin only: :update
+
   before_action :set_account
   before_action :set_xero_invoice_source
   before_action :set_invoice_sources
@@ -39,8 +41,7 @@ class Account::SettingsController < ApplicationController
     end
 
     def set_notification_preferences
-      notification_user = @account.users.active.find_by!(identity: Current.identity)
-      @notification_preferences = notification_user.notification_subscriptions.index_by(&:event)
+      @notification_preferences = Current.user.notification_subscriptions.index_by(&:event)
     end
 
     def account_params

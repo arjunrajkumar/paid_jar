@@ -1,0 +1,76 @@
+<%= content_for :title, resource.friendly_name.pluralize %>
+
+<header class="header">
+  <h1><%= resource.friendly_name.pluralize %></h1>
+
+  <div class="actions">
+    <form class="search">
+      <%= hidden_field_tag :page, params[:page], value: 1 %>
+      <%= search_field_tag :q, params[:q], placeholder: "Search" %>
+    </form>
+
+    <%= link_to "Clear search", clear_search_params, class: "btn btn-secondary" if params[:q].present? %>
+
+    <% if madmin_action_allowed?(:new) %>
+      <%= link_to resource.new_path, class: "btn btn-secondary" do %>
+        New <%= tag.span resource.friendly_name, class: "hidden md:inline-block" %>
+      <% end %>
+    <% end %>
+  </div>
+</header>
+
+<nav class="scopes">
+  <% if resource.scopes.any? %>
+    <%= link_to "All", resource.index_path, class: class_names("btn btn-secondary", { "active" => params[:scope].blank? }) %>
+  <% end %>
+
+  <% resource.scopes.each do |scope| %>
+    <%= link_to scope.to_s.humanize,
+      resource.index_path(scope: scope, q: params[:q], sort: params[:sort], direction: params[:direction]),
+      class: class_names("btn btn-secondary", { "active" => params[:scope] == scope.to_s }) %>
+  <% end %>
+</nav>
+
+<div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <% resource.attributes.values.each do |attribute| %>
+          <% next if attribute.field.nil? %>
+          <% next unless attribute.field.visible?(action_name) %>
+
+          <th><%= sortable attribute.name, attribute.field.label %></th>
+        <% end %>
+        <th></th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <% @records.each do |record| %>
+        <tr>
+          <% resource.attributes.values.each do |attribute| %>
+            <% next if attribute.field.nil? %>
+            <% next unless attribute.field.visible?(action_name) %>
+
+            <td><%= render partial: attribute.field.to_partial_path("index"), locals: { field: attribute.field, record:, resource: } %></td>
+          <% end %>
+
+          <td>
+            <%= link_to "View", resource.show_path(record) %>
+            <%= link_to "Edit", resource.edit_path(record) if madmin_action_allowed?(:edit) %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+</div>
+
+<div class="pagination">
+  <% if @pagy.respond_to?(:series_nav) %>
+    <%== @pagy.series_nav if @pagy.last > 1 %>
+    <%== @pagy.info_tag %>
+  <% else %>
+    <%== pagy_nav @pagy if @pagy.last > 1 %>
+    <%== pagy_info @pagy %>
+  <% end %>
+</div>

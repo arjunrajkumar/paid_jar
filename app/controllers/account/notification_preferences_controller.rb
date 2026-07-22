@@ -22,6 +22,6 @@ class Account::NotificationPreferencesController < ApplicationController
     end
 
     def notification_user
-      @notification_user ||= Current.account.users.active.find_by!(identity: Current.identity)
+      @notification_user ||= Current.user
     end
 end

@@ -2,6 +2,8 @@ module InvoiceSources
   class XeroConnectionsController < ApplicationController
     include ::Xero::OauthFlow
 
+    require_account_admin only: %i[new destroy]
+
     before_action :set_request_account, only: %i[new destroy]
     before_action :ensure_xero_configured, only: :new
     before_action :set_xero_source, only: :destroy
@@ -29,7 +31,8 @@ module InvoiceSources
       result = ::Xero::AccountConnection.new(
         account: @connection_account,
         identity: Current.identity,
-        authorization:
+        authorization:,
+        platform_admin_impersonated_user: exact_impersonated_user(@connection_account.id)
       ).complete!
       queue_initial_refresh(result.invoice_source)
 
@@ -58,7 +61,7 @@ module InvoiceSources
       def set_request_account
         external_account_id = request.env["paidjar.external_account_id"]
         account = Account.find_by!(external_account_id:)
-        @connection_account = Current.identity.users.active.find_by!(account_id: account.id).account
+        @connection_account = connection_account_for(account.id) || raise(ActiveRecord::RecordNotFound)
       rescue ActiveRecord::RecordNotFound
         redirect_to root_url, alert: "Choose a PaymentReminder account you can access."
       end
@@ -82,15 +85,15 @@ module InvoiceSources
         account_id = context&.fetch(:account_id, nil)
         identity_id = context&.fetch(:identity_id, nil)
         valid_identity = identity_id.present? && Current.identity.id == identity_id.to_i
-        membership = Current.identity.users.active.find_by(account_id: account_id)
+        account = connection_account_for(account_id)
         scoped_account_matches = request.env["paidjar.external_account_id"].blank? ||
-          membership&.account&.external_account_id == request.env["paidjar.external_account_id"]
+          account&.external_account_id == request.env["paidjar.external_account_id"]
 
-        unless valid_identity && membership.present? && scoped_account_matches
+        unless valid_identity && account.present? && scoped_account_matches
           raise ::Xero::OauthFlow::Error, "Xero connection could not be verified."
         end
 
-        @connection_account = membership.account
+        @connection_account = account
       end
 
       def connection_settings_url
@@ -104,7 +107,27 @@ module InvoiceSources
         context = xero_oauth_context
         return if context.blank? || context[:identity_id].to_i != Current.identity.id
 
-        Current.identity.users.active.find_by(account_id: context[:account_id])&.account
+        connection_account_for(context[:account_id])
+      end
+
+      def connection_account_for(account_id)
+        return if account_id.blank?
+
+        Current.identity.users.admin.find_by(account_id:)&.account ||
+          exact_impersonated_account(account_id)
+      end
+
+      def exact_impersonated_account(account_id)
+        exact_impersonated_user(account_id)&.account
+      end
+
+      def exact_impersonated_user(account_id)
+        return unless platform_admin_impersonating?
+        return unless Current.user&.active?
+        return unless Current.user.account_id == account_id.to_i
+        return unless Current.account&.id == Current.user.account_id
+
+        Current.user
       end
 
       def queue_initial_refresh(source)

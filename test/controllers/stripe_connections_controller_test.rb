@@ -37,6 +37,17 @@ class StripeConnectionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "signed-install-state", query.fetch("state")
   end
 
+  test "install requires an account administrator" do
+    account = sign_up_and_complete(email_address: "member-stripe-install@example.com")
+    account.users.owner.sole.update!(role: :member)
+    InvoiceSources::Stripe::InstallState.expects(:issue).never
+
+    get new_stripe_connection_url(script_name: account.slug)
+
+    assert_redirected_to root_url(script_name: nil)
+    assert_equal "You need to be an account owner or administrator to do that.", flash[:alert]
+  end
+
   test "install redirects home when Stripe App credentials are missing" do
     sign_up_and_complete
     @stripe_config.configured = false
@@ -70,6 +81,43 @@ class StripeConnectionsControllerTest < ActionDispatch::IntegrationTest
     assert_equal "usr_123", source.provider_data.fetch("stripe_user_id")
     assert_equal false, source.provider_data.fetch("livemode")
     assert_enqueued_with(job: InvoiceSources::RefreshJob, args: [ source ])
+  end
+
+  test "platform administrator impersonating a member can connect that exact account" do
+    platform_account = sign_up_and_complete(email_address: "platform-stripe-install@example.com")
+    target_account = Account.create_with_owner(
+      account: { name: "Platform Stripe Target" },
+      owner: {
+        name: "Target Owner",
+        identity: Identity.create!(email_address: "target-stripe-owner@example.com")
+      }
+    )
+    target_member = target_account.users.create!(
+      name: "Target Member",
+      role: :member,
+      identity: Identity.create!(email_address: "target-stripe-member@example.com")
+    )
+    PlatformAdminAccess.stubs(:allowed?).returns(true)
+    post impersonate_madmin_user_url(target_member, script_name: nil)
+
+    state = begin_install
+    get stripe_callback_url(script_name: nil), params: callback_params(state:)
+
+    assert_empty platform_account.invoice_sources.stripe
+    assert_equal "acct_123", target_account.invoice_sources.stripe.sole.external_account_id
+    assert_redirected_to invoices_url(script_name: target_account.slug)
+  end
+
+  test "callback rejects an ordinary member demoted after install started" do
+    account = sign_up_and_complete(email_address: "demoted-stripe-install@example.com")
+    state = begin_install
+    account.users.owner.sole.update!(role: :member)
+
+    get stripe_callback_url(script_name: nil), params: callback_params(state:)
+
+    assert_redirected_to root_url(script_name: nil)
+    assert_empty account.invoice_sources.stripe
+    assert_no_enqueued_jobs only: InvoiceSources::RefreshJob
   end
 
   test "callback rejects invalid state before connecting Stripe" do

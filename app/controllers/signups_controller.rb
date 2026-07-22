@@ -12,12 +12,15 @@ class SignupsController < ApplicationController
   end
 
   def create
-    signup = Signup.new(signup_params)
+    @signup = Signup.new(signup_params)
 
-    if signup.valid?(:identity_creation)
-      redirect_to_session_magic_link signup.create_identity
+    if @signup.valid?(:identity_creation)
+      redirect_to_session_magic_link @signup.create_identity
     else
-      head :unprocessable_entity
+      respond_to do |format|
+        format.html { render :new, status: :unprocessable_entity }
+        format.json { render json: { errors: @signup.errors.full_messages }, status: :unprocessable_entity }
+      end
     end
   end
 

@@ -82,6 +82,25 @@ class Customers::EmailAddressesControllerTest < ActionDispatch::IntegrationTest
     assert_equal "Recipient removed.", flash[:notice]
   end
 
+  test "members can view recipients but cannot add or remove them" do
+    email_address = @customer.additional_email_addresses.create!(email: "existing@acme.example")
+    @account.users.owner.sole.update!(role: :member)
+
+    get customer_email_addresses_url(@customer, script_name: @account.slug)
+    assert_response :success
+
+    assert_no_difference -> { @customer.additional_email_addresses.count } do
+      post customer_email_addresses_url(@customer, script_name: @account.slug), params: {
+        customer_email_address: { email: "new@acme.example" }
+      }
+    end
+    assert_redirected_to root_url(script_name: nil)
+
+    delete customer_email_address_url(@customer, email_address, script_name: @account.slug)
+    assert_redirected_to root_url(script_name: nil)
+    assert_predicate email_address.reload, :persisted?
+  end
+
   test "customers and email addresses are scoped to the current account" do
     other_account = Account.create!(name: "Other Recipient Account")
     other_source = create_invoice_source(other_account, external_account_id: "other-recipient-source")

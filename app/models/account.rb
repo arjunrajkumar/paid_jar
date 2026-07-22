@@ -14,12 +14,13 @@ class Account < ApplicationRecord
   has_many :invoice_messages, dependent: :destroy, inverse_of: :account
   has_many :users, dependent: :destroy
   has_many :customer_segments, dependent: :destroy, inverse_of: :account
+  has_many :platform_admin_events, dependent: :nullify, inverse_of: :account
 
   include CustomerSegments, InvoiceSchedules, Remindable
 
-  before_create :assign_external_account_id
+  before_validation :assign_external_account_id, on: :create
 
-  validates :name, presence: true
+  validates :external_account_id, :name, presence: true
   validates :invoice_reminder_from_email,
     format: { with: URI::MailTo::EMAIL_REGEXP },
     allow_blank: true

@@ -1,5 +1,7 @@
 module OutboundEmailConnections
   class GmailConnectionsController < ApplicationController
+    require_account_admin
+
     before_action :ensure_google_configured, only: %i[new create]
     before_action :ensure_google_approved, only: :create
     before_action :ensure_oauth_state, only: :create
@@ -66,6 +68,10 @@ module OutboundEmailConnections
     end
 
     private
+      def account_access_denied_message
+        "Gmail connection could not be verified."
+      end
+
       def ensure_google_configured
         return if gmail_configuration.configured?
 

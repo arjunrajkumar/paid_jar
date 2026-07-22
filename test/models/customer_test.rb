@@ -87,6 +87,19 @@ class CustomerTest < ActiveSupport::TestCase
     assert_includes customer.errors[:customer_segment], "must belong to the customer account"
   end
 
+  test "requires its invoice source to belong to its account" do
+    other_account = Account.create!(name: "Other Invoice Source Account")
+    customer = @source.customers.build(
+      account: other_account,
+      customer_segment: other_account.customer_segment(:normal_debtor),
+      external_id: SecureRandom.uuid,
+      name: "Mismatched Invoice Source Customer"
+    )
+
+    assert_not customer.valid?
+    assert_includes customer.errors[:invoice_source], "must belong to the customer account"
+  end
+
   test "requires provider identity and a name" do
     customer = @source.customers.build(account: @source.account)
 

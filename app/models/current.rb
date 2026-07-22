@@ -13,8 +13,14 @@ class Current < ActiveSupport::CurrentAttributes
     super(identity)
 
     if identity.present?
-      self.user = identity&.users&.active&.first
-      self.account = user&.account
+      self.user = if account.present?
+        identity.users.active.find_by(account_id: account.id)
+      else
+        identity.users.active.first
+      end
+      self.account ||= user&.account
+    else
+      self.user = nil
     end
   end
 

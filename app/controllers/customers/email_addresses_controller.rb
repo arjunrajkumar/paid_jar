@@ -1,5 +1,7 @@
 module Customers
   class EmailAddressesController < ApplicationController
+    require_account_admin only: %i[create destroy]
+
     before_action :set_customer
 
     def index

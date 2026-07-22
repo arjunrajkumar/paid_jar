@@ -1,6 +1,14 @@
 class InvoiceSources::RefreshJob < ApplicationJob
   queue_as :default
 
+  limits_concurrency(
+    to: 1,
+    key: ->(invoice_source) { invoice_source },
+    duration: 15.minutes,
+    group: "InvoiceSourceSync",
+    on_conflict: :block
+  )
+
   retry_on InvoiceSources::ProviderError,
     wait: :polynomially_longer,
     attempts: 5
