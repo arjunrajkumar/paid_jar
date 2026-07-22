@@ -3,10 +3,6 @@ class InvoiceReminder < ApplicationRecord
     pre_due: "pre_due",
     overdue: "overdue"
   }.freeze
-  STATUSES = {
-    sent: "sent",
-    failed: "failed"
-  }.freeze
   TONES = {
     friendly: "friendly",
     neutral: "neutral",
@@ -17,17 +13,29 @@ class InvoiceReminder < ApplicationRecord
 
   belongs_to :account, inverse_of: :invoice_reminders
   belongs_to :invoice, inverse_of: :invoice_reminders
+  belongs_to :invoice_message, inverse_of: :invoice_reminder
   belongs_to :invoice_schedule, optional: true, inverse_of: :invoice_reminders
 
   enum :category, CATEGORIES, prefix: true, validate: true
-  enum :status, STATUSES, prefix: true, validate: true
   enum :tone, TONES, prefix: true, validate: { allow_nil: true }
+
+  delegate :status,
+    :status_pending?,
+    :status_sent?,
+    :status_failed?,
+    :sent_at,
+    :provider_message_id,
+    :provider_thread_id,
+    :failure_reason,
+    to: :invoice_message
 
   validates :stage_key, presence: true
   validates :stage_key, uniqueness: { scope: :invoice_id }
+  validates :invoice_message_id, uniqueness: true
   validates :invoice_schedule_id, uniqueness: { scope: :invoice_id }, allow_nil: true
   validates :day_offset, numericality: { only_integer: true, greater_than: 0 }
   validate :account_matches_invoice
+  validate :invoice_message_matches_reminder
   validate :invoice_schedule_matches_account
   validate :stage_key_matches_category_and_day_offset
 
@@ -42,6 +50,15 @@ class InvoiceReminder < ApplicationRecord
       return if account.blank? || invoice_schedule.blank? || account == invoice_schedule.account
 
       errors.add(:invoice_schedule, "must belong to the same account")
+    end
+
+    def invoice_message_matches_reminder
+      return if invoice_message.blank? || invoice.blank? || account.blank?
+
+      errors.add(:invoice_message, "must belong to the same invoice") unless invoice_message.invoice == invoice
+      errors.add(:invoice_message, "must belong to the same account") unless invoice_message.account == account
+      errors.add(:invoice_message, "must be an outbound scheduled reminder") unless
+        invoice_message.direction_outbound? && invoice_message.kind_scheduled_reminder?
     end
 
     def stage_key_matches_category_and_day_offset

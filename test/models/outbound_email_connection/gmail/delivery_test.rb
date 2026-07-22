@@ -7,7 +7,7 @@ class OutboundEmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
     connection = outbound_email_connections(:paid_jar_gmail)
     invoice.account.update!(invoice_reminder_from_name: "Accounts Team")
     service = mock
-    response = Struct.new(:id).new("gmail-message-123")
+    response = Struct.new(:id, :thread_id).new("gmail-message-123", "gmail-thread-456")
     captured_message = nil
     service.expects(:authorization=).with("gmail-access-token")
     service.expects(:send_user_message).with do |user_id, message|
@@ -19,13 +19,14 @@ class OutboundEmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
       invoice_schedules(:normal_pre_due_7)
     ).message
 
-    message_id = OutboundEmailConnection::Gmail::Delivery.new(
+    result = OutboundEmailConnection::Gmail::Delivery.new(
       account: invoice.account,
       connection:,
       service:
     ).deliver(mail_message)
 
-    assert_equal "gmail-message-123", message_id
+    assert_equal "gmail-message-123", result.provider_message_id
+    assert_equal "gmail-thread-456", result.provider_thread_id
     assert_equal [ "billing@paymentreminder.example" ], captured_message.from
     assert_equal [ "Accounts Team" ], captured_message[:from].display_names
     assert_equal [ "customer@example.com" ], captured_message.to

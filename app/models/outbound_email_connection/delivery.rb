@@ -1,4 +1,6 @@
 class OutboundEmailConnection::Delivery
+  Result = Data.define(:provider_message_id, :provider_thread_id)
+
   def initialize(account:, connection:)
     @account = account
     @connection = connection

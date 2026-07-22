@@ -5,11 +5,12 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     @invoice = invoices(:xero_invoice)
   end
 
-  test "belongs to an account and invoice" do
+  test "belongs to an account invoice and invoice message" do
     reminder = build_reminder
 
     assert_equal @invoice.account, reminder.account
     assert_equal @invoice, reminder.invoice
+    assert_equal @invoice, reminder.invoice_message.invoice
   end
 
   test "records a sent reminder receipt by default" do
@@ -21,7 +22,9 @@ class InvoiceReminderTest < ActiveSupport::TestCase
   end
 
   test "records a failed reminder receipt" do
-    reminder = build_reminder(status: :failed, failure_reason: "delivery failed")
+    reminder = build_reminder(
+      invoice_message: build_message(status: :failed, sent_at: nil, failure_reason: "delivery failed")
+    )
 
     assert reminder.save
     assert_predicate reminder, :status_failed?
@@ -49,17 +52,15 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     assert_includes reminder.errors[:tone], "is not included in the list"
   end
 
-  test "requires a valid category status and stage" do
+  test "requires a valid category and stage" do
     reminder = build_reminder(
       category: "other",
-      status: "other",
       stage_key: nil,
       day_offset: 0
     )
 
     assert_not reminder.valid?
     assert_includes reminder.errors[:category], "is not included in the list"
-    assert_includes reminder.errors[:status], "is not included in the list"
     assert_includes reminder.errors[:stage_key], "can't be blank"
     assert_includes reminder.errors[:day_offset], "must be greater than 0"
   end
@@ -95,6 +96,45 @@ class InvoiceReminderTest < ActiveSupport::TestCase
     assert_includes reminder.errors[:account], "must match invoice account"
   end
 
+  test "requires its message to match its invoice and account" do
+    other_invoice = @invoice.dup
+    other_invoice.external_id = "invoice-reminder-message-other-invoice"
+    other_invoice.save!
+    reminder = build_reminder(invoice_message: build_message(invoice: other_invoice))
+
+    assert_not reminder.valid?
+    assert_includes reminder.errors[:invoice_message], "must belong to the same invoice"
+  end
+
+  test "requires an outbound scheduled reminder message" do
+    inbound_message = build_message(
+      direction: :inbound,
+      kind: :due_date_answer,
+      status: :received,
+      sent_at: nil,
+      received_at: Time.current
+    )
+    reminder = build_reminder(invoice_message: inbound_message)
+
+    assert_not reminder.valid?
+    assert_includes reminder.errors[:invoice_message], "must be an outbound scheduled reminder"
+  end
+
+  test "allows an invoice message to describe only one reminder" do
+    first = build_reminder
+    first.save!
+    duplicate = build_reminder(
+      invoice_message: first.invoice_message,
+      category: :overdue,
+      day_offset: 3,
+      stage_key: "overdue_3",
+      invoice_schedule: nil
+    )
+
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:invoice_message_id], "has already been taken"
+  end
+
   test "requires its invoice schedule to belong to the same account" do
     other_account = Account.create!(name: "Other Schedule Receipt Account")
     other_schedule = other_account.invoice_schedules.first
@@ -128,13 +168,32 @@ class InvoiceReminderTest < ActiveSupport::TestCase
 
   private
     def build_reminder(attributes = {})
+      invoice = attributes.fetch(:invoice, @invoice)
+      account = attributes.fetch(:account, invoice.account)
+
       InvoiceReminder.new(
         {
-          account: @invoice.account,
-          invoice: @invoice,
+          account:,
+          invoice:,
+          invoice_message: build_message(invoice:, account:),
           category: :pre_due,
           stage_key: "pre_due_7",
           day_offset: 7
+        }.merge(attributes)
+      )
+    end
+
+    def build_message(invoice: @invoice, account: invoice.account, **attributes)
+      InvoiceMessage.new(
+        {
+          account:,
+          invoice:,
+          direction: :outbound,
+          kind: :scheduled_reminder,
+          status: :sent,
+          sent_at: Time.current,
+          to_addresses: [],
+          cc_addresses: []
         }.merge(attributes)
       )
     end

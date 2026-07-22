@@ -15,7 +15,7 @@ class InvoiceReminders::SendJob < ApplicationJob
 
   limits_concurrency(
     to: 1,
-    key: ->(invoice_id, category, day_offset, *) { "#{invoice_id}:#{category}_#{day_offset}" },
+    key: ->(invoice_id, *) { invoice_id.to_s },
     duration: 1.hour,
     on_conflict: :block
   )
@@ -26,11 +26,17 @@ class InvoiceReminders::SendJob < ApplicationJob
     return unless invoice
 
     delivery_context = delivery_context_for(invoice:, category:, day_offset:, stage_key:)
-    return unless delivery_context
+    unless delivery_context
+      cancel_pending_retry(invoice:, stage_key:)
+      return
+    end
 
     invoice = InvoiceReminders::InvoiceFreshnessCheck.call(invoice)
     delivery_context = delivery_context_for(invoice:, category:, day_offset:, stage_key:)
-    return unless delivery_context
+    unless delivery_context
+      cancel_pending_retry(invoice:, stage_key:)
+      return
+    end
 
     stage, connection = delivery_context
 
@@ -53,7 +59,8 @@ class InvoiceReminders::SendJob < ApplicationJob
 
       stage = current_stage_for(invoice:, category:, day_offset:)
       return unless stage
-      return unless stage_not_delivered?(invoice:, stage:)
+      return unless stage_available_for_delivery?(invoice:, stage:)
+      return unless outside_follow_up_cooldown?(invoice:, stage_key:)
       return unless stage_due_today?(invoice:, stage:)
       return unless recipient_available?(invoice:, stage_key:)
 
@@ -68,11 +75,6 @@ class InvoiceReminders::SendJob < ApplicationJob
 
       unless invoice.outstanding?
         log_skip(invoice:, stage_key:, reason: "not_outstanding")
-        return false
-      end
-
-      if invoice.invoice_reminders.exists?(stage_key:)
-        log_skip(invoice:, stage_key:, reason: "duplicate_stage")
         return false
       end
 
@@ -93,10 +95,21 @@ class InvoiceReminders::SendJob < ApplicationJob
       nil
     end
 
-    def stage_not_delivered?(invoice:, stage:)
-      return true unless invoice.invoice_reminders.exists?(invoice_schedule: stage)
+    def stage_available_for_delivery?(invoice:, stage:)
+      reminder = existing_reminder(invoice:, stage:)
+      return true unless reminder
+      return true if temporary_delivery_retry? && reminder.invoice_message.status_pending?
 
       log_skip(invoice:, stage_key: stage.key, reason: "duplicate_stage")
+      false
+    end
+
+    def outside_follow_up_cooldown?(invoice:, stage_key:, lock: false)
+      messages = invoice.invoice_messages.successful_outbound
+      messages = messages.lock if lock
+      return true unless messages.sent_after(InvoiceMessage::FOLLOW_UP_COOLDOWN.ago).exists?
+
+      log_skip(invoice:, stage_key:, reason: "recent_outbound_message")
       false
     end
 
@@ -139,36 +152,111 @@ class InvoiceReminders::SendJob < ApplicationJob
 
     def deliver_reminder(invoice:, stage:, connection:)
       terminal = stage.category_overdue? && stage.terminal?
-      @outbound_connection = connection
-      email_sent, provider_message_id, failure_reason = send_email_result(invoice:, stage:)
+      mail_message = reminder_email(invoice:, stage:)
+      reminder = reserve_delivery(invoice:, stage:, mail_message:)
+      return unless reminder
 
-      reminder = record_delivery(
-        invoice:,
-        stage:,
+      @outbound_connection = connection
+      @mail_message = mail_message
+      email_sent, delivery_result, failure_reason = send_email_result(invoice:, stage:)
+
+      record_delivery_result(
+        reminder:,
         email_sent:,
-        provider_message_id:,
+        delivery_result:,
         failure_reason:
       )
       log_delivery(invoice:, stage:, email_sent:)
       notify_account_users(invoice:, reminder:, terminal:) if email_sent
+    ensure
+      @mail_message = nil
+      @outbound_connection = nil
     end
 
-    def record_delivery(invoice:, stage:, email_sent:, provider_message_id: nil, failure_reason:)
-      receipt_attributes = {
-        account: invoice.account,
-        category: stage.category,
-        day_offset: stage.day_offset,
-        stage_key: stage.key,
-        status: email_sent ? :sent : :failed,
-        tone: stage.tone.to_s,
-        sent_at: email_sent ? Time.current : nil,
-        provider_message_id: email_sent ? provider_message_id : nil,
-        failure_reason:
-      }
+    def reserve_delivery(invoice:, stage:, mail_message:)
+      reminder = nil
 
-      invoice.invoice_reminders.create!(receipt_attributes.merge(invoice_schedule: stage))
-    rescue ActiveRecord::InvalidForeignKey
-      invoice.invoice_reminders.create!(receipt_attributes)
+      invoice.with_lock do
+        existing = existing_reminder(invoice:, stage:)
+        if existing
+          if temporary_delivery_retry? && existing.invoice_message.status_pending?
+            reminder = existing
+          else
+            log_skip(invoice:, stage_key: stage.key, reason: "duplicate_stage")
+          end
+          next
+        end
+
+        next unless outside_follow_up_cooldown?(invoice:, stage_key: stage.key, lock: true)
+
+        if invoice.invoice_messages.direction_outbound.status_pending.lock.exists?
+          log_skip(invoice:, stage_key: stage.key, reason: "outbound_delivery_in_progress")
+          next
+        end
+
+        message = invoice.invoice_messages.create!(
+          invoice_message_attributes(invoice:, mail_message:)
+        )
+        reminder = invoice.invoice_reminders.create!(
+          account: invoice.account,
+          invoice_message: message,
+          invoice_schedule: stage,
+          category: stage.category,
+          day_offset: stage.day_offset,
+          stage_key: stage.key,
+          tone: stage.tone.to_s
+        )
+      end
+
+      reminder
+    rescue ActiveRecord::InvalidForeignKey, ActiveRecord::RecordNotUnique
+      log_skip(invoice:, stage_key: stage.key, reason: "delivery_reservation_conflict")
+      nil
+    end
+
+    def invoice_message_attributes(invoice:, mail_message:)
+      {
+        account: invoice.account,
+        direction: :outbound,
+        kind: :scheduled_reminder,
+        status: :pending,
+        from_address: Array(mail_message.from).first,
+        to_addresses: Array(mail_message.to),
+        cc_addresses: Array(mail_message.cc),
+        subject: mail_message.subject,
+        body: message_body(mail_message)
+      }
+    end
+
+    def message_body(mail_message)
+      if mail_message.multipart?
+        mail_message.text_part&.body&.decoded.presence ||
+          mail_message.html_part&.body&.decoded.to_s
+      else
+        mail_message.body.decoded
+      end
+    end
+
+    def record_delivery_result(reminder:, email_sent:, delivery_result:, failure_reason:)
+      attributes = if email_sent
+        {
+          status: :sent,
+          sent_at: Time.current,
+          provider_message_id: provider_message_id(delivery_result),
+          provider_thread_id: provider_thread_id(delivery_result),
+          failure_reason: nil
+        }
+      else
+        {
+          status: :failed,
+          sent_at: nil,
+          provider_message_id: nil,
+          provider_thread_id: nil,
+          failure_reason:
+        }
+      end
+
+      reminder.invoice_message.update!(attributes)
     end
 
     def log_delivery(invoice:, stage:, email_sent:)
@@ -187,7 +275,7 @@ class InvoiceReminders::SendJob < ApplicationJob
 
     def send_email_result(invoice:, stage:)
       result = send_email(invoice:, stage:)
-      [ result.present?, result.is_a?(String) ? result : nil, nil ]
+      [ result.present?, result, result.present? ? nil : "Email provider did not confirm delivery." ]
     rescue OutboundEmailConnection::Errors::TemporaryDeliveryError
       raise
     rescue OutboundEmailConnection::Errors::AuthenticationError => error
@@ -212,11 +300,15 @@ class InvoiceReminders::SendJob < ApplicationJob
     end
 
     def send_email(invoice:, stage:)
-      message = InvoiceReminderMailer.reminder(invoice, stage).message
+      message = @mail_message || reminder_email(invoice:, stage:)
       OutboundEmailConnection::Delivery.new(
         account: invoice.account,
         connection: @outbound_connection
       ).deliver(message)
+    end
+
+    def reminder_email(invoice:, stage:)
+      InvoiceReminderMailer.reminder(invoice, stage).message
     end
 
     def record_exhausted_temporary_failure(error)
@@ -224,20 +316,60 @@ class InvoiceReminders::SendJob < ApplicationJob
       invoice = Invoice.find_by(id: invoice_id)
       return unless invoice
 
-      stage = current_stage_for(invoice:, category:, day_offset:)
-      return unless stage
-      return if invoice.invoice_reminders.exists?(stage_key: stage.key)
+      stage_key = "#{category}_#{day_offset}"
+      reminder = invoice.invoice_reminders.includes(:invoice_message).find_by(stage_key:)
+      return unless reminder&.invoice_message&.status_pending?
 
-      record_delivery(
-        invoice:,
-        stage:,
-        email_sent: false,
-        failure_reason: error.message
+      reminder.invoice_message.update!(status: :failed, failure_reason: error.message)
+      log_event(
+        :error,
+        "invoice_reminder.delivery_failed",
+        account_id: invoice.account_id,
+        invoice_id: invoice.id,
+        stage_key:
       )
-      log_delivery(invoice:, stage:, email_sent: false)
+    end
+
+    def cancel_pending_retry(invoice:, stage_key:)
+      return unless temporary_delivery_retry?
+
+      reminder = invoice.invoice_reminders.includes(:invoice_message).find_by(stage_key:)
+      return unless reminder&.invoice_message&.status_pending?
+
+      reminder.invoice_message.update!(
+        status: :failed,
+        failure_reason: "Reminder was no longer eligible (#{@last_skip_reason || "unknown_reason"})."
+      )
+    end
+
+    def existing_reminder(invoice:, stage:)
+      invoice.invoice_reminders
+        .includes(:invoice_message)
+        .where("stage_key = :stage_key OR invoice_schedule_id = :schedule_id", stage_key: stage.key, schedule_id: stage.id)
+        .first
+    end
+
+    def temporary_delivery_retry?
+      exception_executions[
+        [ OutboundEmailConnection::Errors::TemporaryDeliveryError ].to_s
+      ].to_i.positive?
+    end
+
+    def provider_message_id(delivery_result)
+      return delivery_result.provider_message_id if delivery_result.respond_to?(:provider_message_id)
+      return delivery_result if delivery_result.is_a?(String)
+
+      nil
+    end
+
+    def provider_thread_id(delivery_result)
+      return delivery_result.provider_thread_id if delivery_result.respond_to?(:provider_thread_id)
+
+      nil
     end
 
     def log_skip(level = :info, invoice:, stage_key:, reason:, **context)
+      @last_skip_reason = reason
       log_event(
         level,
         "invoice_reminder.skipped",

@@ -196,12 +196,81 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
         customer:,
         due_on: due_stage.invoice_due_on_for(reminder_on:)
       )
-      create_receipt(invoice:, stage: other_stage, status: :sent)
+      create_receipt(
+        invoice:,
+        stage: other_stage,
+        status: :sent,
+        sent_at: InvoiceMessage::FOLLOW_UP_COOLDOWN.ago - 1.second
+      )
 
       assert_enqueued_with(
         job: InvoiceReminders::SendJob,
         args: [ invoice.id, "pre_due", 3, "friendly" ]
       ) do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
+  test "does not queue an invoice contacted successfully in the last 48 hours" do
+    reminder_on = Date.new(2026, 11, 17)
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      customer = create_customer(payer_segment: :good_debtor)
+      invoice = create_invoice(customer:, due_on: reminder_on + 3.days)
+      create_message(
+        invoice:,
+        kind: :invoice_resend,
+        status: :sent,
+        sent_at: 47.hours.ago
+      )
+
+      assert_no_enqueued_jobs only: InvoiceReminders::SendJob do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
+  test "queues an invoice whose last successful message was exactly 48 hours ago" do
+    reminder_on = Date.new(2026, 11, 17)
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      customer = create_customer(payer_segment: :good_debtor)
+      invoice = create_invoice(customer:, due_on: reminder_on + 3.days)
+      create_message(
+        invoice:,
+        kind: :due_date_answer,
+        status: :sent,
+        sent_at: InvoiceMessage::FOLLOW_UP_COOLDOWN.ago
+      )
+
+      assert_enqueued_with(
+        job: InvoiceReminders::SendJob,
+        args: [ invoice.id, "pre_due", 3, "friendly" ]
+      ) do
+        Account::InvoiceReminders::ScheduleJob.perform_now
+      end
+    end
+  end
+
+  test "failed pending and inbound messages do not start the 48 hour cooldown" do
+    reminder_on = Date.new(2026, 11, 17)
+
+    travel_to reminder_on.in_time_zone.change(hour: 12) do
+      customer = create_customer(payer_segment: :good_debtor)
+      invoices = 3.times.map do
+        create_invoice(customer:, due_on: reminder_on + 3.days)
+      end
+      create_message(invoice: invoices.first, status: :failed)
+      create_message(invoice: invoices.second, status: :pending)
+      create_message(
+        invoice: invoices.third,
+        direction: :inbound,
+        status: :received,
+        received_at: Time.current
+      )
+
+      assert_enqueued_jobs 3, only: InvoiceReminders::SendJob do
         Account::InvoiceReminders::ScheduleJob.perform_now
       end
     end
@@ -305,8 +374,11 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       category: :pre_due,
       day_offset: 3,
       stage_key: "pre_due_3",
-      status: :sent,
-      sent_at: reminder_on - 1.day
+      invoice_message: create_message(
+        invoice:,
+        status: :sent,
+        sent_at: reminder_on - 1.day
+      )
     )
     schedule.update!(day_offset: 2)
 
@@ -345,14 +417,37 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
       invoice
     end
 
-    def create_receipt(invoice:, stage:, status:)
+    def create_receipt(invoice:, stage:, status:, sent_at: nil)
       invoice.invoice_reminders.create!(
         account: invoice.account,
         category: stage.category,
         day_offset: stage.day_offset,
         stage_key: stage.key,
+        invoice_message: create_message(
+          invoice:,
+          status:,
+          sent_at: status.to_sym == :sent ? sent_at || Time.current : nil
+        )
+      )
+    end
+
+    def create_message(
+      invoice:,
+      direction: :outbound,
+      kind: :scheduled_reminder,
+      status:,
+      sent_at: nil,
+      received_at: nil
+    )
+      invoice.invoice_messages.create!(
+        account: invoice.account,
+        direction:,
+        kind:,
         status:,
-        sent_at: status == :sent ? Time.current : nil
+        sent_at:,
+        received_at:,
+        to_addresses: [],
+        cc_addresses: []
       )
     end
 

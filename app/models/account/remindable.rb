@@ -33,5 +33,13 @@ module Account::Remindable
         .where.not(
           id: InvoiceReminder.where(stage_key: schedule.key).select(:invoice_id)
         )
+        .where.not(id: recently_contacted_invoice_ids)
+    end
+
+    def recently_contacted_invoice_ids
+      invoice_messages
+        .successful_outbound
+        .sent_after(InvoiceMessage::FOLLOW_UP_COOLDOWN.ago)
+        .select(:invoice_id)
     end
 end

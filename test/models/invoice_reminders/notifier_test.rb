@@ -5,13 +5,19 @@ class InvoiceReminders::NotifierTest < ActiveSupport::TestCase
 
   setup do
     @invoice = invoices(:xero_invoice)
+    message = @invoice.invoice_messages.create!(
+      account: @invoice.account,
+      direction: :outbound,
+      kind: :scheduled_reminder,
+      status: :sent,
+      sent_at: Time.current
+    )
     @reminder = @invoice.invoice_reminders.create!(
       account: @invoice.account,
+      invoice_message: message,
       category: :pre_due,
       day_offset: 7,
       stage_key: "pre_due_7",
-      status: :sent,
-      sent_at: Time.current,
       tone: :friendly
     )
   end

@@ -68,10 +68,24 @@ class InvoicesHelperTest < ActionView::TestCase
     failed_at = Time.zone.local(2026, 7, 16, 9)
 
     assert_equal "Sent Jul 15, 2026", invoice_reminder_attempt_label(
-      InvoiceReminder.new(status: :sent, sent_at:)
+      InvoiceReminder.new(
+        invoice_message: InvoiceMessage.new(
+          direction: :outbound,
+          kind: :scheduled_reminder,
+          status: :sent,
+          sent_at:
+        )
+      )
     )
     assert_equal "Failed Jul 16, 2026", invoice_reminder_attempt_label(
-      InvoiceReminder.new(status: :failed, created_at: failed_at)
+      InvoiceReminder.new(
+        invoice_message: InvoiceMessage.new(
+          direction: :outbound,
+          kind: :scheduled_reminder,
+          status: :failed
+        ),
+        created_at: failed_at
+      )
     )
   end
 end

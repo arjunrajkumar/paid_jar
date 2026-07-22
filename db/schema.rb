@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_20_150000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_21_100000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -84,24 +84,47 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_150000) do
     t.index ["email_address"], name: "index_identities_on_email_address", unique: true
   end
 
+  create_table "invoice_messages", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
+    t.bigint "account_id", null: false
+    t.text "body"
+    t.json "cc_addresses", null: false
+    t.datetime "created_at", null: false
+    t.string "direction", null: false
+    t.text "failure_reason"
+    t.string "from_address"
+    t.bigint "invoice_id", null: false
+    t.string "kind", null: false
+    t.string "provider_message_id", collation: "utf8mb4_0900_bin"
+    t.string "provider_thread_id", collation: "utf8mb4_0900_bin"
+    t.datetime "received_at"
+    t.datetime "sent_at"
+    t.string "status", default: "pending", null: false
+    t.text "subject"
+    t.json "to_addresses", null: false
+    t.datetime "updated_at", null: false
+    t.index ["account_id", "provider_message_id"], name: "index_invoice_messages_on_provider_message", unique: true
+    t.index ["account_id", "provider_thread_id"], name: "index_invoice_messages_on_provider_thread"
+    t.index ["account_id"], name: "index_invoice_messages_on_account_id"
+    t.index ["invoice_id", "direction", "status", "sent_at"], name: "index_invoice_messages_on_outbound_delivery"
+    t.index ["invoice_id"], name: "index_invoice_messages_on_invoice_id"
+  end
+
   create_table "invoice_reminders", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
     t.string "category", null: false
     t.datetime "created_at", null: false
     t.integer "day_offset", null: false
-    t.text "failure_reason"
     t.bigint "invoice_id", null: false
+    t.bigint "invoice_message_id", null: false
     t.bigint "invoice_schedule_id"
-    t.string "provider_message_id"
-    t.datetime "sent_at"
     t.string "stage_key", null: false
-    t.string "status", default: "sent", null: false
     t.string "tone"
     t.datetime "updated_at", null: false
     t.index ["account_id"], name: "index_invoice_reminders_on_account_id"
     t.index ["invoice_id", "invoice_schedule_id"], name: "index_invoice_reminders_on_invoice_and_schedule", unique: true
     t.index ["invoice_id", "stage_key"], name: "index_invoice_reminders_on_invoice_id_and_stage_key", unique: true
     t.index ["invoice_id"], name: "index_invoice_reminders_on_invoice_id"
+    t.index ["invoice_message_id"], name: "index_invoice_reminders_on_invoice_message_id", unique: true
     t.index ["invoice_schedule_id"], name: "index_invoice_reminders_on_invoice_schedule_id"
   end
 
@@ -281,7 +304,10 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_20_150000) do
   add_foreign_key "customers", "customer_segments"
   add_foreign_key "customers", "invoice_sources"
   add_foreign_key "external_identities", "identities", on_delete: :cascade
+  add_foreign_key "invoice_messages", "accounts"
+  add_foreign_key "invoice_messages", "invoices"
   add_foreign_key "invoice_reminders", "accounts"
+  add_foreign_key "invoice_reminders", "invoice_messages"
   add_foreign_key "invoice_reminders", "invoice_schedules", on_delete: :nullify
   add_foreign_key "invoice_reminders", "invoices"
   add_foreign_key "invoice_schedules", "accounts"

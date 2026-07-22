@@ -18,7 +18,10 @@ class OutboundEmailConnection::Gmail::Delivery
       "me",
       Google::Apis::GmailV1::Message.new(raw: mail_message.encoded)
     )
-    response.id
+    OutboundEmailConnection::Delivery::Result.new(
+      provider_message_id: response.id,
+      provider_thread_id: response.thread_id
+    )
   rescue OutboundEmailConnection::Errors::AuthenticationError
     raise
   rescue Google::Apis::AuthorizationError => error

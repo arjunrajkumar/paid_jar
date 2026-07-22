@@ -7,20 +7,24 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     @invoice = invoices(:xero_invoice)
     @invoice.account.update!(automatic_invoice_reminders_enabled: true)
     InvoiceReminders::InvoiceFreshnessCheck.stubs(:call).returns(@invoice)
-    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns("gmail-message-123")
+    @delivery_result = OutboundEmailConnection::Delivery::Result.new(
+      provider_message_id: "gmail-message-123",
+      provider_thread_id: "gmail-thread-456"
+    )
+    OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver).returns(@delivery_result)
   end
 
-  test "limits concurrency to one job for each invoice stage" do
+  test "limits concurrency to one job for each invoice" do
     first_job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
     same_stage_job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "final")
     other_invoice_job = InvoiceReminders::SendJob.new(@invoice.id + 1, "pre_due", 7, "friendly")
     other_stage_job = InvoiceReminders::SendJob.new(@invoice.id, "overdue", 3, "direct")
 
     assert_predicate first_job, :concurrency_limited?
-    assert_equal "InvoiceReminders::SendJob/#{@invoice.id}:pre_due_7", first_job.concurrency_key
+    assert_equal "InvoiceReminders::SendJob/#{@invoice.id}", first_job.concurrency_key
     assert_equal first_job.concurrency_key, same_stage_job.concurrency_key
     refute_equal first_job.concurrency_key, other_invoice_job.concurrency_key
-    refute_equal first_job.concurrency_key, other_stage_job.concurrency_key
+    assert_equal first_job.concurrency_key, other_stage_job.concurrency_key
     assert_equal 1, InvoiceReminders::SendJob.concurrency_limit
     assert_equal 1.hour, InvoiceReminders::SendJob.concurrency_duration
     assert_equal :block, InvoiceReminders::SendJob.concurrency_on_conflict
@@ -47,7 +51,10 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
 
     travel_to sent_at do
       assert_no_emails do
-        assert_difference -> { @invoice.invoice_reminders.count }, 1 do
+        assert_difference [
+          -> { @invoice.invoice_reminders.count },
+          -> { @invoice.invoice_messages.count }
+        ], 1 do
           InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
         end
       end
@@ -60,7 +67,17 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     assert_predicate reminder, :status_sent?
     assert_equal sent_at, reminder.sent_at
     assert_equal "gmail-message-123", reminder.provider_message_id
+    assert_equal "gmail-thread-456", reminder.provider_thread_id
     assert_nil reminder.failure_reason
+
+    message = reminder.invoice_message
+    assert_predicate message, :direction_outbound?
+    assert_predicate message, :kind_scheduled_reminder?
+    assert_equal [ "billing@paymentreminder.example" ], [ message.from_address ]
+    assert_equal [ "customer@example.com" ], message.to_addresses
+    assert_equal [], message.cc_addresses
+    assert_equal "Upcoming Payment Due: Invoice INV-001", message.subject
+    assert_match "friendly reminder", message.body
   end
 
   test "creates a failed receipt when the email is not sent" do
@@ -148,8 +165,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "does not send or create a duplicate receipt" do
-    @invoice.invoice_reminders.create!(
-      account: @invoice.account,
+    create_reminder(
       category: :pre_due,
       day_offset: 7,
       stage_key: "pre_due_7",
@@ -542,8 +558,7 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   test "logs a duplicate stage" do
-    @invoice.invoice_reminders.create!(
-      account: @invoice.account,
+    create_reminder(
       category: :pre_due,
       day_offset: 7,
       stage_key: "pre_due_7",
@@ -656,17 +671,81 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     assert_equal "invalid recipient", reminder.failure_reason
   end
 
-  test "temporary Gmail failure retries with backoff without recording a receipt" do
+  test "temporary Gmail failure retries with one pending delivery record" do
     OutboundEmailConnection::Gmail::Delivery.any_instance.stubs(:deliver)
       .raises(OutboundEmailConnection::Errors::TemporaryDeliveryError, "rate limited")
 
     travel_to Time.zone.local(2026, 7, 24, 12) do
-      assert_enqueued_jobs 1, only: InvoiceReminders::SendJob do
-        InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+      assert_difference [
+        -> { @invoice.invoice_reminders.count },
+        -> { @invoice.invoice_messages.count }
+      ], 1 do
+        assert_enqueued_jobs 1, only: InvoiceReminders::SendJob do
+          InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+        end
       end
     end
 
-    assert_not @invoice.invoice_reminders.exists?(stage_key: "pre_due_7")
+    reminder = @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7")
+    assert_predicate reminder, :status_pending?
+    assert_nil reminder.sent_at
+    assert_nil reminder.failure_reason
+  end
+
+  test "a temporary-delivery retry reuses its pending message and reminder" do
+    reminder = create_reminder(
+      category: :pre_due,
+      day_offset: 7,
+      stage_key: "pre_due_7",
+      status: :pending
+    )
+    job = InvoiceReminders::SendJob.new(@invoice.id, "pre_due", 7, "friendly")
+    job.exception_executions[
+      [ OutboundEmailConnection::Errors::TemporaryDeliveryError ].to_s
+    ] = 1
+    job.expects(:send_email).once.returns(@delivery_result)
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        assert_no_difference -> { @invoice.invoice_messages.count } do
+          job.perform_now
+        end
+      end
+    end
+
+    assert_equal reminder.id, @invoice.invoice_reminders.find_by!(stage_key: "pre_due_7").id
+    assert_predicate reminder.invoice_message.reload, :status_sent?
+    assert_equal "gmail-message-123", reminder.provider_message_id
+    assert_equal "gmail-thread-456", reminder.provider_thread_id
+  end
+
+  test "a duplicate initial job does not bypass a pending retry's backoff" do
+    reminder = create_reminder(
+      category: :pre_due,
+      day_offset: 7,
+      stage_key: "pre_due_7",
+      status: :pending
+    )
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_now(@invoice.id, "pre_due", 7, "friendly")
+    end
+
+    assert_predicate reminder.invoice_message.reload, :status_pending?
+  end
+
+  test "does not send a queued reminder after another outbound message contacts the invoice" do
+    InvoiceReminders::SendJob.any_instance.expects(:send_email).never
+
+    travel_to Time.zone.local(2026, 7, 24, 12) do
+      InvoiceReminders::SendJob.perform_later(@invoice.id, "pre_due", 7, "friendly")
+      create_message(kind: :invoice_resend, status: :sent, sent_at: Time.current)
+
+      assert_no_difference -> { @invoice.invoice_reminders.count } do
+        perform_enqueued_jobs(only: InvoiceReminders::SendJob)
+      end
+    end
   end
 
   test "exhausted temporary Gmail retries record a failed receipt" do
@@ -687,6 +766,32 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
   end
 
   private
+    def create_reminder(category:, day_offset:, stage_key:, status:, sent_at: nil)
+      @invoice.invoice_reminders.create!(
+        account: @invoice.account,
+        category:,
+        day_offset:,
+        stage_key:,
+        invoice_message: create_message(status:, sent_at:)
+      )
+    end
+
+    def create_message(
+      kind: :scheduled_reminder,
+      status:,
+      sent_at: nil
+    )
+      @invoice.invoice_messages.create!(
+        account: @invoice.account,
+        direction: :outbound,
+        kind:,
+        status:,
+        sent_at:,
+        to_addresses: [],
+        cc_addresses: []
+      )
+    end
+
     def create_stripe_invoice
       source = @invoice.account.invoice_sources.create!(
         provider: :stripe,
