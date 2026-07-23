@@ -19,7 +19,7 @@ gem "google-apis-gmail_v1"
 gem "jwt", "~> 3.2"
 gem "madmin", "~> 2.3"
 gem "sentry-rails", "~> 6.6"
-gem "stripe", "~> 19.0"
+gem "stripe", "~> 19.3"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 # gem "bcrypt", "~> 3.1.7"
