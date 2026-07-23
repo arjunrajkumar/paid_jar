@@ -2,6 +2,7 @@ class ConversationMessages::Content < Data.define(
   :from_address,
   :to_addresses,
   :cc_addresses,
+  :bcc_addresses,
   :subject,
   :body
 )
@@ -10,6 +11,7 @@ class ConversationMessages::Content < Data.define(
       from_address: Array(mail_message.from).first,
       to_addresses: Array(mail_message.to),
       cc_addresses: Array(mail_message.cc),
+      bcc_addresses: Array(mail_message.bcc),
       subject: mail_message.subject,
       body: message_body(mail_message)
     )

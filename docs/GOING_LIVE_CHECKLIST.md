@@ -40,7 +40,8 @@ Use these exact production URLs when a provider asks for them:
 - [ ] Publish the privacy policy and terms at the exact URLs in the table above.
 - [ ] Ensure the policies and homepage are accessible without signing in.
 - [ ] Link the privacy policy and terms from the marketing homepage and the application.
-- [ ] Ensure the homepage clearly explains that PaymentReminder connects to Gmail only to send reminders and connects to Xero or Stripe to import invoice information.
+- [ ] Ensure the homepage clearly explains that PaymentReminder connects to Gmail to send reminders
+  and screen relevant mailbox activity, and connects to Xero or Stripe to import invoice information.
 - [ ] Confirm the operator name, support address, data practices, and deletion/contact instructions in the policies are accurate.
 - [ ] Have the policies reviewed for the jurisdictions in which the service will be offered.
 - [ ] Review existing SPF and DMARC records before adding email-provider DNS records. A domain must have no more than one SPF TXT record.
@@ -125,9 +126,10 @@ Google requires an owner/editor of the Cloud project to verify every OAuth autho
 - [ ] Create a **Web application** OAuth client.
 - [ ] Add this exact authorized redirect URI: `https://app.paymentreminderemails.com/gmail/callback`.
 - [ ] Under **Data Access**, declare only the scopes used by the application:
-  - `email`
-  - `profile`
+  - `https://www.googleapis.com/auth/userinfo.email`
+  - `https://www.googleapis.com/auth/userinfo.profile`
   - `https://www.googleapis.com/auth/gmail.send`
+  - `https://www.googleapis.com/auth/gmail.readonly`
 - [ ] Add the production client ID and client secret using `bin/rails credentials:edit`:
 
 ```yaml
@@ -136,12 +138,17 @@ google:
   client_secret: your-production-google-client-secret
 ```
 
-The `gmail.send` scope is classified as sensitive, not restricted. It allows sending but does not allow PaymentReminder to read the mailbox. See [Gmail API scopes](https://developers.google.com/workspace/gmail/api/auth/scopes).
+`gmail.send` is sensitive and `gmail.readonly` is restricted. Readonly access supports screened
+History API synchronization without modifying labels or read state. A hosted deployment storing
+Gmail data may need a security assessment in addition to OAuth verification. See
+[Gmail API scopes](https://developers.google.com/workspace/gmail/api/auth/scopes) and
+[restricted-scope verification](https://support.google.com/cloud/answer/9110914).
 
 ### Submit OAuth verification
 
 - [ ] Move the OAuth app toward **In production** rather than relying on Testing status for real users.
-- [ ] Prepare a concise scope justification explaining that `gmail.send` sends invoice reminders chosen and configured by the account owner.
+- [ ] Prepare scope justifications explaining reminder delivery and the seven-day screened initial
+  sync, incremental History API polling, recovery sync, and durable relevant-message receipts.
 - [ ] Record the complete authorization flow, including the consent screen, Gmail connection, test email, sender shown in settings, and disconnect flow.
 - [ ] Provide reviewer access and test instructions that do not require private verbal coordination.
 - [ ] Confirm the privacy policy explains how Google user data is accessed, used, stored, protected, and deleted.
@@ -156,6 +163,8 @@ Google's current requirements are documented in [OAuth app branding](https://sup
 - [ ] Connect a Gmail or Google Workspace account that is not the Cloud project owner.
 - [ ] Confirm the callback returns to PaymentReminder without `redirect_uri_mismatch`.
 - [ ] Send the built-in Gmail test email and confirm its visible From address.
+- [ ] Confirm an already-read and archived reply is imported on the next poll without changing its
+  Gmail label or read state.
 - [ ] Disconnect Gmail in PaymentReminder and confirm automation is disabled.
 - [ ] Reconnect and confirm automatic reminders remain off until explicitly enabled.
 
@@ -365,7 +374,9 @@ sentry:
 - [ ] Confirm the `refresh-invoice-sources` monitor appears after the six-hour invoice-source scheduler first runs.
 - [ ] Confirm the `schedule-payment-promise-follow-ups` monitor appears after the hourly payment-promise scheduler first runs.
 - [ ] Confirm the `reconcile-pending-conversation-messages` monitor appears after the hourly pending-delivery reconciler first runs.
-- [ ] Configure Sentry notifications for missed, timed-out, and error check-ins on all four monitors.
+- [ ] Confirm the `poll-gmail-inbound` monitor appears after the 15-minute Gmail poll first runs.
+- [ ] Confirm the `process-pending-gmail-receipts` monitor appears after the 15-minute receipt recovery job first runs.
+- [ ] Configure Sentry notifications for missed, timed-out, and error check-ins on all six monitors.
 - [ ] Configure issue alerts for new and regressed production errors.
 - [ ] Configure a threshold alert for repeated Gmail authentication failures (`provider:gmail`, `operation:invoice_reminder_delivery`).
 - [ ] Configure alerts for repeated Xero OAuth and Stripe App authentication/API retry failures.

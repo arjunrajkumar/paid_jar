@@ -50,7 +50,19 @@ class PaymentPromises::DeliveryReservation
       end
 
       mail_message = PaymentPromiseMailer.follow_up(payment_promise).message
-      message = decision.message || reserve_new_message(mail_message:)
+      message = decision.message || reserve_new_message(
+        mail_message:,
+        connection: decision.connection
+      )
+      unless message.bind_delivery_mailbox!(
+        connection: decision.connection,
+        job_id: delivery_job_id
+      )
+        reservation = skipped_reason(:email_connection_replaced)
+        next
+      end
+
+      message.apply_internet_message_id!(mail_message)
 
       if decision.message && !message.refresh_delivery_attempt!(
         job_id: delivery_job_id,
@@ -79,11 +91,14 @@ class PaymentPromises::DeliveryReservation
   private
     attr_reader :payment_promise, :delivery_job_id, :on
 
-    def reserve_new_message(mail_message:)
+    def reserve_new_message(mail_message:, connection:)
       message = payment_promise.invoice.conversation_messages.create!(
         {
           account: payment_promise.account,
           conversation: Conversation.for_invoice!(invoice: payment_promise.invoice),
+          email_connection: connection,
+          email_connection_generation: connection.credential_generation,
+          provider_account_id: connection.provider_account_id,
           direction: :outbound,
           kind: :promise_follow_up,
           status: :pending,

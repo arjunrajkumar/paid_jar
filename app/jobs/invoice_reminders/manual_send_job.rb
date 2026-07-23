@@ -46,13 +46,17 @@ class InvoiceReminders::ManualSendJob < ApplicationJob
       delivery_result = ConversationMessages::ProviderDelivery.call(
         account: invoice.account,
         connection: reservation.connection,
+        provider_account_id: reservation.message.provider_account_id,
+        credential_generation: reservation.message.email_connection_generation,
         mail_message: reservation.mail_message,
         operation: "manual_invoice_reminder_delivery",
         context: {
           account_id: invoice.account_id,
           invoice_id: invoice.id,
           conversation_message_id: reservation.message.id
-        }
+        },
+        conversation_message: reservation.message,
+        delivery_job_id: job_id
       )
 
       if delivery_result.confirmed?

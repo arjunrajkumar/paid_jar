@@ -92,12 +92,22 @@ ordinary user, and operator behavior exposed through the platform-admin panel.
 
 - **Available:** an owner or admin can connect or reconnect a Gmail or Google Workspace account,
   send a test email, set the sender display name, disconnect Gmail, and enable or disable automatic
-  reminders. The OAuth scope is send-only.
+  reminders. OAuth includes `https://www.googleapis.com/auth/gmail.send`, restricted
+  `https://www.googleapis.com/auth/gmail.readonly`,
+  `https://www.googleapis.com/auth/userinfo.email`,
+  `https://www.googleapis.com/auth/userinfo.profile`, and a stable Google account ID.
 - **Available:** each account has persisted reminder stages and tones for each debtor rating. The
   hourly scheduler finds invoices due for a stage and sends through the account's Gmail connection.
 - **Available:** delivery is recorded in a conversation-message ledger before sending and finalized with
   the provider message/thread identifier or a failure reason. Temporary provider errors use bounded
   retries, and pending deliveries older than two hours are reconciled to failed.
+- **Available:** a roughly 15-minute Gmail History poll creates durable message receipts, with a
+  seven-day screened initial sync and an overlapping recovery scan for expired cursors. Relevant
+  inbound customer mail and manually sent Gmail mail are imported; unrelated content is ignored at
+  receipt level. Imported manual mail participates in the 48-hour cooldown.
+- **Available as data, not ordinary UI:** automatic, spam, unmatched, ambiguous, and parse-problem
+  messages are persisted for future human review. Gmail state is never modified; raw MIME and
+  attachments are not retained.
 - **Available:** users can independently opt in to emails when a reminder succeeds and when the last
   overdue stage requires manual follow-up.
 - **Available:** an active payment promise or a successful outbound conversation message in the previous
@@ -172,15 +182,14 @@ promises, or email delivery state.
 - `scheduled_reminder` and `manual_reminder` for outbound collection messages;
 - `promise_follow_up` for an overdue payment-promise follow-up;
 - `customer_reply` for the manually recorded inbound source of a payment promise;
-- `customer_email` for a future unmatched inbound email;
+- `customer_email` for imported inbound email and `manual_email` for mail sent directly in Gmail;
 - `due_date_answer`, `payment_status_answer`, `invoice_resend`, and
   `dispute_acknowledgement` for future assistant responses.
 
-Only scheduled reminders, operator-initiated manual reminders, promise follow-ups, and manually
-recorded customer replies currently have complete producers. Gmail is authorized with send-only
-access, so there is no inbound mailbox reader, reply parser, automatic email understanding,
-AI classification/response pipeline, or customer conversation inbox. The conversation records,
-events, and other message kinds are durable domain foundations, not shipped user features.
+Scheduled reminders, operator-initiated manual reminders, promise follow-ups, manually recorded
+customer replies, and screened Gmail imports have complete producers. Gmail ingestion is
+deterministic and contains no automatic email understanding, AI classification/response pipeline,
+or customer conversation Inbox.
 
 ### Other latent operations
 
@@ -227,11 +236,15 @@ CRUD so an admin cannot casually break tenant or provider relationships.
   outstanding magic link.
 - Browse delivery failures, source failures, webhooks, suppressions, promises, sessions, and their
   associations across accounts.
+- Browse durable Gmail screening receipts and their processing state, and manually requeue a
+  terminally failed receipt. Receipts remain read-only outside that purpose-built retry action.
 - Browse the durable platform-admin event ledger. Redirecting POST/PATCH/PUT/DELETE requests handled
   by Madmin record the signed-in administrator, action, target record, affected account when known,
   timestamp, and names of changed fields without copying submitted values or secrets. Validation
   failures rendered in place are not currently recorded, and mutations made through ordinary
-  account controllers while impersonating are not individually written to this ledger.
+  account controllers while impersonating are not individually written to this ledger. A Gmail
+  receipt retry whose enqueue step raises records a dedicated failure event with only the error
+  class.
 - Refresh all debtor ratings in an account or refresh one customer; run today's reminder scheduler
   for one account.
 - Queue a Xero or Stripe invoice refresh, disconnect an invoice source, and retry a pending or failed
@@ -292,8 +305,10 @@ organization access, security policies, and consent screens remain authoritative
 | Invoice-reminder scheduler | Every hour | Enqueue stages due on the current date |
 | Payment-promise scheduler | Hourly at minute 20 | Enqueue follow-ups for due active promises |
 | Pending-message reconciler | Hourly at minute 40 | Fail deliveries left pending for more than 2 hours |
+| Gmail inbound poll | Every 15 minutes | Enqueue mailbox History synchronization |
+| Pending Gmail receipt processor | Every 15 minutes | Recover stalled receipts and enqueue due processing |
 
-All four jobs have Sentry cron-monitor check-ins when Sentry is configured. `/up` checks only the web
+All six jobs have Sentry cron-monitor check-ins when Sentry is configured. `/up` checks only the web
 process; it does not prove that queue workers or recurring jobs are healthy.
 
 ### Provider dependencies
@@ -304,8 +319,9 @@ process; it does not prove that queue workers or recurring jobs are healthy.
   secrets, live/test platform secret keys, distinct live/test webhook signing secrets, configured
   connected-account event destinations for real-time updates, and the required read-only App
   permissions.
-- Google OAuth client credentials, an approved callback URL, Gmail send scope, a usable refresh
-  token, and an account sender address that exactly matches the connected Gmail identity.
+- Google OAuth client credentials, an approved callback URL, canonical Google identity scopes,
+  Gmail send and readonly scopes, a usable refresh token, and an account sender address that
+  exactly matches the connected Gmail identity.
 - Amazon SES or another configured Rails mail transport for authentication and account-user
   notifications. Customer collection messages are delivered through the account's Gmail
   connection, not SES.
@@ -341,7 +357,7 @@ process; it does not prove that queue workers or recurring jobs are healthy.
 - Returned actionable validation errors for invalid HTML signup submissions.
 - Corrected the privacy policy to disclose that generated outbound message content is stored in the
   delivery ledger.
-- Removed test gems from the production container bundle and documented all four recurring-job
+- Removed test gems from the production container bundle and documented all six recurring-job
   monitors.
 
 ## Remaining product, policy, and operations gaps
@@ -349,8 +365,8 @@ process; it does not prove that queue workers or recurring jobs are healthy.
 These items were found during review but were not silently changed because they require product,
 privacy, security, or deployment decisions:
 
-- There is no inbound accounts-receivable inbox, Gmail read scope, reply ingestion, AI extraction,
-  automated answer generation, or human approval workflow, despite the broader product direction.
+- There is no ordinary-user accounts-receivable Inbox, AI extraction, automated answer generation,
+  or human approval workflow. Reviewable Gmail records currently require admin/data access.
 - Provider synchronization intentionally preserves an existing customer email when a later provider
   payload has a blank email. This may retain a stale recipient, but existing tests define the
   behavior and it needs an explicit product decision.

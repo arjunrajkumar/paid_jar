@@ -3,15 +3,17 @@
 Self-hosted accounts receivable for freelancers and small teams.
 
 PaymentReminder connects to Xero or Stripe, turns imported invoices into a prioritized
-receivables list, and sends scheduled reminders from each account's own Gmail address. A
+receivables list, sends scheduled reminders from each account's own Gmail address, and imports
+relevant customer replies and messages sent manually from that mailbox. A
 separate platform-admin console gives the person operating the installation a view across every
 account.
 
 ![PaymentReminder receivables list](docs/ui-north-star/after-home-inbox.png)
 
-PaymentReminder is working, early-stage software. The invoice-sync and outbound-reminder flows
-are implemented; the broader AI inbox, inbound email reading, and automated reply handling are
-not built yet. See the [capability audit](docs/CAPABILITY_AUDIT.md) for the exact current boundary.
+PaymentReminder is working, early-stage software. Invoice sync, outbound reminders, and screened
+Gmail shadow ingestion are implemented; an account-user conversation Inbox, AI understanding,
+and automated reply handling are not built yet. See the [capability audit](docs/CAPABILITY_AUDIT.md)
+for the exact current boundary.
 
 ## What it does
 
@@ -24,6 +26,9 @@ not built yet. See the [capability audit](docs/CAPABILITY_AUDIT.md) for the exac
   and sender identity; each user controls their own notification preferences.
 - Schedules debtor-specific reminders before and after an invoice is due, with durable delivery
   history, idempotency, retries, and fresh provider checks before sending.
+- Polls Gmail about every 15 minutes, imports relevant inbound replies and manually sent mail, and
+  retains unmatched or ambiguous relevant messages for future human review without changing Gmail
+  labels or read state.
 - Tracks payment promises and follow-ups in the domain; platform administrators can operate that
   flow while the customer-facing capture UI is still to be built.
 - Supports multiple accounts and users while keeping every normal application request scoped to
@@ -33,7 +38,8 @@ not built yet. See the [capability audit](docs/CAPABILITY_AUDIT.md) for the exac
 
 Not yet exposed to ordinary users: team invitations and role management, account switching,
 one-off reminders, payment-promise capture, customer and invoice detail pages, search, an inbound
-conversation inbox, Gmail reply ingestion, or AI-generated replies. These are documented as
+conversation inbox or AI-generated replies. Gmail ingestion currently has no ordinary-user Inbox;
+reviewable records are available only as durable domain/admin data. These boundaries are documented as
 latent or not built—not presented as shipped features.
 
 ## Run it locally
@@ -161,7 +167,7 @@ product:
 | --- | --- | --- |
 | Xero | Read invoices and their embedded customer details; receive invoice webhooks | Xero-backed receivables |
 | Stripe App | Read invoices; consume connected-account events for supported public Apps | Stripe-backed receivables |
-| Gmail / Google Workspace | Send from an account-owned mailbox with `gmail.send` | Customer reminders |
+| Gmail / Google Workspace | Send reminders and screen relevant mailbox activity with `gmail.send` and `gmail.readonly` | Customer reminders and shadow ingestion |
 | SMTP / Amazon SES | Send installation-wide application email | Email-code authentication and notifications |
 | Sentry | Report application failures and recurring-job check-ins | Optional monitoring |
 
@@ -185,6 +191,8 @@ sessions, failures, and other operational records. The console also provides exp
 impersonate an active user, manage access and roles, refresh sources and debtor ratings, run an
 account's reminder scheduler, send a one-off reminder, operate payment promises, disconnect
 providers, retry webhook processing, and revoke sessions or sign-in codes.
+Terminally failed Gmail screening receipts can also be inspected and explicitly requeued without
+exposing generic edit or delete controls.
 
 High-risk provider-owned records do not get unrestricted raw edit/delete controls, and platform
 admin access cannot bypass Xero, Stripe, or Google consent. Secrets and sensitive token material

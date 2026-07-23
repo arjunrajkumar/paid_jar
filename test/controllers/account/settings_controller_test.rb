@@ -408,10 +408,12 @@ class Account::SettingsControllerTest < ActionDispatch::IntegrationTest
       account.build_email_connection.connect_gmail!(
         email:,
         name: "Billing Team",
+        provider_account_id: "google-account-settings",
+        history_id: "100",
         access_token: "access-token",
         refresh_token: "refresh-token",
         expires_at: 1.hour.from_now,
-        scopes: [ "email", "profile", EmailConnection::Gmailable::SEND_SCOPE ]
+        scopes: EmailConnection::Gmailable::REQUIRED_SCOPES
       )
     end
 

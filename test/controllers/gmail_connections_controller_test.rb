@@ -12,13 +12,33 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
     EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
 
     get new_gmail_connection_url(script_name: account.slug)
-    get gmail_callback_url(script_name: account.slug), params: { code: "auth-code", state: client.state }
+    get gmail_callback_url(script_name: nil), params: { code: "auth-code", state: client.state }
 
     connection = account.reload.email_connection
     assert_redirected_to account_settings_url(script_name: account.slug)
     assert_predicate connection, :active?
     assert_equal "billing@example.com", connection.connected_email
     assert_nil other_account.reload.email_connection
+  end
+
+  test "unscoped callback restores the initiating account for a multi-account administrator" do
+    first_account = sign_up_and_complete(email_address: "multi-account-admin@example.com")
+    identity = first_account.users.owner.sole.identity
+    second_account = Account.create!(name: "Second Admin Account")
+    second_account.users.create!(
+      identity:,
+      name: "Multi Account Admin",
+      role: :owner
+    )
+    client = FakeGmailOauthClient.new
+    EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+
+    get new_gmail_connection_url(script_name: second_account.slug)
+    get gmail_callback_url(script_name: nil), params: { code: "auth-code", state: client.state }
+
+    assert_redirected_to account_settings_url(script_name: second_account.slug)
+    assert_nil first_account.reload.email_connection
+    assert_predicate second_account.reload.email_connection, :active?
   end
 
   test "callback cannot connect Gmail through another account's state" do
@@ -39,11 +59,13 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
     account = sign_up_and_complete(email_address: "owner-reconnect@example.com")
     connection = account.create_email_connection!(
       provider: :gmail,
+      provider_account_id: "google-account-123",
       connected_email: "billing@example.com",
       access_token: "old-access",
       refresh_token: "old-refresh",
       token_expires_at: 1.minute.from_now,
-      scopes: [ EmailConnection::Gmailable::SEND_SCOPE ],
+      scopes: EmailConnection::Gmailable::REQUIRED_SCOPES,
+      inbound_cursor: "100",
       status: :active
     )
     client = FakeGmailOauthClient.new(refresh_token: nil)
@@ -54,6 +76,59 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_equal "access-token", connection.reload.access_token
     assert_equal "old-refresh", connection.refresh_token
+    assert_equal "100", connection.inbound_cursor
+  end
+
+  test "a different Google identity resets the mailbox baseline" do
+    account = sign_up_and_complete(email_address: "owner-replace@example.com")
+    connection = connect_gmail(account)
+    connection.update!(last_inbound_synced_at: 1.day.ago)
+    client = FakeGmailOauthClient.new(
+      provider_account_id: "replacement-google-account",
+      email: "replacement@example.com",
+      history_id: "900"
+    )
+    EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+
+    get new_gmail_connection_url(script_name: account.slug)
+    get gmail_callback_url(script_name: account.slug), params: { code: "auth-code", state: client.state }
+
+    connection.reload
+    assert_equal "replacement-google-account", connection.provider_account_id
+    assert_equal "replacement@example.com", connection.connected_email
+    assert_equal "900", connection.inbound_cursor
+    assert_nil connection.last_inbound_synced_at
+  end
+
+  test "callback rejects a grant without Gmail readonly" do
+    account = sign_up_and_complete(email_address: "owner-scope@example.com")
+    scopes = EmailConnection::Gmailable::REQUIRED_SCOPES - [ EmailConnection::Gmailable::READ_SCOPE ]
+    client = FakeGmailOauthClient.new(scopes:)
+    EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+
+    get new_gmail_connection_url(script_name: account.slug)
+    get gmail_callback_url(script_name: account.slug), params: { code: "auth-code", state: client.state }
+
+    assert_nil account.reload.email_connection
+    assert_includes flash[:alert], "did not grant all required Gmail permissions"
+  end
+
+  test "callback remains successful when the initial inbound sync cannot enqueue" do
+    account = sign_up_and_complete(email_address: "owner-enqueue-failure@example.com")
+    client = FakeGmailOauthClient.new
+    EmailConnection::Gmail::OauthClient.stubs(:new).returns(client)
+    ActiveJob::Base.queue_adapter.stubs(:enqueue).raises(RuntimeError, "queue unavailable")
+    Rails.error.expects(:report).with(instance_of(RuntimeError), severity: :error)
+
+    get new_gmail_connection_url(script_name: account.slug)
+    get gmail_callback_url(script_name: nil), params: { code: "auth-code", state: client.state }
+
+    connection = account.reload.email_connection
+    assert_redirected_to account_settings_url(script_name: account.slug)
+    assert_equal "Gmail connected.", flash[:notice]
+    assert_predicate connection, :active?
+    assert_nil connection.inbound_sync_job_id
+    assert_nil connection.inbound_sync_enqueued_at
   end
 
   test "disconnect disables reminders and removes usable credentials" do
@@ -130,10 +205,12 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
       account.build_email_connection.connect_gmail!(
         email: "billing@example.com",
         name: "Billing Team",
+        provider_account_id: "google-account-123",
+        history_id: "100",
         access_token: "access-token",
         refresh_token: "refresh-token",
         expires_at: 1.hour.from_now,
-        scopes: [ "email", "profile", EmailConnection::Gmailable::SEND_SCOPE ]
+        scopes: EmailConnection::Gmailable::REQUIRED_SCOPES
       )
     end
 
@@ -142,8 +219,18 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
 
       attr_reader :state
 
-      def initialize(refresh_token: "refresh-token")
+      def initialize(
+        refresh_token: "refresh-token",
+        provider_account_id: "google-account-123",
+        email: "billing@example.com",
+        history_id: "100",
+        scopes: EmailConnection::Gmailable::REQUIRED_SCOPES
+      )
         @refresh_token = refresh_token
+        @provider_account_id = provider_account_id
+        @email = email
+        @history_id = history_id
+        @scopes = scopes
       end
 
       def authorization_url(state:, redirect_uri:)
@@ -158,14 +245,23 @@ class GmailConnectionsControllerTest < ActionDispatch::IntegrationTest
           "access_token" => "access-token",
           "refresh_token" => @refresh_token,
           "expires_in" => 3600,
-          "scope" => "email profile #{EmailConnection::Gmailable::SEND_SCOPE}"
+          "scope" => @scopes.join(" ")
         }
       end
 
       def userinfo(access_token:)
         raise "unexpected token" unless access_token == "access-token"
 
-        { "email" => "billing@example.com", "name" => "Billing Team" }
+        { "id" => @provider_account_id, "email" => @email, "name" => "Billing Team" }
+      end
+
+      def gmail_profile(access_token:)
+        raise "unexpected token" unless access_token == "access-token"
+
+        Google::Apis::GmailV1::Profile.new(
+          email_address: @email,
+          history_id: @history_id
+        )
       end
     end
 end

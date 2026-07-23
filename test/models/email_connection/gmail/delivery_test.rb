@@ -22,6 +22,8 @@ class EmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
     result = EmailConnection::Gmail::Delivery.new(
       account: invoice.account,
       connection:,
+      provider_account_id: connection.provider_account_id,
+      credential_generation: connection.credential_generation,
       service:
     ).deliver(mail_message)
 
@@ -38,6 +40,8 @@ class EmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
 
   test "refuses to deliver through another account's Gmail connection" do
     other_account = Account.create!(name: "Other Delivery Account")
+    connection = email_connections(:paid_jar_gmail)
+    connection.expects(:refresh_gmail_access_token_if_needed!).never
     mail_message = InvoiceReminderMailer.reminder(
       invoices(:xero_invoice),
       invoice_schedules(:normal_pre_due_7)
@@ -46,7 +50,9 @@ class EmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
     error = assert_raises EmailConnection::Errors::PermanentDeliveryError do
       EmailConnection::Gmail::Delivery.new(
         account: other_account,
-        connection: email_connections(:paid_jar_gmail),
+        connection:,
+        provider_account_id: connection.provider_account_id,
+        credential_generation: connection.credential_generation,
         service: mock
       ).deliver(mail_message)
     end
@@ -59,17 +65,102 @@ class EmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
     service = mock
     service.stubs(:authorization=)
     service.stubs(:send_user_message).raises(Google::Apis::AuthorizationError.new("revoked"))
+    expected_credentials = {
+      provider_account_id: connection.provider_account_id,
+      credential_generation: connection.credential_generation
+    }
+    connection.expects(:refresh_gmail_access_token_if_needed!)
+      .with(**expected_credentials)
+      .returns(connection.access_token)
+    connection.expects(:refresh_gmail_access_token_if_needed!)
+      .with(force: true, **expected_credentials)
+      .returns(connection.access_token)
 
-    assert_raises EmailConnection::Errors::AuthenticationError do
+    error = assert_raises EmailConnection::Errors::AuthenticationError do
       EmailConnection::Gmail::Delivery.new(
         account: connection.account,
         connection:,
+        provider_account_id: connection.provider_account_id,
+        credential_generation: connection.credential_generation,
         service:
       ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
     end
 
     assert_predicate connection.reload, :errored?
-    assert_equal "revoked", connection.last_error
+    assert_equal "gmail_authentication_failed", connection.last_error
+    assert_equal "Gmail authentication failed.", error.message
+    assert_nil error.cause
+    assert_not_includes error.full_message, "revoked"
+  end
+
+  test "force refreshes once after Gmail rejects a valid-looking access token" do
+    connection = email_connections(:paid_jar_gmail)
+    old_access_token = connection.access_token
+    EmailConnection::Gmail::OauthClient.any_instance.expects(:refresh_token)
+      .with(refresh_token: connection.refresh_token)
+      .once
+      .returns(
+        "access_token" => "refreshed-access-token",
+        "expires_in" => 3600
+      )
+    authorizations = []
+    send_attempts = 0
+    service = Object.new
+    service.define_singleton_method(:authorization=) { |token| authorizations << token }
+    service.define_singleton_method(:send_user_message) do |*, **|
+      send_attempts += 1
+      raise Google::Apis::AuthorizationError, "expired" if send_attempts == 1
+
+      Struct.new(:id, :thread_id).new("gmail-after-refresh", "thread-after-refresh")
+    end
+
+    result = EmailConnection::Gmail::Delivery.new(
+      account: connection.account,
+      connection:,
+      provider_account_id: connection.provider_account_id,
+      credential_generation: connection.credential_generation,
+      service:
+    ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
+
+    assert_equal "gmail-after-refresh", result.provider_message_id
+    assert_equal [ old_access_token, "refreshed-access-token" ], authorizations
+    assert_predicate connection.reload, :active?
+  end
+
+  test "does not mark a newer same-generation access token errored for an old 401" do
+    connection = email_connections(:paid_jar_gmail)
+    EmailConnection::Gmail::OauthClient.any_instance.expects(:refresh_token)
+      .with(refresh_token: connection.refresh_token)
+      .once
+      .returns(
+        "access_token" => "forced-access-token",
+        "expires_in" => 3600
+      )
+    service = Object.new
+    service.define_singleton_method(:authorization=) { |_| }
+    service.define_singleton_method(:send_user_message) do |*, **|
+      raise Google::Apis::AuthorizationError, "stale authorization failure"
+    end
+    original_mark_errored = connection.method(:mark_errored!)
+    connection.define_singleton_method(:mark_errored!) do |error, **attributes|
+      update!(access_token: "winning-access-token", token_expires_at: 1.hour.from_now)
+      original_mark_errored.call(error, **attributes)
+    end
+
+    error = assert_raises EmailConnection::Errors::TemporaryDeliveryError do
+      EmailConnection::Gmail::Delivery.new(
+        account: connection.account,
+        connection:,
+        provider_account_id: connection.provider_account_id,
+        credential_generation: connection.credential_generation,
+        service:
+      ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
+    end
+
+    assert_equal "Gmail credentials changed; retry delivery.", error.message
+    assert_nil error.cause
+    assert_predicate connection.reload, :active?
+    assert_equal "winning-access-token", connection.access_token
   end
 
   test "classifies Gmail rate limits as temporary" do
@@ -82,11 +173,61 @@ class EmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
       EmailConnection::Gmail::Delivery.new(
         account: connection.account,
         connection:,
+        provider_account_id: connection.provider_account_id,
+        credential_generation: connection.credential_generation,
         service:
       ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
     end
 
     assert_predicate connection.reload, :active?
+  end
+
+  test "translates a disabled Gmail API into a permanent delivery failure" do
+    connection = email_connections(:paid_jar_gmail)
+    service = mock
+    service.stubs(:authorization=)
+    service.stubs(:send_user_message)
+      .raises(Google::Apis::ProjectNotLinkedError.new("private project details"))
+
+    error = assert_raises EmailConnection::Errors::PermanentDeliveryError do
+      EmailConnection::Gmail::Delivery.new(
+        account: connection.account,
+        connection:,
+        provider_account_id: connection.provider_account_id,
+        credential_generation: connection.credential_generation,
+        service:
+      ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
+    end
+
+    assert_equal "Gmail rejected the request.", error.message
+    assert_nil error.cause
+    assert_not_includes error.full_message, "private project details"
+    assert_predicate connection.reload, :active?
+  end
+
+  test "recognizes a modern Gmail permission error and marks the connection errored" do
+    connection = email_connections(:paid_jar_gmail)
+    service = mock
+    service.stubs(:authorization=)
+    service.stubs(:send_user_message).raises(
+      gmail_client_error(
+        "ACCESS_TOKEN_SCOPE_INSUFFICIENT",
+        status: "PERMISSION_DENIED"
+      )
+    )
+
+    assert_raises EmailConnection::Errors::AuthenticationError do
+      EmailConnection::Gmail::Delivery.new(
+        account: connection.account,
+        connection:,
+        provider_account_id: connection.provider_account_id,
+        credential_generation: connection.credential_generation,
+        service:
+      ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
+    end
+
+    assert_predicate connection.reload, :errored?
+    assert_equal "gmail_authentication_failed", connection.last_error
   end
 
   test "classifies a lost Gmail response as ambiguous rather than safely retryable" do
@@ -99,6 +240,8 @@ class EmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
       EmailConnection::Gmail::Delivery.new(
         account: connection.account,
         connection:,
+        provider_account_id: connection.provider_account_id,
+        credential_generation: connection.credential_generation,
         service:
       ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
     end
@@ -106,12 +249,50 @@ class EmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
     assert_predicate connection.reload, :active?
   end
 
+  test "does not call Gmail after the reserved credential generation is replaced" do
+    connection = email_connections(:paid_jar_gmail)
+    expected_provider_account_id = connection.provider_account_id
+    expected_generation = connection.credential_generation
+    service = mock
+    service.expects(:authorization=).never
+    service.expects(:send_user_message).never
+
+    connection.connect_gmail!(
+      email: connection.connected_email,
+      name: connection.provider_display_name,
+      provider_account_id: expected_provider_account_id,
+      history_id: "999",
+      access_token: "reauthorized-access",
+      refresh_token: "reauthorized-refresh",
+      expires_at: 1.hour.from_now,
+      scopes: EmailConnection::Gmailable::REQUIRED_SCOPES
+    )
+
+    assert_raises EmailConnection::Errors::CredentialChanged do
+      EmailConnection::Gmail::Delivery.new(
+        account: connection.account,
+        connection:,
+        provider_account_id: expected_provider_account_id,
+        credential_generation: expected_generation,
+        service:
+      ).deliver(Mail.new(to: "customer@example.com", subject: "Test", body: "Test"))
+    end
+  end
+
   private
-    def gmail_client_error(reason)
+    def gmail_client_error(reason, status: nil)
+      errors = status ? [] : [ { reason: } ]
+      details = status ? [ { reason: } ] : []
       Google::Apis::ClientError.new(
         "Gmail rejected the request",
         status_code: 403,
-        body: { error: { errors: [ { reason: } ] } }.to_json
+        body: {
+          error: {
+            errors:,
+            details:,
+            status:
+          }.compact
+        }.to_json
       )
     end
 end

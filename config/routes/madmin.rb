@@ -66,8 +66,11 @@ namespace :madmin do
       post :record_payment_promise
     end
   end
-  resources :email_connections do
+  resources :email_connections, only: %i[index show] do
     post :disconnect, on: :member
+  end
+  resources :email_message_receipts, only: %i[index show] do
+    post :retry_processing, on: :member
   end
   resources :conversation_messages
   resources :invoice_reminders

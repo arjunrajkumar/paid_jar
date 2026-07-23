@@ -14,6 +14,7 @@ class Account < ApplicationRecord
   has_many :conversation_messages, dependent: :destroy, inverse_of: :account
   has_many :conversations, dependent: :destroy, inverse_of: :account
   has_many :conversation_events, dependent: :delete_all, inverse_of: :account
+  has_many :email_message_receipts, dependent: :destroy, inverse_of: :account
   has_many :users, dependent: :destroy
   has_many :customer_segments, dependent: :destroy, inverse_of: :account
   has_many :platform_admin_events, dependent: :nullify, inverse_of: :account
@@ -56,7 +57,7 @@ class Account < ApplicationRecord
   end
 
   def email_ready?
-    email_connection&.active? &&
+    email_connection&.gmail_ready? &&
       email_connection.sender_matches?(invoice_reminder_from_email)
   end
 

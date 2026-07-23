@@ -77,6 +77,14 @@ sentry:
 mysql_root_password: your-application-database-password
 ```
 
+The Google OAuth application must enable the Gmail API and declare
+`https://www.googleapis.com/auth/userinfo.email`,
+`https://www.googleapis.com/auth/userinfo.profile`,
+`https://www.googleapis.com/auth/gmail.send`, and
+`https://www.googleapis.com/auth/gmail.readonly`. The restricted Gmail readonly scope may require
+OAuth verification and a security assessment for hosted deployments that store Gmail data. See
+[Integrations](INTEGRATIONS.md) for the exact behavior and Google references.
+
 Keep overlapping Stripe App and webhook signing secrets in the relevant array during a rotation.
 Remove an old secret only after Stripe has stopped using it.
 

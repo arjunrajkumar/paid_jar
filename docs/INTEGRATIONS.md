@@ -7,7 +7,7 @@ application email:
 | --- | --- | --- |
 | Xero | Read-only import plus webhooks | Invoices and the customer details embedded in them |
 | Stripe App | Read-only import plus supported connected-account events | Invoices, provider links, payment state |
-| Gmail / Google Workspace | Send-only OAuth | Customer invoice reminders from the account's mailbox |
+| Gmail / Google Workspace | Send and readonly OAuth | Customer reminders and screened shadow ingestion |
 | SMTP / Amazon SES | Outbound SMTP | Sign-in codes and notifications from the installation |
 
 Configure only the services needed by the installation. Prefer isolated provider applications and
@@ -281,15 +281,34 @@ Useful Stripe references:
 - [Distribution options](https://docs.stripe.com/stripe-apps/distribution-options)
 - [Webhook signature verification](https://docs.stripe.com/webhooks/signature)
 
-## Gmail reminder delivery
+## Gmail reminder delivery and shadow ingestion
 
 Each PaymentReminder account can connect one Gmail or Google Workspace mailbox. Its address becomes
 the customer reminder From address; an account owner or admin can customize the visible sender
-name.
+name. PaymentReminder also polls Gmail approximately every 15 minutes to import relevant customer
+replies and messages sent manually from the connected mailbox.
 
-PaymentReminder requests `gmail.send` plus basic `email` and `profile` identity scopes. It does not
-request permission to read the mailbox. There is no reply ingestion or inbound conversation
-workflow in this release.
+PaymentReminder requests the canonical
+`https://www.googleapis.com/auth/gmail.send`,
+`https://www.googleapis.com/auth/gmail.readonly`,
+`https://www.googleapis.com/auth/userinfo.email`, and
+`https://www.googleapis.com/auth/userinfo.profile` scopes. The stable Google account subject
+identifies the mailbox even if its address changes. Gmail readonly is a restricted Google scope; a
+hosted deployment that stores Gmail data may require Google OAuth verification and a security
+assessment.
+
+The first successful connection screens messages from the previous seven days. Later polls use the
+Gmail History API's `messageAdded` changes, so already-read and archived replies are still found.
+If a history cursor expires, PaymentReminder performs a time-bounded overlapping recovery scan and
+then catches up from a fresh history baseline. Durable per-message receipts let individual fetches
+retry independently after the mailbox cursor advances.
+
+Only mail with an exact Gmail/RFC thread, known customer address, or exact invoice reference is
+imported as a conversation message. Unrelated mailbox content is not copied into PaymentReminder.
+Relevant automatic replies, spam, unmatched, ambiguous, and malformed messages remain marked for
+future human review. PaymentReminder does not change Gmail labels or read state, and does not store
+raw MIME or attachment bodies. Gmail push notifications, an account-user Inbox, AI processing, and
+automatic actions are not implemented.
 
 ### Create the Google OAuth application
 
@@ -317,9 +336,10 @@ Production callback:
 Requested scopes:
 
 ```text
-email
-profile
+https://www.googleapis.com/auth/userinfo.email
+https://www.googleapis.com/auth/userinfo.profile
 https://www.googleapis.com/auth/gmail.send
+https://www.googleapis.com/auth/gmail.readonly
 ```
 
 An External Google OAuth app in Testing normally issues refresh tokens with a seven-day lifetime
@@ -330,6 +350,9 @@ Google's verification requirements when they apply.
 Google references:
 
 - [Gmail API scopes](https://developers.google.com/workspace/gmail/api/auth/scopes)
+- [Synchronize a mail client](https://developers.google.com/workspace/gmail/api/guides/sync)
+- [Gmail history.list](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.history/list)
+- [Gmail threads](https://developers.google.com/workspace/gmail/api/guides/threads)
 - [OAuth audiences and publishing status](https://support.google.com/cloud/answer/15549945?hl=en)
 - [OAuth verification](https://support.google.com/cloud/answer/13463073?hl=en)
 
@@ -362,21 +385,14 @@ HOST=http://localhost:3001 bin/rails server -p 3001 -P tmp/pids/server-3001.pid
 6. Explicitly enable automatic invoice reminders.
 
 The sender address must exactly match the connected Gmail address. OAuth tokens are encrypted at
-rest and refreshed by the application. When Google access is revoked or an authentication refresh
+rest and refreshed by the application. The mailbox cursor is opaque and is preserved across a
+reconnection to the same Google identity; choosing another Google account starts a new seven-day
+screening baseline. When Google access is revoked or an authentication refresh
 fails, the Gmail connection enters an errored state and delivery pauses. Temporary rate limits,
 server errors, and timeouts retry without marking the connection errored. The automatic-reminder
 preference remains unchanged in the error case, so reconnecting the mailbox can resume delivery
 without a separate re-enable step. Choosing **Disconnect Gmail** explicitly disables automatic
-reminders.
-
-When upgrading an older installation through the Gmail migration, apply database changes first:
-
-```bash
-bin/rails db:migrate
-```
-
-The migration disables existing automatic reminders. Reconnect Gmail, send a test email, and then
-explicitly re-enable automation so reminders are not sent from an unverified address.
+reminders. An explicit disconnect clears credentials, provider identity, and synchronization state.
 
 ### Gmail troubleshooting
 

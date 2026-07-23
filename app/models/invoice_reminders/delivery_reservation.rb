@@ -49,7 +49,18 @@ class InvoiceReminders::DeliveryReservation
         next
       end
 
-      if decision.reminder && !reminder.conversation_message.refresh_delivery_attempt!(
+      message = reminder.conversation_message
+      unless message.bind_delivery_mailbox!(
+        connection: decision.connection,
+        job_id: delivery_job_id
+      )
+        reservation = skipped_reason(:email_connection_replaced, stage: decision.stage)
+        next
+      end
+
+      message.apply_internet_message_id!(mail_message)
+
+      if decision.reminder && !message.refresh_delivery_attempt!(
         job_id: delivery_job_id,
         mail_message:
       )
@@ -100,6 +111,9 @@ class InvoiceReminders::DeliveryReservation
         {
           account: invoice.account,
           conversation: Conversation.for_invoice!(invoice:),
+          email_connection: decision.connection,
+          email_connection_generation: decision.connection.credential_generation,
+          provider_account_id: decision.connection.provider_account_id,
           direction: :outbound,
           kind: :scheduled_reminder,
           status: :pending,

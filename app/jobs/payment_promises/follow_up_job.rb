@@ -80,13 +80,17 @@ class PaymentPromises::FollowUpJob < ApplicationJob
       delivery_result = ConversationMessages::ProviderDelivery.call(
         account: payment_promise.account,
         connection: reservation.connection,
+        provider_account_id: reservation.message.provider_account_id,
+        credential_generation: reservation.message.email_connection_generation,
         mail_message: reservation.mail_message,
         operation: "payment_promise_follow_up_delivery",
         context: {
           account_id: payment_promise.account_id,
           invoice_id: payment_promise.invoice_id,
           payment_promise_id: payment_promise.id
-        }
+        },
+        conversation_message: reservation.message,
+        delivery_job_id: job_id
       )
       recorded = record_delivery_result(
         payment_promise:,

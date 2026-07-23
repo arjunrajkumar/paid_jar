@@ -2,6 +2,7 @@ module EmailConnections
   class GmailConnectionsController < ApplicationController
     require_account_admin
 
+    prepend_before_action :restore_oauth_account_from_state, only: :create
     before_action :ensure_google_configured, only: %i[new create]
     before_action :ensure_google_approved, only: :create
     before_action :ensure_oauth_state, only: :create
@@ -23,18 +24,31 @@ module EmailConnections
         code: params.require(:code),
         redirect_uri: gmail_callback_url(script_name: nil)
       )
-      profile = oauth_client.userinfo(access_token: token_data.fetch("access_token"))
+      scopes = token_data.fetch("scope", "").split
+      validate_required_scopes!(scopes)
+      access_token = token_data.fetch("access_token")
+      userinfo = oauth_client.userinfo(access_token:)
+      gmail_profile = oauth_client.gmail_profile(access_token:)
+      provider_account_id = userinfo.fetch("id").to_s.presence || raise(KeyError, "missing Google account ID")
+      connected_email = gmail_profile.email_address.to_s.presence || raise(KeyError, "missing Gmail address")
+      history_id = gmail_profile.history_id.to_s.presence || raise(KeyError, "missing Gmail history ID")
+      unless userinfo.fetch("email").to_s.casecmp?(connected_email)
+        raise EmailConnection::Errors::AuthorizationError, "Google identity did not match the Gmail profile."
+      end
       connection = Current.account.email_connection ||
-        Current.account.build_email_connection(provider: :gmail, connected_email: profile.fetch("email"))
+        Current.account.build_email_connection(provider: :gmail, connected_email: connected_email)
 
       connection.connect_gmail!(
-        email: profile.fetch("email"),
-        name: profile["name"],
-        access_token: token_data.fetch("access_token"),
+        email: connected_email,
+        name: userinfo["name"],
+        provider_account_id:,
+        history_id:,
+        access_token:,
         refresh_token: token_data["refresh_token"],
         expires_at: Time.current + token_data.fetch("expires_in").to_i.seconds,
-        scopes: token_data.fetch("scope", "").split
+        scopes:
       )
+      enqueue_initial_inbound_sync(connection)
 
       redirect_to account_settings_path(script_name: Current.account.slug), notice: "Gmail connected."
     rescue KeyError, ActiveRecord::RecordInvalid, EmailConnection::Errors::Error => error
@@ -58,7 +72,9 @@ module EmailConnections
       )
       EmailConnection::Delivery.new(
         account: Current.account,
-        connection: @connection
+        connection: @connection,
+        provider_account_id: @connection.provider_account_id,
+        credential_generation: @connection.credential_generation
       ).deliver(mail_message)
 
       redirect_to account_settings_path(script_name: Current.account.slug), notice: "Test email sent."
@@ -70,6 +86,14 @@ module EmailConnections
     private
       def account_access_denied_message
         "Gmail connection could not be verified."
+      end
+
+      def restore_oauth_account_from_state
+        account_id = EmailConnection::Gmail::OauthState.account_id(
+          params[:state],
+          nonce: session[:gmail_oauth_nonce]
+        )
+        Current.account = Account.find_by(id: account_id) if account_id
       end
 
       def ensure_google_configured
@@ -121,10 +145,26 @@ module EmailConnections
         @gmail_configuration ||= EmailConnection::Gmail::Configuration.new
       end
 
+      def validate_required_scopes!(scopes)
+        return if EmailConnection::Gmailable.required_scopes_granted?(scopes)
+
+        raise EmailConnection::Errors::AuthorizationError, "Google did not grant all required Gmail permissions."
+      end
+
+      def enqueue_initial_inbound_sync(connection)
+        EmailConnections::SyncInboundJob.enqueue(connection)
+      rescue StandardError => error
+        Rails.error.report(error, severity: :error)
+        Rails.logger.error(
+          "email.gmail_initial_sync_enqueue_failed " \
+            "account_id=#{Current.account.id} error=#{error.class.name}"
+        )
+      end
+
       def log_connection_error(error)
         Rails.logger.error(
           "email.gmail_connection_failed " \
-            "account_id=#{Current.account.id} error=#{error.class} message=#{error.message}"
+            "account_id=#{Current.account.id} error=#{error.class.name}"
         )
       end
   end

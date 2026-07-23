@@ -81,7 +81,8 @@ class InvoiceReminders::SendJob < ApplicationJob
       delivery_result = deliver_email(
         invoice:,
         connection: reservation.connection,
-        mail_message: reservation.mail_message
+        mail_message: reservation.mail_message,
+        message: reminder.conversation_message
       )
       recorded = record_delivery_result(
         reminder:,
@@ -125,25 +126,43 @@ class InvoiceReminders::SendJob < ApplicationJob
       InvoiceReminders::Notifier.deliver(invoice:, reminder:, terminal:)
     end
 
-    def deliver_email(invoice:, connection:, mail_message:)
+    def deliver_email(invoice:, connection:, mail_message:, message:)
       ConversationMessages::ProviderDelivery.call(
         account: invoice.account,
         connection:,
+        provider_account_id: message.provider_account_id,
+        credential_generation: message.email_connection_generation,
         mail_message:,
         operation: "invoice_reminder_delivery",
         context: {
           account_id: invoice.account_id,
           invoice_id: invoice.id
-        }
+        },
+        conversation_message: message,
+        delivery_job_id: job_id
       ) do
-        send_email(invoice:, connection:, mail_message:)
+        send_email(
+          invoice:,
+          connection:,
+          provider_account_id: message.provider_account_id,
+          credential_generation: message.email_connection_generation,
+          mail_message:
+        )
       end
     end
 
-    def send_email(invoice:, connection:, mail_message:)
+    def send_email(
+      invoice:,
+      connection:,
+      provider_account_id:,
+      credential_generation:,
+      mail_message:
+    )
       EmailConnection::Delivery.new(
         account: invoice.account,
-        connection:
+        connection:,
+        provider_account_id:,
+        credential_generation:
       ).deliver(mail_message)
     end
 

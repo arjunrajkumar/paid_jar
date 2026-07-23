@@ -1,9 +1,5 @@
 class EmailConnection::Gmail::Configuration
-  SCOPES = [
-    "email",
-    "profile",
-    EmailConnection::Gmailable::SEND_SCOPE
-  ].freeze
+  SCOPES = EmailConnection::Gmailable::REQUIRED_SCOPES
 
   def client_id
     Rails.application.credentials.dig(:google, :client_id)

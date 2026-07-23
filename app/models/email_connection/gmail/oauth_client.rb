@@ -46,6 +46,10 @@ class EmailConnection::Gmail::OauthClient
     request_json(config.userinfo_uri, request)
   end
 
+  def gmail_profile(access_token:)
+    EmailConnection::Gmail::Mailbox.new(access_token:).profile
+  end
+
   private
     def post_token(form)
       request = Net::HTTP::Post.new(config.token_uri)
@@ -65,16 +69,25 @@ class EmailConnection::Gmail::OauthClient
       ) do |http|
         http.request(request)
       end
+      if temporary_response?(response)
+        raise EmailConnection::Errors::TemporaryDeliveryError,
+          "Google is temporarily unavailable.",
+          cause: nil
+      end
+
       payload = JSON.parse(response.body.presence || "{}")
 
       return payload if response.is_a?(Net::HTTPSuccess)
 
-      error_message = payload["error_description"] || payload["error"] || response.message
-      raise error_class_for(response, payload), error_message
+      raise error_class_for(response, payload), error_message_for(response, payload), cause: nil
     rescue JSON::ParserError
-      raise EmailConnection::Errors::PermanentDeliveryError, "Google returned an invalid response."
-    rescue Timeout::Error, SocketError, SystemCallError, IOError, OpenSSL::SSL::SSLError => error
-      raise EmailConnection::Errors::TemporaryDeliveryError, "Google request failed: #{error.message}"
+      raise EmailConnection::Errors::PermanentDeliveryError,
+        "Google returned an invalid response.",
+        cause: nil
+    rescue Timeout::Error, SocketError, SystemCallError, IOError, OpenSSL::SSL::SSLError
+      raise EmailConnection::Errors::TemporaryDeliveryError,
+        "Google is temporarily unavailable.",
+        cause: nil
     end
 
     def authentication_failure?(response, payload)
@@ -84,8 +97,21 @@ class EmailConnection::Gmail::OauthClient
 
     def error_class_for(response, payload)
       return EmailConnection::Errors::AuthenticationError if authentication_failure?(response, payload)
-      return EmailConnection::Errors::TemporaryDeliveryError if response.code.to_i == 429 || response.code.to_i >= 500
+      return EmailConnection::Errors::TemporaryDeliveryError if temporary_response?(response)
 
       EmailConnection::Errors::PermanentDeliveryError
+    end
+
+    def error_message_for(response, payload)
+      return "Google authentication failed." if authentication_failure?(response, payload)
+      return "Google is temporarily unavailable." if temporary_response?(response)
+
+      "Google rejected the request."
+    end
+
+    def temporary_response?(response)
+      response.code.to_i == 408 ||
+        response.code.to_i == 429 ||
+        response.code.to_i >= 500
     end
 end

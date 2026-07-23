@@ -12,12 +12,19 @@ class EmailConnection::Gmail::OauthState
     end
 
     def valid?(token, account:, nonce:)
-      payload = verifier.verify(token, purpose: PURPOSE)
+      account_id(token, nonce:) == account.id
+    end
 
-      payload.fetch("account_id") == account.id &&
-        ActiveSupport::SecurityUtils.secure_compare(payload.fetch("nonce"), nonce.to_s)
-    rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError
-      false
+    def account_id(token, nonce:)
+      payload = verifier.verify(token, purpose: PURPOSE)
+      return unless ActiveSupport::SecurityUtils.secure_compare(
+        payload.fetch("nonce").to_s,
+        nonce.to_s
+      )
+
+      Integer(payload.fetch("account_id"))
+    rescue ActiveSupport::MessageVerifier::InvalidSignature, KeyError, ArgumentError, TypeError
+      nil
     end
 
     private

@@ -20,7 +20,7 @@ class EmailConnection::DeliveryAvailability
     account.reload
     connection = account.email_connection&.reload
 
-    return unavailable(MISSING_CONNECTION) unless connection&.active? && connection.account_id == account.id
+    return unavailable(MISSING_CONNECTION) unless connection&.gmail_ready? && connection.account_id == account.id
     return unavailable(SENDER_ADDRESS_MISMATCH) unless connection.sender_matches?(account.invoice_reminder_from_email)
 
     Result.new(connection:, reason: nil)

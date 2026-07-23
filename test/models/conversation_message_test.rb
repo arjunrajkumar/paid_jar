@@ -193,6 +193,137 @@ class ConversationMessageTest < ActiveSupport::TestCase
     assert_not sent.delivery_owned_by?("delivery-job-123")
   end
 
+  test "reserves one stable RFC Message-ID for outbound delivery retries" do
+    message = build_message(status: :pending, sent_at: nil, delivery_job_id: "delivery-job-123")
+    message.save!
+    first_mail = Mail.new(to: "customer@example.com", subject: "First render", body: "First")
+    retry_mail = Mail.new(to: "customer@example.com", subject: "Retry render", body: "Retry")
+
+    message.apply_internet_message_id!(first_mail)
+    message.apply_internet_message_id!(retry_mail)
+
+    assert_match(/\A<.+@paymentreminder\.local>\z/, message.internet_message_id)
+    assert_equal Digest::SHA256.hexdigest(message.internet_message_id), message.internet_message_id_digest
+    assert_equal message.internet_message_id, "<#{first_mail.message_id}>"
+    assert_equal message.internet_message_id, "<#{retry_mail.message_id}>"
+  end
+
+  test "does not invent an RFC Message-ID for imported manual email" do
+    connection = email_connections(:paid_jar_gmail)
+    message = build_message(
+      kind: :manual_email,
+      email_connection: connection,
+      email_connection_generation: connection.credential_generation,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id: "gmail-import-without-rfc-id",
+      internet_message_id: nil
+    )
+
+    message.save!
+
+    assert_nil message.internet_message_id
+    assert_nil message.internet_message_id_digest
+  end
+
+  test "preserves Gmail's RFC Message-ID for imported manual email" do
+    connection = email_connections(:paid_jar_gmail)
+    internet_message_id = "<manual-email@example.com>"
+    message = build_message(
+      kind: :manual_email,
+      email_connection: connection,
+      email_connection_generation: connection.credential_generation,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id: "gmail-import-with-rfc-id",
+      internet_message_id:
+    )
+
+    message.save!
+
+    assert_equal internet_message_id, message.internet_message_id
+    assert_equal Digest::SHA256.hexdigest(internet_message_id), message.internet_message_id_digest
+  end
+
+  test "scopes Gmail provider IDs to the stable provider account" do
+    connection = email_connections(:paid_jar_gmail)
+    provider_message_id = "gmail-provider-id-collision"
+    first = build_message(
+      email_connection: connection,
+      email_connection_generation: connection.credential_generation,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id:
+    )
+    first.save!
+
+    connection.update!(
+      provider_account_id: "replacement-google-account",
+      credential_generation: connection.credential_generation + 1
+    )
+    replacement = build_message(
+      email_connection: connection,
+      email_connection_generation: connection.credential_generation,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id:
+    )
+    duplicate = replacement.dup
+
+    assert replacement.save
+    assert_not duplicate.valid?
+    assert_includes duplicate.errors[:provider_message_id], "has already been taken"
+  end
+
+  test "keeps a Gmail message's provider account binding immutable" do
+    connection = email_connections(:paid_jar_gmail)
+    message = build_message(
+      email_connection: connection,
+      email_connection_generation: connection.credential_generation,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id: "gmail-immutable-provider-account"
+    )
+    message.save!
+
+    assert_not message.update(provider_account_id: "replacement-google-account")
+    assert_includes message.errors[:provider_account_id], "cannot be changed"
+    assert_equal connection.provider_account_id, message.reload.provider_account_id
+  end
+
+  test "keeps a Gmail message's credential generation binding immutable" do
+    connection = email_connections(:paid_jar_gmail)
+    message = build_message(
+      email_connection: connection,
+      email_connection_generation: connection.credential_generation,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id: "gmail-immutable-credential-generation"
+    )
+    message.save!
+
+    assert_not message.update(email_connection_generation: connection.credential_generation + 1)
+    assert_includes message.errors[:email_connection_generation], "cannot be changed"
+    assert_equal connection.credential_generation, message.reload.email_connection_generation
+  end
+
+  test "captures a mailbox once for an owned unsent delivery and never rebinds it" do
+    connection = email_connections(:paid_jar_gmail)
+    message = build_message(
+      status: :pending,
+      sent_at: nil,
+      delivery_job_id: "delivery-job-123"
+    )
+    message.save!
+
+    assert message.bind_delivery_mailbox!(connection:, job_id: "delivery-job-123")
+    assert_equal connection, message.reload.email_connection
+    assert_equal connection.provider_account_id, message.provider_account_id
+    assert_equal connection.credential_generation, message.email_connection_generation
+
+    connection.update!(
+      provider_account_id: "replacement-google-account",
+      credential_generation: connection.credential_generation + 1
+    )
+    assert_not message.bind_delivery_mailbox!(connection:, job_id: "delivery-job-123")
+    assert_not_equal connection.provider_account_id, message.reload.provider_account_id
+    assert_not_equal connection.credential_generation, message.email_connection_generation
+  end
+
   test "refreshes an owned pending delivery from the current mail message" do
     message = build_message(
       status: :pending,
@@ -216,6 +347,7 @@ class ConversationMessageTest < ActiveSupport::TestCase
     assert_equal "billing@example.com", message.from_address
     assert_equal [ "customer@example.com" ], message.to_addresses
     assert_equal [ "accounts@example.com" ], message.cc_addresses
+    assert_equal [ "archive@example.com" ], message.bcc_addresses
     assert_equal "Updated payment reminder", message.subject
     assert_equal "Please pay the updated balance.", message.body
   end
@@ -349,6 +481,7 @@ class ConversationMessageTest < ActiveSupport::TestCase
         from "billing@example.com"
         to "customer@example.com"
         cc "accounts@example.com"
+        bcc "archive@example.com"
         subject "Updated payment reminder"
 
         text_part do

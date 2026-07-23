@@ -26,8 +26,36 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
     assert_predicate message, :status_pending?
     assert_predicate message, :kind_scheduled_reminder?
     assert_equal "delivery-job-123", message.delivery_job_id
+    assert_equal @reservation.connection, message.email_connection
+    assert_equal @reservation.connection.provider_account_id, message.provider_account_id
+    assert_equal @reservation.connection.credential_generation, message.email_connection_generation
+    assert_match(/\A<.+@paymentreminder\.local>\z/, message.internet_message_id)
     assert_equal [ "customer@example.com" ], message.to_addresses
     assert_match "friendly reminder", message.body
+  end
+
+  test "does not reuse a pending reminder after the Gmail identity is replaced" do
+    travel_to reminder_time do
+      first = reserve
+      first.connection.update!(provider_account_id: "replacement-google-account")
+
+      replacement = reserve
+
+      assert_not_predicate replacement, :reserved?
+      assert_equal "email_connection_replaced", replacement.reason
+    end
+  end
+
+  test "does not reuse a pending reminder after the same Gmail identity reconnects" do
+    travel_to reminder_time do
+      first = reserve
+      first.connection.increment!(:credential_generation)
+
+      replacement = reserve
+
+      assert_not_predicate replacement, :reserved?
+      assert_equal "email_connection_replaced", replacement.reason
+    end
   end
 
   test "reuses only the pending delivery owned by the same job" do
@@ -40,6 +68,8 @@ class InvoiceReminders::DeliveryReservationTest < ActiveSupport::TestCase
 
           assert_predicate second, :reserved?
           assert_equal first.reminder, second.reminder
+          assert_equal first.reminder.conversation_message.internet_message_id,
+            second.reminder.conversation_message.internet_message_id
         end
       end
 

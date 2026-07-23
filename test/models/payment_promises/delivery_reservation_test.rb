@@ -22,7 +22,34 @@ class PaymentPromises::DeliveryReservationTest < ActiveSupport::TestCase
     assert_predicate @reservation.message, :kind_promise_follow_up?
     assert_equal "promise-delivery-job", @reservation.message.delivery_job_id
     assert_equal email_connections(:paid_jar_gmail), @reservation.connection
+    assert_equal @reservation.connection, @reservation.message.email_connection
+    assert_equal @reservation.connection.provider_account_id, @reservation.message.provider_account_id
+    assert_equal @reservation.connection.credential_generation, @reservation.message.email_connection_generation
     assert_equal "Payment status: Invoice INV-001", @reservation.mail_message.subject
+  end
+
+  test "does not reuse a pending follow-up after the Gmail identity is replaced" do
+    travel_to follow_up_time do
+      first = reserve
+      first.connection.update!(provider_account_id: "replacement-google-account")
+
+      replacement = reserve
+
+      assert_not_predicate replacement, :reserved?
+      assert_equal "email_connection_replaced", replacement.reason
+    end
+  end
+
+  test "does not reuse a pending follow-up after the same Gmail identity reconnects" do
+    travel_to follow_up_time do
+      first = reserve
+      first.connection.increment!(:credential_generation)
+
+      replacement = reserve
+
+      assert_not_predicate replacement, :reserved?
+      assert_equal "email_connection_replaced", replacement.reason
+    end
   end
 
   test "reuses only the pending follow-up owned by the same job" do

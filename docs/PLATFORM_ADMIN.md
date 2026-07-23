@@ -49,7 +49,8 @@ The panel exposes global indexes and detail pages for:
 - sign-in identities, external identities, browser sessions, and outstanding sign-in codes;
 - customers, additional reminder recipients, debtor segments, and imported invoices;
 - Xero and Stripe invoice sources, source state, sync errors, install claims, and webhook events;
-- Gmail connection state and configured sender identity;
+- Gmail connection state and configured sender identity, plus durable mailbox screening receipts
+  and their processing state;
 - reminder schedules, reminders, suppressions, and message delivery state;
 - payment promises and their follow-up state;
 - notification subscriptions and the platform-admin event ledger.
@@ -74,6 +75,8 @@ The panel provides explicit, domain-aware actions to:
 - queue a Xero or Stripe invoice refresh;
 - disconnect an invoice source and disconnect an account's Gmail sender;
 - retry a pending or failed webhook event;
+- requeue a terminally failed Gmail screening receipt after diagnosing the provider or processing
+  failure;
 - edit or remove an additional customer reminder recipient;
 - send a one-off reminder for an outstanding invoice;
 - record a customer's payment promise with an operator note;
@@ -99,6 +102,7 @@ forms to:
 - create or delete customer accounts;
 - create arbitrary users outside a deliberate account workflow;
 - expose or rewrite OAuth tokens and signing material;
+- alter or delete Gmail screening receipts outside the explicit terminal-failure retry workflow;
 - bypass provider authorization or consent.
 
 Those limits preserve tenant integrity, provider truth, validation, delivery idempotency, and the
@@ -134,6 +138,10 @@ Submitted values and secrets are not copied into that ledger. Browse it in Madmi
 support intervention. The ledger covers requests handled by the Madmin controller. Starting and
 stopping impersonation are recorded, but mutations made through ordinary account controllers while
 impersonating are not separately written to `PlatformAdminEvent`.
+
+If a terminal Gmail receipt is reset for retry but its processing job cannot be enqueued, the
+controller records a separate enqueue-failure event containing the error class, not its potentially
+sensitive message, before propagating the failure.
 
 ## Operating practice
 

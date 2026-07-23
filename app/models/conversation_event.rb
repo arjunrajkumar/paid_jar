@@ -2,12 +2,15 @@ class ConversationEvent < ApplicationRecord
   ACTOR_KINDS = {
     system: "system",
     user: "user",
-    ai: "ai"
+    ai: "ai",
+    customer: "customer"
   }.freeze
   KINDS = {
     conversation_created: "conversation_created",
     conversation_resolved: "conversation_resolved",
-    conversation_reopened: "conversation_reopened"
+    conversation_reopened: "conversation_reopened",
+    conversation_message_received: "conversation_message_received",
+    conversation_message_imported: "conversation_message_imported"
   }.freeze
 
   belongs_to :account, inverse_of: :conversation_events
@@ -86,7 +89,12 @@ class ConversationEvent < ApplicationRecord
       if actor_kind_user?
         errors.add(:actor_user, "must be present for a user event") if actor_user.blank?
       elsif actor_user.present?
-        errors.add(:actor_user, "must be blank for a system or AI event")
+        message = if actor_kind_customer?
+          "must be blank unless this is a user event"
+        else
+          "must be blank for a system or AI event"
+        end
+        errors.add(:actor_user, message)
       end
     end
 end

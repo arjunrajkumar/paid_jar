@@ -20,7 +20,7 @@
     <ul>
       <li>Connects to Xero or Stripe to synchronize customer and invoice information.</li>
       <li>Organizes customers using payment-history rules and applies the reminder schedules you configure.</li>
-      <li>Connects to a Gmail or Google Workspace account using the <code>gmail.send</code> permission so invoice reminders can be sent on your behalf.</li>
+      <li>Connects to Gmail or Google Workspace using <code>gmail.send</code> and <code>gmail.readonly</code> so reminders can be sent and relevant mailbox activity can be screened and imported.</li>
       <li>Records each reminder attempt and its delivery status so you can review reminder history.</li>
       <li>Processes your information according to our <%= link_to "Privacy Policy", privacy_path(script_name: nil) %>.</li>
     </ul>
@@ -45,8 +45,9 @@
       We handle information as described in our
       <%= link_to "Privacy Policy", privacy_path(script_name: nil) %>. In summary, the Service stores
       connected-service OAuth tokens, customer and invoice information, reminder settings, and
-      reminder delivery records. We do not sell your information. Reminder recipients and message
-      content are shared with Google only so Gmail can deliver the reminder you configured.
+      reminder delivery records, and relevant imported Gmail messages and processing receipts. We
+      do not sell your information. Reminder content is shared with Google for delivery, and Gmail
+      mailbox data is accessed and stored only as described in the Privacy Policy.
     </p>
   </section>
 

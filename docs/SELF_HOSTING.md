@@ -16,7 +16,7 @@ inviting users.
 | Jobs | `bin/jobs` | Solid Queue work and production recurring schedules |
 | Database | MySQL 8 | Primary data plus Solid Cache, Queue, and Cable databases |
 | System mail | SMTP, configured for SES by default | Sign-in codes and user notifications |
-| Reminder mail | Per-account Gmail OAuth connection | Customer invoice reminders |
+| Gmail | Per-account Gmail OAuth connection | Customer reminders and screened mailbox ingestion |
 | TLS / proxy | Kamal Proxy or your reverse proxy | Public HTTPS termination and forwarding |
 
 Both web and jobs use the same application image, `RAILS_MASTER_KEY`, provider credentials, and
@@ -214,7 +214,9 @@ the scheduler considers current.
 
 Production sign-in and account notification emails use Action Mailer over SMTP. Customer invoice
 reminders use each account's connected Gmail address and are not sent through the system SMTP
-transport. Configure both paths when both behaviors are needed.
+transport. Workers also poll Gmail about every 15 minutes for History API synchronization and
+receipt recovery, so a healthy web process alone is insufficient. Configure both mail paths when
+both behaviors are needed.
 
 Register provider callbacks only after the public `HOST` is stable and reachable over HTTPS. See
 [Integrations](INTEGRATIONS.md) for scopes, credentials, callbacks, webhook events, and provider
@@ -236,12 +238,14 @@ sentry:
 `SENTRY_TRACES_SAMPLE_RATE` defaults to `0.05`. Default PII collection is disabled; do not add OAuth
 tokens, email contents, recipient lists, or financial data to Sentry context.
 
-The four critical recurring workflows publish expected-schedule check-ins when Sentry is enabled:
+The six critical recurring workflows publish expected-schedule check-ins when Sentry is enabled:
 
 - `schedule-invoice-reminders`
 - `refresh-invoice-sources`
 - `schedule-payment-promise-follow-ups`
 - `reconcile-pending-conversation-messages`
+- `poll-gmail-inbound`
+- `process-pending-gmail-receipts`
 
 Configure alerts for missed and failed check-ins as well as application exceptions. Also monitor
 queue depth, database availability/capacity, provider webhook failures, SMTP bounces/complaints,

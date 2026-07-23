@@ -634,7 +634,9 @@ class InvoiceReminders::SendJobTest < ActiveJob::TestCase
     delivery.expects(:deliver).returns("gmail-account-message")
     EmailConnection::Gmail::Delivery.expects(:new).with(
       account: @invoice.account,
-      connection:
+      connection:,
+      provider_account_id: connection.provider_account_id,
+      credential_generation: connection.credential_generation
     ).returns(delivery)
 
     travel_to Time.zone.local(2026, 7, 24, 12) do

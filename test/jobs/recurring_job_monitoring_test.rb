@@ -45,6 +45,25 @@ class RecurringJobMonitoringTest < ActiveJob::TestCase
     )
   end
 
+  test "configures the Gmail polling monitors for their fifteen-minute schedules" do
+    assert_monitor_configuration(
+      EmailConnections::PollInboundJob,
+      slug: "poll-gmail-inbound",
+      interval: 15,
+      unit: :minute,
+      checkin_margin: 5,
+      max_runtime: 10
+    )
+    assert_monitor_configuration(
+      EmailMessageReceipts::ProcessPendingJob,
+      slug: "process-pending-gmail-receipts",
+      interval: 15,
+      unit: :minute,
+      checkin_margin: 5,
+      max_runtime: 10
+    )
+  end
+
   test "reports a successful reminder scheduler execution" do
     monitor_config = Account::InvoiceReminders::ScheduleJob.sentry_monitor_config
     check_ins = sequence("check-ins")

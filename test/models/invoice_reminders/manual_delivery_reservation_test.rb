@@ -18,8 +18,32 @@ class InvoiceReminders::ManualDeliveryReservationTest < ActiveSupport::TestCase
     assert_equal "manual_reminder", @result.message.kind
     assert_predicate @result.message, :status_pending?
     assert_equal "manual-reminder-job", @result.message.delivery_job_id
+    assert_equal @result.connection, @result.message.email_connection
+    assert_equal @result.connection.provider_account_id, @result.message.provider_account_id
+    assert_equal @result.connection.credential_generation, @result.message.email_connection_generation
+    assert_match(/\A<.+@paymentreminder\.local>\z/, @result.message.internet_message_id)
     assert_equal [ "customer@example.com" ], @result.message.to_addresses
     assert_match(/INV-001/, @result.message.subject)
+  end
+
+  test "does not reuse a pending manual reminder after the Gmail identity is replaced" do
+    first_result = reserve
+    first_result.connection.update!(provider_account_id: "replacement-google-account")
+
+    replacement_result = reserve
+
+    assert_not_predicate replacement_result, :reserved?
+    assert_equal "email_connection_replaced", replacement_result.reason
+  end
+
+  test "does not reuse a pending manual reminder after the same Gmail identity reconnects" do
+    first_result = reserve
+    first_result.connection.increment!(:credential_generation)
+
+    replacement_result = reserve
+
+    assert_not_predicate replacement_result, :reserved?
+    assert_equal "email_connection_replaced", replacement_result.reason
   end
 
   test "does not reserve a reminder for a settled invoice" do
@@ -49,6 +73,7 @@ class InvoiceReminders::ManualDeliveryReservationTest < ActiveSupport::TestCase
 
     assert_predicate retry_result, :reserved?
     assert_equal first_result.message, retry_result.message
+    assert_equal first_result.message.internet_message_id, retry_result.message.internet_message_id
     assert_not_predicate other_job_result, :reserved?
     assert_equal "outbound_delivery_in_progress", other_job_result.reason
   end

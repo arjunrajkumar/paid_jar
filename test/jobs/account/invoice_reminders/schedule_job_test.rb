@@ -389,11 +389,13 @@ class Account::InvoiceReminders::ScheduleJobTest < ActiveJob::TestCase
     )
     other_account.create_email_connection!(
       provider: :gmail,
+      provider_account_id: "google-account-schedule",
       connected_email: "reminders@other.example",
       access_token: "access-token",
       refresh_token: "refresh-token",
       token_expires_at: 1.hour.from_now,
-      scopes: [ EmailConnection::Gmailable::SEND_SCOPE ],
+      scopes: EmailConnection::Gmailable::REQUIRED_SCOPES,
+      inbound_cursor: "100",
       status: :active
     )
     other_account.update!(automatic_invoice_reminders_enabled: true)

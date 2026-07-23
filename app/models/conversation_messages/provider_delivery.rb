@@ -14,17 +14,25 @@ class ConversationMessages::ProviderDelivery
   def self.call(
     account:,
     connection:,
+    provider_account_id:,
+    credential_generation:,
     mail_message:,
     operation:,
     context:,
+    conversation_message: nil,
+    delivery_job_id: nil,
     &delivery
   )
     new(
       account:,
       connection:,
+      provider_account_id:,
+      credential_generation:,
       mail_message:,
       operation:,
       context:,
+      conversation_message:,
+      delivery_job_id:,
       delivery:
     ).call
   end
@@ -32,21 +40,34 @@ class ConversationMessages::ProviderDelivery
   def initialize(
     account:,
     connection:,
+    provider_account_id:,
+    credential_generation:,
     mail_message:,
     operation:,
     context:,
+    conversation_message:,
+    delivery_job_id:,
     delivery: nil
   )
     @account = account
     @connection = connection
+    @provider_account_id = provider_account_id
+    @credential_generation = credential_generation
     @mail_message = mail_message
     @operation = operation
     @context = context
+    @conversation_message = conversation_message
+    @delivery_job_id = delivery_job_id
     @delivery = delivery
   end
 
   def call
     confirmed_result(deliver)
+  rescue EmailConnection::Errors::CredentialChanged
+    release_obsolete_mailbox_binding
+    raise EmailConnection::Errors::TemporaryDeliveryError,
+      "Email connection changed before delivery; retrying.",
+      cause: nil
   rescue EmailConnection::Errors::TemporaryDeliveryError
     raise
   rescue EmailConnection::Errors::AuthenticationError => error
@@ -57,14 +78,25 @@ class ConversationMessages::ProviderDelivery
   end
 
   private
-    attr_reader :account, :connection, :mail_message, :operation, :context, :delivery
+    attr_reader :account,
+      :connection,
+      :provider_account_id,
+      :credential_generation,
+      :mail_message,
+      :operation,
+      :context,
+      :conversation_message,
+      :delivery_job_id,
+      :delivery
 
     def deliver
       return delivery.call(mail_message) if delivery
 
       EmailConnection::Delivery.new(
         account:,
-        connection:
+        connection:,
+        provider_account_id:,
+        credential_generation:
       ).deliver(mail_message)
     end
 
@@ -104,6 +136,15 @@ class ConversationMessages::ProviderDelivery
 
     def normalize_provider_id(value)
       value.to_s.strip.presence
+    end
+
+    def release_obsolete_mailbox_binding
+      conversation_message&.release_delivery_mailbox_binding!(
+        connection:,
+        job_id: delivery_job_id,
+        provider_account_id:,
+        credential_generation:
+      )
     end
 
     def report_authentication_failure(error)

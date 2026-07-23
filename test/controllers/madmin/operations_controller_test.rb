@@ -168,6 +168,179 @@ class Madmin::OperationsControllerTest < ActionDispatch::IntegrationTest
     assert_predicate stripe_source.reload, :disconnected?
   end
 
+  test "retries a terminally failed email receipt through an audited action" do
+    connection = email_connections(:paid_jar_gmail)
+    receipt = connection.email_message_receipts.create!(
+      account: connection.account,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id: "terminal-admin-retry",
+      discovered_at: Time.current,
+      status: :failed,
+      attempts: 5,
+      last_error: "EmailConnection::Errors::PermanentProviderError"
+    )
+
+    assert_difference -> { PlatformAdminEvent.count }, 1 do
+      assert_enqueued_with(
+        job: EmailMessageReceipts::ProcessJob,
+        args: [
+          receipt.id,
+          receipt.provider_account_id,
+          receipt.email_connection_generation
+        ]
+      ) do
+        post retry_processing_madmin_email_message_receipt_url(receipt)
+      end
+    end
+
+    assert_redirected_to madmin_email_message_receipt_url(receipt)
+    assert_predicate receipt.reload, :status_pending?
+    assert_equal 0, receipt.attempts
+    assert_nil receipt.last_error
+
+    event = PlatformAdminEvent.order(:id).last
+    assert_equal "email_message_receipts.retry_processing", event.action
+    assert_equal receipt, event.target
+    assert_equal receipt.account, event.account
+  end
+
+  test "does not manually retry a receipt that already has an automatic retry" do
+    connection = email_connections(:paid_jar_gmail)
+    receipt = connection.email_message_receipts.create!(
+      account: connection.account,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id: "scheduled-admin-retry",
+      discovered_at: Time.current,
+      status: :failed,
+      attempts: 1,
+      next_retry_at: 5.minutes.from_now,
+      last_error: "EmailConnection::Errors::TemporaryProviderError"
+    )
+
+    assert_no_enqueued_jobs only: EmailMessageReceipts::ProcessJob do
+      post retry_processing_madmin_email_message_receipt_url(receipt)
+    end
+
+    assert_redirected_to madmin_email_message_receipt_url(receipt)
+    assert_equal "Only terminally failed email receipts can be retried.", flash[:alert]
+    assert_predicate receipt.reload, :status_failed?
+  end
+
+  test "audits an email receipt retry whose job cannot be enqueued" do
+    connection = email_connections(:paid_jar_gmail)
+    receipt = connection.email_message_receipts.create!(
+      account: connection.account,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id: "terminal-admin-enqueue-failure",
+      discovered_at: Time.current,
+      status: :failed,
+      attempts: 5,
+      last_error: "EmailConnection::Errors::PermanentProviderError"
+    )
+    EmailMessageReceipts::ProcessJob
+      .stubs(:enqueue)
+      .with(receipt)
+      .raises(ActiveJob::EnqueueError, "secret queue details")
+
+    assert_difference -> { PlatformAdminEvent.count }, 1 do
+      assert_raises(ActiveJob::EnqueueError) do
+        post retry_processing_madmin_email_message_receipt_url(receipt)
+      end
+    end
+
+    assert_predicate receipt.reload, :status_pending?
+
+    event = PlatformAdminEvent.order(:id).last
+    assert_equal "email_message_receipts.retry_processing_enqueue_failed", event.action
+    assert_equal receipt, event.target
+    assert_equal receipt.account, event.account
+    assert_equal({ "error_class" => "ActiveJob::EnqueueError" }, event.metadata)
+    assert_not_includes event.metadata.to_json, "secret queue details"
+  end
+
+  test "email receipts expose no generic mutation routes" do
+    receipt = email_connections(:paid_jar_gmail).email_message_receipts.create!(
+      account: accounts(:paid_jar),
+      provider_account_id: email_connections(:paid_jar_gmail).provider_account_id,
+      provider_message_id: "read-only-admin-receipt",
+      discovered_at: Time.current
+    )
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "/madmin/email_message_receipts/#{receipt.id}",
+        method: :delete
+      )
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "/madmin/email_message_receipts/#{receipt.id}/edit",
+        method: :get
+      )
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "/madmin/email_message_receipts",
+        method: :post
+      )
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "/madmin/email_message_receipts/#{receipt.id}",
+        method: :patch
+      )
+    end
+  end
+
+  test "email receipts remain available to platform admins for index and show" do
+    receipt = email_connections(:paid_jar_gmail).email_message_receipts.create!(
+      account: accounts(:paid_jar),
+      provider_message_id: "read-only-visible-receipt",
+      discovered_at: Time.current
+    )
+
+    get madmin_email_message_receipts_url
+    assert_response :success
+    get madmin_email_message_receipt_url(receipt)
+    assert_response :success
+  end
+
+  test "email connections expose no generic mutation routes because receipts are durable" do
+    connection = email_connections(:paid_jar_gmail)
+    receipt = connection.email_message_receipts.create!(
+      account: connection.account,
+      provider_message_id: "durable-receipt-before-admin-delete",
+      discovered_at: Time.current
+    )
+
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "/madmin/email_connections/#{connection.id}",
+        method: :delete
+      )
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "/madmin/email_connections/#{connection.id}/edit",
+        method: :get
+      )
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "/madmin/email_connections",
+        method: :post
+      )
+    end
+    assert_raises(ActionController::RoutingError) do
+      Rails.application.routes.recognize_path(
+        "/madmin/email_connections/#{connection.id}",
+        method: :patch
+      )
+    end
+    assert EmailConnection.exists?(connection.id)
+    assert EmailMessageReceipt.exists?(receipt.id)
+  end
+
   test "disconnects Gmail and disables automatic reminders" do
     connection = email_connections(:paid_jar_gmail)
     connection.account.update!(automatic_invoice_reminders_enabled: true)

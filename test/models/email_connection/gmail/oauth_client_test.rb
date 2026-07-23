@@ -18,6 +18,13 @@ class EmailConnection::Gmail::OauthClientTest < ActiveSupport::TestCase
     assert_equal "signed-state", params["state"]
     assert_equal "true", params["include_granted_scopes"]
     assert_equal @config.scopes.sort, params.fetch("scope").split.sort
+    assert_includes params.fetch("scope").split, EmailConnection::Gmailable::EMAIL_SCOPE
+    assert_includes params.fetch("scope").split, EmailConnection::Gmailable::PROFILE_SCOPE
+    assert_includes params.fetch("scope").split, EmailConnection::Gmailable::SEND_SCOPE
+    assert_includes params.fetch("scope").split, EmailConnection::Gmailable::READ_SCOPE
+    refute_includes params.fetch("scope").split, "email"
+    refute_includes params.fetch("scope").split, "profile"
+    refute_includes params.fetch("scope").split, "https://www.googleapis.com/auth/gmail.modify"
   end
 
   test "refreshes tokens without a real Google request" do
@@ -65,6 +72,45 @@ class EmailConnection::Gmail::OauthClientTest < ActiveSupport::TestCase
     assert_raises EmailConnection::Errors::AuthenticationError do
       @client.refresh_token(refresh_token: "revoked-token")
     end
+  end
+
+  test "classifies a non-JSON provider outage as temporary before parsing the body" do
+    stub_request(:post, @config.token_uri.to_s).to_return(
+      status: 503,
+      body: "upstream proxy unavailable",
+      headers: { "Content-Type" => "text/html" }
+    )
+
+    assert_raises EmailConnection::Errors::TemporaryDeliveryError do
+      @client.refresh_token(refresh_token: "refresh-token")
+    end
+  end
+
+  test "classifies an HTTP request timeout response as temporary" do
+    stub_request(:post, @config.token_uri.to_s).to_return(
+      status: 408,
+      body: "request timed out",
+      headers: { "Content-Type" => "text/plain" }
+    )
+
+    error = assert_raises EmailConnection::Errors::TemporaryDeliveryError do
+      @client.refresh_token(refresh_token: "refresh-token")
+    end
+
+    assert_equal "Google is temporarily unavailable.", error.message
+    assert_nil error.cause
+  end
+
+  test "does not retain private network error details as a cause" do
+    Net::HTTP.stubs(:start).raises(SocketError, "private resolver details")
+
+    error = assert_raises EmailConnection::Errors::TemporaryDeliveryError do
+      @client.refresh_token(refresh_token: "refresh-token")
+    end
+
+    assert_equal "Google is temporarily unavailable.", error.message
+    assert_nil error.cause
+    assert_not_includes error.full_message, "private resolver details"
   end
 
   class FakeConfiguration

@@ -39,11 +39,13 @@ class EmailConnection::DeliveryAvailabilityTest < ActiveSupport::TestCase
     other_account = Account.create!(name: "Other Delivery Account")
     other_connection = other_account.create_email_connection!(
       provider: :gmail,
+      provider_account_id: "google-account-availability",
       connected_email: "billing@other.example",
       access_token: "access-token",
       refresh_token: "refresh-token",
       token_expires_at: 1.hour.from_now,
-      scopes: [ EmailConnection::Gmailable::SEND_SCOPE ],
+      scopes: EmailConnection::Gmailable::REQUIRED_SCOPES,
+      inbound_cursor: "100",
       status: :active
     )
     @account.stubs(:email_connection).returns(other_connection)

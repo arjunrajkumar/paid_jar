@@ -46,15 +46,26 @@
     <h3>Google user data</h3>
     <p>
       When you connect Gmail, PaymentReminder requests your email address, basic profile
-      information, and the <code>gmail.send</code> permission. We store the connected email address,
-      display name, granted scopes, connection status, token expiry, and the OAuth access and
-      refresh tokens Google provides. The tokens allow scheduled jobs to send reminders after you
-      leave the Service.
+      information, the <code>gmail.send</code> permission, and restricted
+      <code>gmail.readonly</code> permission. We store Google's stable account identifier, the
+      connected email address, display name, granted scopes, connection and synchronization state,
+      token expiry, and the encrypted OAuth access and refresh tokens Google provides. The tokens
+      allow scheduled jobs to send reminders and screen mailbox activity after you leave the Service.
     </p>
     <p>
       The <code>gmail.send</code> permission lets PaymentReminder send email from the connected
-      account. It does not let PaymentReminder read, modify, or delete existing messages in your
-      mailbox. When a reminder is due, PaymentReminder generates the recipient, sender, subject,
+      account. The <code>gmail.readonly</code> permission lets PaymentReminder screen a seven-day
+      initial window and later Gmail History changes for relevant customer replies and messages you
+      sent manually. We poll about every 15 minutes and may use a bounded recovery scan when Google
+      expires a history cursor. We do not modify labels, read state, or mailbox messages. Unrelated
+      mail is not stored as a conversation message, and raw MIME and attachment bodies are not
+      retained. A durable transport receipt keeps the Gmail message identifier and processing state
+      for screened messages, but not unrelated message content. Relevant message sender and
+      recipient addresses, subject, sanitized text body, threading headers, Gmail labels, matching
+      status, and review flags may be stored.
+    </p>
+    <p>
+      When a reminder is due, PaymentReminder generates the recipient, sender, subject,
       and message body from your settings and invoice data and transmits that message to Google for
       delivery. We store the generated message content in the delivery ledger, including the sender,
       recipients, subject, and message body, alongside the invoice, reminder stage, date, status,
@@ -170,11 +181,14 @@
       disputes, or meet legal obligations. Retention periods may differ by category and context.
     </p>
     <p>
-      Disconnecting Gmail removes the stored Gmail access and refresh tokens and disables automatic
-      reminders. Connection metadata and reminder delivery records may remain so that the account
-      has an accurate operational history. You can also revoke access from your
+      Disconnecting Gmail removes the stored Gmail access and refresh tokens, clears the stable
+      Google identity and synchronization cursor from the active connection, and disables automatic
+      reminders. Historical mailbox-identity and Gmail/RFC thread snapshots on imported relevant
+      messages, processing receipts, and reminder delivery records may remain with other connection
+      metadata so that the account has an accurate operational and audit history. You can also revoke
+      access from your
       <a href="https://myaccount.google.com/permissions">Google Account permissions</a>. Revocation
-      prevents future access but does not remove messages already delivered through Gmail.
+      prevents future access but does not remove messages already delivered or imported through Gmail.
     </p>
     <p>
       You can revoke the hosted Service's Stripe access by uninstalling PaymentReminder from your

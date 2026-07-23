@@ -20,7 +20,9 @@ class ConversationMessages::ProviderDeliveryTest < ActiveSupport::TestCase
     delivery = mock
     EmailConnection::Delivery.expects(:new).with(
       account: @account,
-      connection: @connection
+      connection: @connection,
+      provider_account_id: @connection.provider_account_id,
+      credential_generation: @connection.credential_generation
     ).returns(delivery)
     delivery.expects(:deliver).with(@mail_message).returns(provider_result)
 
@@ -66,6 +68,47 @@ class ConversationMessages::ProviderDeliveryTest < ActiveSupport::TestCase
     assert_same error, raised
   end
 
+  test "releases a safe pre-send credential snapshot so the job can reserve the current mailbox" do
+    invoice = invoices(:xero_invoice)
+    delivery_job_id = "credential-change-retry"
+    reservation = InvoiceReminders::ManualDeliveryReservation.call(
+      invoice:,
+      delivery_job_id:
+    )
+    message = reservation.message
+    old_provider_account_id = message.provider_account_id
+    old_generation = message.email_connection_generation
+    @connection.increment!(:credential_generation)
+
+    error = assert_raises EmailConnection::Errors::TemporaryDeliveryError do
+      deliver(
+        conversation_message: message,
+        delivery_job_id:,
+        provider_account_id: old_provider_account_id,
+        credential_generation: old_generation
+      ) do
+        raise EmailConnection::Errors::CredentialChanged, "credentials changed"
+      end
+    end
+
+    assert_equal "Email connection changed before delivery; retrying.", error.message
+    assert_nil error.cause
+    assert_predicate message.reload, :status_pending?
+    assert_nil message.email_connection
+    assert_nil message.provider_account_id
+    assert_nil message.email_connection_generation
+
+    retry_reservation = InvoiceReminders::ManualDeliveryReservation.call(
+      invoice:,
+      delivery_job_id:
+    )
+    assert_predicate retry_reservation, :reserved?
+    assert_equal message, retry_reservation.message
+    assert_equal @connection, message.reload.email_connection
+    assert_equal @connection.provider_account_id, message.provider_account_id
+    assert_equal @connection.credential_generation, message.email_connection_generation
+  end
+
   test "reports authentication errors with caller context and returns a terminal failure" do
     error = EmailConnection::Errors::AuthenticationError.new("invalid_grant")
     Sentry.expects(:capture_exception).with(
@@ -104,16 +147,26 @@ class ConversationMessages::ProviderDeliveryTest < ActiveSupport::TestCase
   end
 
   private
-    def deliver(&delivery)
+    def deliver(
+      conversation_message: nil,
+      delivery_job_id: nil,
+      provider_account_id: @connection.provider_account_id,
+      credential_generation: @connection.credential_generation,
+      &delivery
+    )
       ConversationMessages::ProviderDelivery.call(
         account: @account,
         connection: @connection,
+        provider_account_id:,
+        credential_generation:,
         mail_message: @mail_message,
         operation: "invoice_reminder_delivery",
         context: {
           account_id: @account.id,
           invoice_id: 123
         },
+        conversation_message:,
+        delivery_job_id:,
         &delivery
       )
     end

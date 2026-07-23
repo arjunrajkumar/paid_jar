@@ -23,12 +23,20 @@ class InvoiceReminders::ManualDeliveryReservation
       next if reservation
 
       mail_message = ManualInvoiceReminderMailer.reminder(invoice).message
-      message = owned_pending_message || reserve_new_message(mail_message:)
+      connection = delivery_availability.connection
+      message = owned_pending_message || reserve_new_message(mail_message:, connection:)
 
       unless message
         reservation = skipped(:outbound_delivery_in_progress)
         next
       end
+
+      unless message.bind_delivery_mailbox!(connection:, job_id: delivery_job_id)
+        reservation = skipped(:email_connection_replaced)
+        next
+      end
+
+      message.apply_internet_message_id!(mail_message)
 
       if owned_pending_message && !message.refresh_delivery_attempt!(
         job_id: delivery_job_id,
@@ -40,7 +48,7 @@ class InvoiceReminders::ManualDeliveryReservation
 
       reservation = Result.new(
         message:,
-        connection: delivery_availability.connection,
+        connection:,
         mail_message:,
         reason: nil,
         context: {}
@@ -80,13 +88,16 @@ class InvoiceReminders::ManualDeliveryReservation
         .find_by(delivery_job_id:)
     end
 
-    def reserve_new_message(mail_message:)
+    def reserve_new_message(mail_message:, connection:)
       return if invoice.conversation_messages.direction_outbound.status_pending.exists?
 
       invoice.conversation_messages.create!(
         {
           account: invoice.account,
           conversation: Conversation.for_invoice!(invoice:),
+          email_connection: connection,
+          email_connection_generation: connection.credential_generation,
+          provider_account_id: connection.provider_account_id,
           direction: :outbound,
           kind: :manual_reminder,
           status: :pending,
