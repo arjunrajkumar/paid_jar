@@ -1,0 +1,11 @@
+<%= turbo_stream.append "conversation-rows" do %>
+  <%= render partial: "conversations/conversation", collection: @entries, as: :entry %>
+<% end %>
+
+<% if @page.last? %>
+  <%= turbo_stream.remove "conversations-next-page" %>
+<% else %>
+  <%= turbo_stream.replace "conversations-next-page" do %>
+    <%= render "conversations/next_page", page: @page.next_param, filter: @filter %>
+  <% end %>
+<% end %>

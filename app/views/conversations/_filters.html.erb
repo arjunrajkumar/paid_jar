@@ -1,0 +1,12 @@
+<nav class="app-inbox-filters" aria-label="Inbox filters">
+  <% {
+    "all" => "All",
+    "needs_attention" => "Needs attention",
+    "needs_review" => "Needs review"
+  }.each do |value, label| %>
+    <%= link_to label,
+      conversations_path(filter: value),
+      class: [ "app-inbox-filter", ("app-inbox-filter--active" if filter == value) ],
+      aria: { current: ("page" if filter == value) } %>
+  <% end %>
+</nav>

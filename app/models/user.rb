@@ -8,6 +8,16 @@ class User < ApplicationRecord
     foreign_key: :actor_user_id,
     dependent: :nullify,
     inverse_of: :actor_user
+  has_many :authored_conversation_messages,
+    class_name: "ConversationMessage",
+    foreign_key: :actor_user_id,
+    dependent: :nullify,
+    inverse_of: :actor_user
+  has_many :reviewed_conversation_messages,
+    class_name: "ConversationMessage",
+    foreign_key: :reviewed_by_user_id,
+    dependent: :nullify,
+    inverse_of: :reviewed_by_user
 
   validates :name, presence: true
 

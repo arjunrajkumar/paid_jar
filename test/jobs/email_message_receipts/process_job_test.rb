@@ -55,6 +55,23 @@ class EmailMessageReceipts::ProcessJobTest < ActiveJob::TestCase
     assert_nil @receipt.processing_enqueued_at
   end
 
+  test "mailbox thread lock contention leaves a retryable receipt" do
+    EmailMessageReceipts::Processor.stubs(:call)
+      .raises(EmailConnection::MailboxThreadLock::Unavailable, "lock busy")
+
+    assert_enqueued_with(
+      job: EmailMessageReceipts::ProcessJob,
+      args: receipt_job_args(@receipt)
+    ) do
+      perform_receipt
+    end
+
+    assert_predicate @receipt.reload, :status_failed?
+    assert_operator @receipt.next_retry_at, :<=, Time.current
+    assert_equal EmailConnection::MailboxThreadLock::Unavailable.name,
+      @receipt.last_error
+  end
+
   test "retires a receipt from a replaced mailbox before processing" do
     @connection.update_column(:provider_account_id, "replacement-google-account")
     EmailMessageReceipts::Processor.expects(:call).never

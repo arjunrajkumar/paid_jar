@@ -153,11 +153,11 @@ class ConversationMessages::EmailMatcher
       return [] if message.provider_thread_id.blank?
 
       ids = account.conversation_messages
+        .trusted_for_matching
         .where(provider_account_id:, provider_thread_id: message.provider_thread_id)
-        .where.not(matching_status: ConversationMessage::MATCHING_STATUSES.fetch(:ambiguous))
         .distinct
         .pluck(:conversation_id)
-      account.conversations.where(id: ids).to_a
+      canonical_conversations(ids)
     end
 
     def conversations_for_rfc_headers
@@ -165,12 +165,20 @@ class ConversationMessages::EmailMatcher
       conversation_ids = message_ids.flat_map do |message_id|
         digest = Digest::SHA256.hexdigest(message_id)
         account.conversation_messages
+          .trusted_for_matching
           .where(provider_account_id:, internet_message_id_digest: digest)
           .where(internet_message_id: message_id)
-          .where.not(matching_status: ConversationMessage::MATCHING_STATUSES.fetch(:ambiguous))
           .pluck(:conversation_id)
       end.uniq
-      account.conversations.where(id: conversation_ids).to_a
+      canonical_conversations(conversation_ids)
+    end
+
+    def canonical_conversations(ids)
+      account.conversations
+        .where(id: ids)
+        .includes(:canonical_conversation)
+        .map(&:canonical)
+        .uniq(&:id)
     end
 
     def matching_customers

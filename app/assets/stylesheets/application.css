@@ -1469,6 +1469,272 @@ body.app-workspace {
   color: #9b3039;
 }
 
+/* Account conversation Inbox. */
+.app-workspace .app-nav-badge {
+  min-width: 1.5rem;
+  margin-left: auto;
+  border-radius: 9999px;
+  background: #b4232c;
+  color: #fff;
+  font-size: 0.6875rem;
+  font-weight: 750;
+  line-height: 1.25rem;
+  text-align: center;
+  padding: 0.125rem 0.375rem;
+}
+
+.app-workspace .app-inbox-header {
+  margin-bottom: 1rem;
+}
+
+.app-workspace .app-inbox-health {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+}
+
+.app-workspace .app-inbox-health__states {
+  display: grid;
+  min-width: min(100%, 30rem);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.app-workspace .app-inbox-health__states > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.app-workspace .app-inbox-health__state,
+.app-workspace .app-inbox-health__states small {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-inbox-health__state--delayed,
+.app-workspace .app-inbox-health__state--authentication_required,
+.app-workspace .app-inbox-health__state--temporarily_failing,
+.app-workspace .app-inbox-health__state--disconnected,
+.app-workspace .app-inbox-health__state--not_connected {
+  color: #9b3039;
+}
+
+.app-workspace .app-inbox-filters {
+  display: flex;
+  gap: 0.375rem;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.app-workspace .app-inbox-filter {
+  border: 1px solid var(--color-card-border);
+  border-radius: 9999px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+  text-decoration: none;
+  white-space: nowrap;
+  padding: 0.5rem 0.875rem;
+}
+
+.app-workspace .app-inbox-filter--active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.app-workspace .app-conversation-list {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.app-workspace .app-conversation-row {
+  padding: 0;
+  overflow: hidden;
+}
+
+.app-workspace .app-conversation-row__link {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.8fr) minmax(14rem, 1.5fr) minmax(9rem, auto);
+  align-items: center;
+  gap: 1rem;
+  color: inherit;
+  text-decoration: none;
+  padding: 1rem;
+}
+
+.app-workspace .app-conversation-row__link:hover {
+  background: #f8f9fc;
+}
+
+.app-workspace .app-conversation-row__identity,
+.app-workspace .app-conversation-row__summary,
+.app-workspace .app-conversation-row__meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.app-workspace .app-conversation-row__identity span,
+.app-workspace .app-conversation-row__summary span,
+.app-workspace .app-conversation-row__meta time {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.app-workspace .app-conversation-row__summary strong,
+.app-workspace .app-conversation-row__summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace .app-conversation-row__meta {
+  align-items: flex-end;
+}
+
+.app-workspace .app-inbox-chip {
+  display: inline-flex;
+  width: fit-content;
+  border-radius: 9999px;
+  background: #edf1f7;
+  color: #46556b;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.app-workspace .app-inbox-chip--attention {
+  background: #fce8e9;
+  color: #9b3039;
+}
+
+.app-workspace .app-conversation-back {
+  display: inline-block;
+  margin-bottom: 0.375rem;
+  color: var(--color-accent);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.app-workspace .app-conversation-timeline {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.app-workspace .app-conversation-message {
+  width: min(100%, 52rem);
+  padding: 1rem;
+}
+
+.app-workspace .app-conversation-message--outbound {
+  justify-self: end;
+  border-color: #c8d4f8;
+  background: #f6f8ff;
+}
+
+.app-workspace .app-conversation-message__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.875rem;
+}
+
+.app-workspace .app-conversation-message__header > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.app-workspace .app-conversation-message__header > div:last-child {
+  align-items: flex-end;
+}
+
+.app-workspace .app-conversation-message__header span,
+.app-workspace .app-conversation-message__header time {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+.app-workspace .app-conversation-message__body {
+  color: var(--color-text);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.app-workspace .app-conversation-message__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-top: 1rem;
+}
+
+.app-workspace .app-conversation-message__actions form,
+.app-workspace .app-conversation-header form {
+  margin: 0;
+}
+
+.app-workspace .app-conversation-event {
+  display: flex;
+  justify-content: center;
+  gap: 0.375rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+  text-align: center;
+}
+
+.app-workspace .app-reply-composer,
+.app-workspace .app-match-form {
+  margin-top: 1rem;
+  padding: 1rem;
+}
+
+.app-workspace .app-reply-composer form,
+.app-workspace .app-match-form form {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.app-workspace .app-field-label {
+  color: var(--color-text);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.app-workspace .app-textarea,
+.app-workspace .app-match-form .app-select {
+  width: 100%;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 0.625rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  padding: 0.75rem;
+}
+
+.app-workspace .app-textarea:focus,
+.app-workspace .app-match-form .app-select:focus {
+  border-color: var(--color-accent);
+  outline: 3px solid rgba(49, 91, 234, 0.14);
+}
+
 /* Keep the index as one scrollable table on narrow screens. */
 @media (max-width: 69.99rem) {
   .app-workspace .app-invoice-index .app-invoice-table {
@@ -1613,6 +1879,38 @@ body.app-workspace {
   .app-workspace .app-recipient-form {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .app-workspace .app-inbox-health {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-workspace .app-inbox-health__states {
+    grid-template-columns: 1fr;
+  }
+
+  .app-workspace .app-conversation-row__link {
+    grid-template-columns: 1fr;
+  }
+
+  .app-workspace .app-conversation-row__meta {
+    align-items: flex-start;
+  }
+
+  .app-workspace .app-conversation-message__header,
+  .app-workspace .app-conversation-message__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .app-workspace .app-conversation-message__header > div:last-child {
+    align-items: flex-start;
+  }
+
+  .app-workspace .app-conversation-message__actions .app-primary-button,
+  .app-workspace .app-conversation-message__actions .app-secondary-button {
+    width: 100%;
   }
 
 }

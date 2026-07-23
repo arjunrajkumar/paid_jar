@@ -1,0 +1,7 @@
+<div class="app-conversation-event">
+  <span><%= conversation_event_label(event) %></span>
+  <% if event.actor_kind_user? && event.actor_user %>
+    <span>by <%= event.actor_user.name %></span>
+  <% end %>
+  <time datetime="<%= event.created_at.iso8601 %>"><%= l(event.created_at, format: :short) %></time>
+</div>

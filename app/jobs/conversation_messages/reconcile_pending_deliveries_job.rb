@@ -21,10 +21,30 @@ class ConversationMessages::ReconcilePendingDeliveriesJob < ApplicationJob
     reconciled_count = 0
 
     ConversationMessage.stale_pending_deliveries(before: cutoff).find_each do |message|
-      if message.reconcile_stale_delivery!(before: cutoff, failure_reason: FAILURE_REASON)
-        reconciled_count += 1
+      manual_reply = message.kind_manual_reply?
+      attempted_manual_reply = manual_reply && message.delivery_attempted_at.present?
+      failure_reason = if attempted_manual_reply
+        ConversationMessages::ProviderDelivery::UNCONFIRMED_FAILURE_REASON
+      else
+        FAILURE_REASON
+      end
+      next unless message.reconcile_stale_delivery!(
+        before: cutoff,
+        failure_reason:,
+        delivery_uncertain: attempted_manual_reply
+      )
+
+      reconciled_count += 1
+      if manual_reply
+        ConversationMessages::ManualReplyOutcome.finalize!(message)
       end
     end
+
+    ConversationMessages::ManualReplyOutcome
+      .needing_finalization
+      .find_each do |message|
+        ConversationMessages::ManualReplyOutcome.finalize!(message)
+      end
 
     Rails.logger.warn(
       "conversation_message.pending_deliveries_reconciled " \

@@ -1,0 +1,31 @@
+<% conversation = entry.conversation %>
+<% message = entry.latest_message %>
+
+<article class="app-card app-conversation-row">
+  <%= link_to conversation_path(conversation), class: "app-conversation-row__link" do %>
+    <div class="app-conversation-row__identity">
+      <strong><%= conversation_name(
+        conversation,
+        latest_inbound_sender: entry.latest_inbound_sender
+      ) %></strong>
+      <span><%= conversation_invoice_reference(conversation) %></span>
+    </div>
+
+    <div class="app-conversation-row__summary">
+      <strong><%= message.subject.presence || "No subject" %></strong>
+      <span><%= truncate(message.body.to_s.squish, length: 120) %></span>
+    </div>
+
+    <div class="app-conversation-row__meta">
+      <time datetime="<%= message.occurred_at.iso8601 %>">
+        <%= l(message.occurred_at, format: :short) %>
+      </time>
+      <% if conversation.attention_required_at? %>
+        <span class="app-inbox-chip app-inbox-chip--attention">Needs attention</span>
+      <% end %>
+      <% if entry.needs_review %>
+        <span class="app-inbox-chip">Needs review</span>
+      <% end %>
+    </div>
+  <% end %>
+</article>

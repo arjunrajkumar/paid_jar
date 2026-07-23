@@ -1,0 +1,44 @@
+<article class="app-card app-conversation-message app-conversation-message--<%= message.direction %>">
+  <header class="app-conversation-message__header">
+    <div>
+      <strong><%= message.direction_inbound? ? (message.from_address.presence || "Customer") : "Your account" %></strong>
+      <span><%= message.subject.presence || "No subject" %></span>
+    </div>
+    <div>
+      <span class="app-inbox-chip"><%= conversation_message_status(message) %></span>
+      <time datetime="<%= message.occurred_at.iso8601 %>">
+        <%= l(message.occurred_at, format: :long) %>
+      </time>
+    </div>
+  </header>
+
+  <div class="app-conversation-message__body"><%= h(message.body.to_s) %></div>
+
+  <% if message.awaiting_review? %>
+    <div class="app-conversation-message__actions">
+      <% if manual_match_available?(message) %>
+        <%= link_to "Match customer or invoice",
+          new_conversation_match_path(conversation, message_id: message.id),
+          class: "app-primary-button" %>
+      <% end %>
+      <%= button_to "Mark reviewed — no match needed",
+        conversation_review_path(conversation, message),
+        method: :patch,
+        params: {
+          review: {
+            outcome: "no_match_needed",
+            work_unit_token:
+          }
+        },
+        class: "app-secondary-button" %>
+    </div>
+  <% elsif message.direction_inbound? &&
+      message.matching_status_unmatched? &&
+      manual_match_available?(message) %>
+    <div class="app-conversation-message__actions">
+      <%= link_to "Match customer or invoice",
+        new_conversation_match_path(conversation, message_id: message.id),
+        class: "app-primary-button" %>
+    </div>
+  <% end %>
+</article>

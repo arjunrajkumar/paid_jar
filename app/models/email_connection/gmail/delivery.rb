@@ -25,12 +25,14 @@ class EmailConnection::Gmail::Delivery
     connection:,
     provider_account_id:,
     credential_generation:,
+    requested_provider_thread_id: nil,
     service: Google::Apis::GmailV1::GmailService.new
   )
     @account = account
     @connection = connection
     @provider_account_id = provider_account_id.to_s.strip
     @credential_generation = credential_generation.to_i
+    @requested_provider_thread_id = requested_provider_thread_id.to_s.strip.presence
     @service = service
   end
 
@@ -76,6 +78,7 @@ class EmailConnection::Gmail::Delivery
       :connection,
       :provider_account_id,
       :credential_generation,
+      :requested_provider_thread_id,
       :service
 
     def validate_current_connection!
@@ -137,7 +140,10 @@ class EmailConnection::Gmail::Delivery
         service.authorization = @request_access_token
         service.send_user_message(
           "me",
-          Google::Apis::GmailV1::Message.new(raw: mail_message.encoded)
+          Google::Apis::GmailV1::Message.new(
+            raw: mail_message.encoded,
+            thread_id: requested_provider_thread_id
+          )
         )
       end
     end

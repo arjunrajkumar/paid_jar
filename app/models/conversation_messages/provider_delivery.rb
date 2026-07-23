@@ -4,10 +4,15 @@ class ConversationMessages::ProviderDelivery
   Result = Data.define(
     :provider_message_id,
     :provider_thread_id,
-    :failure_reason
+    :failure_reason,
+    :delivery_uncertain
   ) do
     def confirmed?
       provider_message_id.present?
+    end
+
+    def unconfirmed?
+      delivery_uncertain
     end
   end
 
@@ -21,6 +26,7 @@ class ConversationMessages::ProviderDelivery
     context:,
     conversation_message: nil,
     delivery_job_id: nil,
+    requested_provider_thread_id: nil,
     &delivery
   )
     new(
@@ -33,6 +39,7 @@ class ConversationMessages::ProviderDelivery
       context:,
       conversation_message:,
       delivery_job_id:,
+      requested_provider_thread_id:,
       delivery:
     ).call
   end
@@ -47,6 +54,7 @@ class ConversationMessages::ProviderDelivery
     context:,
     conversation_message:,
     delivery_job_id:,
+    requested_provider_thread_id:,
     delivery: nil
   )
     @account = account
@@ -58,6 +66,7 @@ class ConversationMessages::ProviderDelivery
     @context = context
     @conversation_message = conversation_message
     @delivery_job_id = delivery_job_id
+    @requested_provider_thread_id = requested_provider_thread_id
     @delivery = delivery
   end
 
@@ -70,6 +79,8 @@ class ConversationMessages::ProviderDelivery
       cause: nil
   rescue EmailConnection::Errors::TemporaryDeliveryError
     raise
+  rescue EmailConnection::Errors::AmbiguousDeliveryError => error
+    unconfirmed_result(error.message)
   rescue EmailConnection::Errors::AuthenticationError => error
     report_authentication_failure(error)
     failed_result(error.message)
@@ -87,27 +98,33 @@ class ConversationMessages::ProviderDelivery
       :context,
       :conversation_message,
       :delivery_job_id,
+      :requested_provider_thread_id,
       :delivery
 
     def deliver
       return delivery.call(mail_message) if delivery
 
-      EmailConnection::Delivery.new(
+      delivery_arguments = {
         account:,
         connection:,
         provider_account_id:,
         credential_generation:
-      ).deliver(mail_message)
+      }
+      if requested_provider_thread_id.present?
+        delivery_arguments[:requested_provider_thread_id] = requested_provider_thread_id
+      end
+      EmailConnection::Delivery.new(**delivery_arguments).deliver(mail_message)
     end
 
     def confirmed_result(delivery_result)
       message_id = provider_message_id(delivery_result)
-      return failed_result(UNCONFIRMED_FAILURE_REASON) unless message_id
+      return unconfirmed_result unless message_id
 
       Result.new(
         provider_message_id: message_id,
         provider_thread_id: provider_thread_id(delivery_result),
-        failure_reason: nil
+        failure_reason: nil,
+        delivery_uncertain: false
       )
     end
 
@@ -115,7 +132,17 @@ class ConversationMessages::ProviderDelivery
       Result.new(
         provider_message_id: nil,
         provider_thread_id: nil,
-        failure_reason:
+        failure_reason:,
+        delivery_uncertain: false
+      )
+    end
+
+    def unconfirmed_result(failure_reason = UNCONFIRMED_FAILURE_REASON)
+      Result.new(
+        provider_message_id: nil,
+        provider_thread_id: nil,
+        failure_reason:,
+        delivery_uncertain: true
       )
     end
 

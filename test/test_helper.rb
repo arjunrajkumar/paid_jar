@@ -14,6 +14,8 @@ module ActiveSupport
     # Setup all fixtures in test/fixtures/*.yml for all tests in alphabetical order.
     fixtures :all
 
-    # Add more helper methods to be used by all tests here...
+    def conversation_work_unit_token(conversation)
+      Conversations::WorkUnitSnapshot.token_for(conversation:)
+    end
   end
 end

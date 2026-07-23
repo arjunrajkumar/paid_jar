@@ -1,0 +1,39 @@
+<section class="app-card app-inbox-health" aria-labelledby="inbox-health-title">
+  <div>
+    <h2 id="inbox-health-title" class="app-card__title">Gmail health</h2>
+    <% if health.connected_email.present? %>
+      <p class="app-card__description"><%= health.connected_email %></p>
+    <% end %>
+  </div>
+
+  <div class="app-inbox-health__states">
+    <div>
+      <strong>Receiving</strong>
+      <span class="app-inbox-health__state app-inbox-health__state--<%= health.receiving.state %>">
+        <%= health.receiving.message %>
+      </span>
+      <% if health.last_successful_inbound_sync_at %>
+        <small>
+          Last received
+          <time datetime="<%= health.last_successful_inbound_sync_at.iso8601 %>">
+            <%= time_ago_in_words(health.last_successful_inbound_sync_at) %> ago
+          </time>
+        </small>
+      <% end %>
+    </div>
+    <div>
+      <strong>Sending</strong>
+      <span class="app-inbox-health__state app-inbox-health__state--<%= health.sending.state %>">
+        <%= health.sending.message %>
+      </span>
+    </div>
+  </div>
+
+  <% if health.action_required? %>
+    <% if Current.user.admin? %>
+      <%= link_to "Open Gmail settings", account_settings_path, class: "app-secondary-button" %>
+    <% else %>
+      <p class="app-table-note">Ask an account administrator to check Gmail settings.</p>
+    <% end %>
+  <% end %>
+</section>

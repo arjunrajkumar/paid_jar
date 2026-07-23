@@ -1,0 +1,8 @@
+<%= turbo_frame_tag "conversations-next-page",
+  loading: :lazy,
+  src: conversations_path(page: page, filter: filter, format: :turbo_stream),
+  class: "app-inbox-pagination",
+  aria: { live: "polite" } do %>
+  <span class="app-inbox-pagination__spinner" aria-hidden="true"></span>
+  <span>Loading more conversations…</span>
+<% end %>

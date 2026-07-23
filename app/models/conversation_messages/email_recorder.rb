@@ -26,6 +26,8 @@ class ConversationMessages::EmailRecorder
       end
     end
     existing.invoice ? existing.invoice.with_lock(&record_link) : record_link.call
+    Conversations::Attention.clear_for_outbound!(existing) if
+      existing.kind_manual_reply? && existing.status_sent?
     existing
   end
 
@@ -41,16 +43,23 @@ class ConversationMessages::EmailRecorder
   end
 
   def call
-    if existing = provider_messages.find_by(provider_message_id: message.provider_message_id)
-      return self.class.link_existing(receipt:, existing:, job_id:)
-    end
-
-    with_invoice_lock(matched_invoice) { record_new_message }
-  rescue ActiveRecord::RecordNotUnique
-    link_existing_winner
+    record
   end
 
   private
+    def record
+      if existing = provider_messages.find_by(provider_message_id: message.provider_message_id)
+        return self.class.link_existing(receipt:, existing:, job_id:)
+      end
+      if existing_reply = app_created_reply
+        return reconcile_app_created_reply(existing_reply)
+      end
+
+      with_invoice_lock(matched_invoice) { record_new_message }
+    rescue ActiveRecord::RecordNotUnique
+      link_existing_winner
+    end
+
     attr_reader :account,
       :receipt,
       :message,
@@ -70,6 +79,7 @@ class ConversationMessages::EmailRecorder
         raise EmailMessageReceipt::ClaimLost unless complete_receipt!(recorded_message)
         receipt.reconsider_unrelated_thread_receipts!(anchor_message: recorded_message)
 
+        apply_attention(recorded_message)
         reopen_confident_inbound(conversation)
       end
       recorded_message
@@ -200,6 +210,50 @@ class ConversationMessages::EmailRecorder
 
     def provider_messages
       account.conversation_messages.where(provider_account_id:)
+    end
+
+    def app_created_reply
+      return if direction != "outbound" || message.internet_message_id.blank?
+
+      digest = Digest::SHA256.hexdigest(message.internet_message_id)
+      account.conversation_messages
+        .kind_manual_reply
+        .where(requested_provider_account_id: provider_account_id)
+        .where(internet_message_id_digest: digest)
+        .find_by(internet_message_id: message.internet_message_id)
+    end
+
+    def reconcile_app_created_reply(existing)
+      newly_confirmed = false
+
+      with_invoice_lock(existing.invoice) do
+        receipt.with_processing_claim!(job_id:) do
+          raise EmailMessageReceipt::ClaimLost unless receipt.provider_account_id == provider_account_id
+
+          newly_confirmed = !existing.status_sent? || existing.provider_message_id.blank?
+          unless existing.reconcile_imported_manual_reply!(
+            receipt:,
+            parsed_message: message,
+            provider_account_id:
+          )
+            raise EmailMessageReceipt::ClaimLost
+          end
+          raise EmailMessageReceipt::ClaimLost unless complete_receipt!(existing)
+          receipt.reconsider_unrelated_thread_receipts!(anchor_message: existing)
+        end
+      end
+
+      if newly_confirmed
+        ConversationMessages::ManualReplyOutcome.finalize!(existing.reload)
+      end
+      existing
+    end
+
+    def apply_attention(recorded_message)
+      Conversations::Attention.require_for_message!(recorded_message)
+      if recorded_message.direction_outbound? && !recorded_message.awaiting_review?
+        Conversations::Attention.clear_for_outbound!(recorded_message)
+      end
     end
 
     def conversation_customer_assigned?

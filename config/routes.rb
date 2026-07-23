@@ -10,6 +10,14 @@ Rails.application.routes.draw do
   get "session/xero/callback", to: "xero/sessions#create", as: :xero_session_callback
 
   resources :invoices, only: :index
+  resources :conversations, only: %i[index show] do
+    scope module: :conversations do
+      resource :match, only: %i[new create]
+      resources :reviews, only: :update, param: :message_id
+      resources :replies, only: :create
+      resource :acknowledgement, only: :create
+    end
+  end
   resources :customers, only: [] do
     resources :email_addresses,
       module: :customers,

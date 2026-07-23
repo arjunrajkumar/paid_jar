@@ -349,7 +349,7 @@ class EmailMessageReceipt < ApplicationRecord
 
   def reconsider_unrelated_thread_receipts!(anchor_message:)
     return [] if provider_thread_id.blank?
-    return [] if anchor_message.blank? || anchor_message.matching_status_ambiguous?
+    return [] if anchor_message.blank? || !anchor_message.trusted_matching_anchor?
 
     self.class.where(
       email_connection_id:,

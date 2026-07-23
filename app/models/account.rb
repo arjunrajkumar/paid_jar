@@ -11,6 +11,7 @@ class Account < ApplicationRecord
   has_many :invoice_reminder_suppressions,
     dependent: :destroy,
     inverse_of: :account
+  before_destroy :destroy_conversation_messages_in_dependency_order
   has_many :conversation_messages, dependent: :destroy, inverse_of: :account
   has_many :conversations, dependent: :destroy, inverse_of: :account
   has_many :conversation_events, dependent: :delete_all, inverse_of: :account
@@ -62,6 +63,10 @@ class Account < ApplicationRecord
   end
 
   private
+    def destroy_conversation_messages_in_dependency_order
+      ConversationMessage.destroy_in_dependency_order!(conversation_messages)
+    end
+
     def assign_external_account_id
       self.external_account_id ||= ExternalIdSequence.next
     end

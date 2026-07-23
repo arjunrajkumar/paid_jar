@@ -213,7 +213,211 @@ class ConversationTest < ActiveSupport::TestCase
     assert_nil conversation.reload.customer
   end
 
+  test "deleting a canonical invoice conversation with a linked source is rejected" do
+    canonical = Conversation.for_invoice!(invoice: @invoice)
+    source = @invoice.account.conversations.create!(
+      canonical_conversation: canonical
+    )
+
+    assert_raises ActiveRecord::RecordNotDestroyed do
+      canonical.destroy!
+    end
+
+    assert_predicate canonical.reload, :persisted?
+    assert_equal canonical, source.reload.canonical_conversation
+  end
+
+  test "direct deletion cannot orphan a linked source" do
+    canonical = Conversation.for_invoice!(invoice: @invoice)
+    source = @invoice.account.conversations.create!(
+      canonical_conversation: canonical
+    )
+
+    assert_raises ActiveRecord::InvalidForeignKey do
+      canonical.delete
+    end
+
+    assert_predicate Conversation.where(id: canonical.id), :exists?
+    assert_equal canonical, source.reload.canonical_conversation
+  end
+
+  test "deleting a linked source leaves its canonical conversation intact" do
+    canonical = Conversation.for_invoice!(invoice: @invoice)
+    source = @invoice.account.conversations.create!(
+      canonical_conversation: canonical
+    )
+
+    source.destroy!
+
+    assert_predicate Conversation.where(id: canonical.id), :exists?
+    assert_not Conversation.exists?(source.id)
+  end
+
+  test "invoice destruction preserves and unlinks source conversations" do
+    canonical = Conversation.for_invoice!(invoice: @invoice)
+    source = @invoice.account.conversations.create!(
+      canonical_conversation: canonical
+    )
+
+    @invoice.destroy!
+
+    assert_not Conversation.exists?(canonical.id)
+    assert_nil source.reload.canonical_conversation
+  end
+
+  test "account destruction removes linked conversation groups" do
+    invoice = create_invoice_for(account_name: "Destroy linked account")
+    account = invoice.account
+    canonical = Conversation.for_invoice!(invoice:)
+    source = account.conversations.create!(canonical_conversation: canonical)
+
+    account.destroy!
+
+    assert_not Conversation.exists?(canonical.id)
+    assert_not Conversation.exists?(source.id)
+  end
+
+  test "independent canonical deletion cannot orphan invoice-assigned source messages" do
+    canonical = Conversation.for_invoice!(invoice: @invoice)
+    source = @invoice.account.conversations.create!(
+      canonical_conversation: canonical
+    )
+    message = source.conversation_messages.create!(
+      account: @invoice.account,
+      invoice: @invoice,
+      direction: :inbound,
+      kind: :customer_email,
+      status: :received,
+      received_at: Time.current,
+      matching_status: :ambiguous,
+      matching_method: :none,
+      review_required: true
+    )
+
+    assert_raises ActiveRecord::RecordNotDestroyed do
+      canonical.destroy!
+    end
+
+    assert_predicate canonical.reload, :persisted?
+    assert_equal canonical, source.reload.canonical_conversation
+    assert_predicate message.reload, :valid?
+  end
+
+  test "invoice destruction removes assigned source messages before unlinking the source" do
+    canonical = Conversation.for_invoice!(invoice: @invoice)
+    source = @invoice.account.conversations.create!(
+      canonical_conversation: canonical
+    )
+    message = source.conversation_messages.create!(
+      account: @invoice.account,
+      invoice: @invoice,
+      email_connection: email_connections(:paid_jar_gmail),
+      email_connection_generation: email_connections(:paid_jar_gmail).credential_generation,
+      provider_account_id: email_connections(:paid_jar_gmail).provider_account_id,
+      provider_message_id: "invoice-destroy-source-anchor",
+      provider_thread_id: "invoice-destroy-source-thread",
+      internet_message_id: "<invoice-destroy-source-anchor@example.com>",
+      direction: :inbound,
+      kind: :customer_email,
+      status: :received,
+      received_at: Time.current,
+      matching_status: :ambiguous,
+      matching_method: :none,
+      review_required: true
+    )
+    reply = create_manual_reply(
+      conversation: canonical,
+      invoice: @invoice,
+      anchor: message,
+      suffix: "invoice-destroy"
+    )
+
+    @invoice.destroy!
+
+    assert_not ConversationMessage.exists?(message.id)
+    assert_not ConversationMessage.exists?(reply.id)
+    assert_nil source.reload.canonical_conversation
+    assert source.conversation_messages.all?(&:valid?)
+  end
+
+  test "account destruction removes assigned linked-source messages safely" do
+    invoice = create_invoice_for(account_name: "Destroy assigned linked account")
+    account = invoice.account
+    account.users.create!(name: "Destroy actor", role: :owner)
+    connection = account.create_email_connection!(
+      provider: :gmail,
+      provider_account_id: "account-destroy-provider",
+      connected_email: "billing-account-destroy@example.com",
+      access_token: "access-token",
+      refresh_token: "refresh-token",
+      scopes: EmailConnection::Gmailable::REQUIRED_SCOPES,
+      status: :active
+    )
+    canonical = Conversation.for_invoice!(invoice:)
+    source = account.conversations.create!(canonical_conversation: canonical)
+    message = source.conversation_messages.create!(
+      account:,
+      invoice:,
+      email_connection: connection,
+      email_connection_generation: connection.credential_generation,
+      provider_account_id: connection.provider_account_id,
+      provider_message_id: "account-destroy-source-anchor",
+      provider_thread_id: "account-destroy-source-thread",
+      internet_message_id: "<account-destroy-source-anchor@example.com>",
+      direction: :inbound,
+      kind: :customer_email,
+      status: :received,
+      received_at: Time.current,
+      matching_status: :ambiguous,
+      matching_method: :none,
+      review_required: true
+    )
+    reply = create_manual_reply(
+      conversation: canonical,
+      invoice:,
+      anchor: message,
+      suffix: "account-destroy"
+    )
+
+    account.destroy!
+
+    assert_not Conversation.exists?(canonical.id)
+    assert_not Conversation.exists?(source.id)
+    assert_not ConversationMessage.exists?(message.id)
+    assert_not ConversationMessage.exists?(reply.id)
+  end
+
   private
+    def create_manual_reply(conversation:, invoice:, anchor:, suffix:)
+      connection = invoice.account.email_connection
+      conversation.conversation_messages.create!(
+        account: invoice.account,
+        invoice:,
+        email_connection: connection,
+        email_connection_generation: connection.credential_generation,
+        provider_account_id: connection.provider_account_id,
+        requested_provider_account_id: connection.provider_account_id,
+        requested_provider_thread_id: anchor.provider_thread_id,
+        reply_to_message: anchor,
+        actor_user: invoice.account.users.active.first,
+        direction: :outbound,
+        kind: :manual_reply,
+        status: :failed,
+        failure_reason: "Delivery failed.",
+        delivery_job_id: "#{suffix}-job",
+        internet_message_id: "<#{suffix}-reply@example.com>",
+        from_address: connection.connected_email,
+        to_addresses: [ invoice.customer.email.presence || "customer@example.com" ],
+        subject: "Re: invoice question",
+        body: "A manual reply.",
+        in_reply_to_message_ids: [ anchor.internet_message_id ],
+        reference_message_ids: [ anchor.internet_message_id ],
+        matching_status: :matched,
+        matching_method: :gmail_thread,
+        idempotency_key: "#{suffix}-reply"
+      )
+    end
+
     def create_sent_message(conversation:, provider_message_id:, provider_thread_id:)
       conversation.conversation_messages.create!(
         account: conversation.account,

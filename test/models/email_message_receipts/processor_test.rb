@@ -1,4 +1,5 @@
 require "test_helper"
+require "timeout"
 
 class EmailMessageReceipts::ProcessorTest < ActiveSupport::TestCase
   setup do
@@ -106,6 +107,39 @@ class EmailMessageReceipts::ProcessorTest < ActiveSupport::TestCase
     assert_equal [ @invoice.customer.email ], imported.bcc_addresses
     assert_predicate @conversation.reload, :status_resolved?
     assert_includes @invoice.conversation_messages.successful_outbound.sent_after(2.days.ago), imported
+  end
+
+  test "review-required imported outbound mail creates shared Inbox attention" do
+    receipt = receipt_for("gmail-outbound-review")
+    receipt.claim!(job_id: "process-outbound-review")
+    gmail_message = gmail_message(
+      id: "gmail-outbound-review",
+      thread_id: "gmail-outbound-review-thread",
+      label_ids: [ "SENT" ],
+      headers: {
+        "From" => @connection.connected_email,
+        "To" => @invoice.customer.email,
+        "Subject" => "A note without an invoice reference",
+        "Message-ID" => "<gmail-outbound-review@example.com>"
+      },
+      body: "Please review this manually sent note."
+    )
+
+    EmailMessageReceipts::Processor.call(
+      receipt,
+      job_id: "process-outbound-review",
+      mailbox: FakeMailbox.new(gmail_message)
+    )
+
+    imported = receipt.reload.conversation_message
+    assert_predicate imported, :direction_outbound?
+    assert_predicate imported, :awaiting_review?
+    assert_equal imported.occurred_at,
+      imported.conversation.reload.attention_required_at
+    assert_includes Conversations::Inbox.call(
+      account: @invoice.account,
+      filter: :needs_attention
+    ), imported.conversation
   end
 
   test "links an existing app-sent message without importing it again" do
@@ -542,6 +576,100 @@ class EmailMessageReceipts::ProcessorTest < ActiveSupport::TestCase
     assert_predicate imported, :matching_status_ambiguous?
     assert_includes imported.review_reasons, "invoice_thread_conflict"
     assert_predicate @conversation.reload, :status_resolved?
+  end
+
+  test "manual matching and message matching serialize without stranding a receipt" do
+    source = @invoice.account.conversations.create!
+    reviewed = source.conversation_messages.create!(
+      account: @invoice.account,
+      email_connection: @connection,
+      email_connection_generation: @connection.credential_generation,
+      provider_account_id: @connection.provider_account_id,
+      provider_message_id: "manual-match-race-anchor",
+      provider_thread_id: "manual-match-race-thread",
+      internet_message_id: "<manual-match-race-anchor@example.com>",
+      direction: :inbound,
+      kind: :customer_email,
+      status: :received,
+      received_at: 1.hour.ago,
+      from_address: "unknown-anchor@example.net",
+      matching_status: :ambiguous,
+      matching_method: :none,
+      review_required: true,
+      review_reasons: [ "invoice_thread_conflict" ]
+    )
+    receipt = receipt_for("manual-match-race-follow-up")
+    receipt.claim!(job_id: "manual-match-race-job")
+    message = gmail_message(
+      id: "manual-match-race-follow-up",
+      thread_id: "manual-match-race-thread",
+      label_ids: [ "IMPORTANT" ],
+      headers: {
+        "From" => "Unknown <unknown-follow-up@example.net>",
+        "To" => @connection.connected_email,
+        "Subject" => "A follow-up",
+        "Message-ID" => "<manual-match-race-follow-up@example.net>"
+      },
+      body: "Following up."
+    )
+    match_calculated = Queue.new
+    continue_processing = Queue.new
+    manual_finished = Queue.new
+    thread_errors = Queue.new
+    matcher_singleton = ConversationMessages::EmailMatcher.singleton_class
+    original_matcher = matcher_singleton.instance_method(:call)
+    pausing_matcher = lambda do |**arguments|
+      result = original_matcher.bind_call(
+        ConversationMessages::EmailMatcher,
+        **arguments
+      )
+      match_calculated << true
+      continue_processing.pop
+      result
+    end
+
+    matcher_singleton.define_method(:call, &pausing_matcher)
+    begin
+      processor = Thread.new do
+        EmailMessageReceipts::Processor.call(
+          receipt,
+          job_id: "manual-match-race-job",
+          mailbox: FakeMailbox.new(message)
+        )
+      rescue StandardError => error
+        thread_errors << error
+      end
+      Timeout.timeout(2) { match_calculated.pop }
+      matcher = Thread.new do
+        Conversations::ManualMatcher.call(
+          source_conversation: source,
+          reviewed_message: reviewed,
+          target_invoice: @invoice,
+          actor_user: users(:arjun),
+          work_unit_token: conversation_work_unit_token(source)
+        )
+        manual_finished << true
+      rescue StandardError => error
+        thread_errors << error
+      end
+      begin
+        Timeout.timeout(0.25) { manual_finished.pop }
+      rescue Timeout::Error
+        nil
+      end
+      continue_processing << true
+      processor.join
+      matcher.join
+    ensure
+      matcher_singleton.define_method(:call, original_matcher)
+    end
+
+    raise thread_errors.pop unless thread_errors.empty?
+    assert_equal Conversation.for_invoice!(invoice: @invoice),
+      source.reload.canonical_conversation
+    assert_predicate receipt.reload, :status_pending?
+  ensure
+    continue_processing << true if continue_processing
   end
 
   private

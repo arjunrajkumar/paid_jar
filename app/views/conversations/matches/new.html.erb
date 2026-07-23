@@ -1,0 +1,46 @@
+<% @page_title = "Match conversation" %>
+<% @body_class = "app-workspace" %>
+
+<%= render "layouts/shared/application_nav", active: :inbox %>
+
+<header class="app-page-header">
+  <div class="app-page-header__content">
+    <%= link_to "← Conversation", conversation_path(@conversation), class: "app-conversation-back" %>
+    <h1 class="app-page-title">Match conversation</h1>
+    <p class="app-page-description">Choose an invoice, or assign only the customer when the invoice is not clear.</p>
+  </div>
+</header>
+
+<section class="app-card app-match-form">
+  <p><strong><%= @message.subject.presence || "No subject" %></strong></p>
+  <div class="app-conversation-message__body"><%= h(@message.body.to_s) %></div>
+
+  <%= form_with url: conversation_match_path(@conversation), scope: :match do |form| %>
+    <%= form.hidden_field :message_id, value: @message.id %>
+    <%= form.hidden_field :work_unit_token,
+      value: Conversations::WorkUnitSnapshot.token_for(
+        conversation: @conversation
+      ) %>
+
+    <%= form.label :invoice_id, "Invoice", class: "app-field-label" %>
+    <%= form.select :invoice_id,
+      options_for_select(
+        @invoices.map do |invoice|
+          [
+            "#{invoice.customer.name} — #{invoice.number.presence || invoice.external_id}",
+            invoice.id
+          ]
+        end
+      ),
+      { include_blank: "No invoice selected" },
+      class: "app-select" %>
+
+    <%= form.label :customer_id, "Customer only", class: "app-field-label" %>
+    <%= form.select :customer_id,
+      options_from_collection_for_select(@customers, :id, :name),
+      { include_blank: "No customer selected" },
+      class: "app-select" %>
+
+    <%= form.submit "Match conversation", class: "app-primary-button" %>
+  <% end %>
+</section>

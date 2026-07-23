@@ -10,10 +10,10 @@ account.
 
 ![PaymentReminder receivables list](docs/ui-north-star/after-home-inbox.png)
 
-PaymentReminder is working, early-stage software. Invoice sync, outbound reminders, and screened
-Gmail shadow ingestion are implemented; an account-user conversation Inbox, AI understanding,
-and automated reply handling are not built yet. See the [capability audit](docs/CAPABILITY_AUDIT.md)
-for the exact current boundary.
+PaymentReminder is working, early-stage software. Invoice sync, outbound reminders, screened Gmail
+ingestion, and an account-user conversation Inbox with human review and threaded manual replies are
+implemented. AI understanding and automated reply handling are not built yet. See the
+[capability audit](docs/CAPABILITY_AUDIT.md) for the exact current boundary.
 
 ## What it does
 
@@ -27,8 +27,10 @@ for the exact current boundary.
 - Schedules debtor-specific reminders before and after an invoice is due, with durable delivery
   history, idempotency, retries, and fresh provider checks before sending.
 - Polls Gmail about every 15 minutes, imports relevant inbound replies and manually sent mail, and
-  retains unmatched or ambiguous relevant messages for future human review without changing Gmail
+  places unmatched or ambiguous relevant messages in a human-review Inbox without changing Gmail
   labels or read state.
+- Lets account users review or manually match imported conversations and send a verified, threaded
+  Gmail reply from the connected account.
 - Tracks payment promises and follow-ups in the domain; platform administrators can operate that
   flow while the customer-facing capture UI is still to be built.
 - Supports multiple accounts and users while keeping every normal application request scoped to
@@ -37,10 +39,9 @@ for the exact current boundary.
   invoices, reminders, promises, and failures, with a dedicated ledger for Madmin mutations.
 
 Not yet exposed to ordinary users: team invitations and role management, account switching,
-one-off reminders, payment-promise capture, customer and invoice detail pages, search, an inbound
-conversation inbox or AI-generated replies. Gmail ingestion currently has no ordinary-user Inbox;
-reviewable records are available only as durable domain/admin data. These boundaries are documented as
-latent or not built—not presented as shipped features.
+one-off reminders, payment-promise capture, customer and invoice detail pages, search, AI-generated
+replies, or automated reply actions. These boundaries are documented as latent or not built—not
+presented as shipped features.
 
 ## Run it locally
 
@@ -167,7 +168,7 @@ product:
 | --- | --- | --- |
 | Xero | Read invoices and their embedded customer details; receive invoice webhooks | Xero-backed receivables |
 | Stripe App | Read invoices; consume connected-account events for supported public Apps | Stripe-backed receivables |
-| Gmail / Google Workspace | Send reminders and screen relevant mailbox activity with `gmail.send` and `gmail.readonly` | Customer reminders and shadow ingestion |
+| Gmail / Google Workspace | Send reminders and screen relevant mailbox activity with `gmail.send` and `gmail.readonly` | Customer reminders and screened Gmail import |
 | SMTP / Amazon SES | Send installation-wide application email | Email-code authentication and notifications |
 | Sentry | Report application failures and recurring-job check-ins | Optional monitoring |
 

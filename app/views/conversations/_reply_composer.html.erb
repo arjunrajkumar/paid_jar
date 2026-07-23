@@ -1,0 +1,30 @@
+<% anchor = target&.message %>
+<section class="app-card app-reply-composer" aria-label="Reply">
+  <h2 class="app-card__title">Reply</h2>
+
+  <% if anchor.nil? %>
+    <p class="app-card__description">A safe customer email is required before you can reply.</p>
+  <% elsif health.sending.state != "healthy" %>
+    <p class="app-card__description">Replies are unavailable until Gmail sending is healthy.</p>
+  <% else %>
+    <p class="app-card__description">
+      Replying to <%= target.recipient %> about <%= anchor.subject.presence || "this email" %>.
+    </p>
+    <%= form_with url: conversation_replies_path(conversation), scope: :reply do |form| %>
+      <%= form.hidden_field :anchor_message_id, value: anchor.id %>
+      <%= form.hidden_field :idempotency_key, value: SecureRandom.uuid %>
+      <%= form.hidden_field :composer_token,
+        value: ConversationMessages::ManualReply.composer_token_for(
+          conversation:,
+          target:
+        ) %>
+      <%= form.label :body, "Message", class: "app-field-label" %>
+      <%= form.text_area :body,
+        required: true,
+        maxlength: ConversationMessages::ManualReply::MAXIMUM_BODY_LENGTH,
+        rows: 8,
+        class: "app-textarea" %>
+      <%= form.submit "Send reply", class: "app-primary-button" %>
+    <% end %>
+  <% end %>
+</section>

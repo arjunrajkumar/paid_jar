@@ -1,0 +1,25 @@
+<% @page_title = "Inbox" %>
+<% @body_class = "app-workspace" %>
+
+<%= render "layouts/shared/application_nav", active: :inbox %>
+
+<header class="app-page-header app-inbox-header">
+  <div class="app-page-header__content">
+    <h1 class="app-page-title">Inbox</h1>
+    <p class="app-page-description">Customer conversations shared by your account.</p>
+  </div>
+</header>
+
+<%= render "conversations/health", health: @health %>
+<%= render "conversations/filters", filter: @filter %>
+
+<section class="app-conversation-index" id="conversation-index">
+  <% if @entries.any? %>
+    <div class="app-conversation-list" id="conversation-rows">
+      <%= render partial: "conversations/conversation", collection: @entries, as: :entry %>
+    </div>
+    <%= render "conversations/next_page", page: @page.next_param, filter: @filter unless @page.last? %>
+  <% else %>
+    <%= render "conversations/empty_state", filter: @filter %>
+  <% end %>
+</section>

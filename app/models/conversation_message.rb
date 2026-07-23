@@ -1,6 +1,26 @@
 class ConversationMessage < ApplicationRecord
   OUTBOUND_CONTACT_COOLDOWN = 48.hours
 
+  def self.destroy_in_dependency_order!(scope)
+    remaining = scope.order(:id).to_a.index_by(&:id)
+
+    until remaining.empty?
+      referenced_ids = remaining.values
+        .filter_map(&:reply_to_message_id)
+        .to_set
+      leaves = remaining.values.reject { |message| referenced_ids.include?(message.id) }
+      if leaves.empty?
+        raise ActiveRecord::DeleteRestrictionError,
+          "conversation message reply graph cannot be destroyed"
+      end
+
+      leaves.each do |message|
+        message.destroy!
+        remaining.delete(message.id)
+      end
+    end
+  end
+
   DIRECTIONS = {
     inbound: "inbound",
     outbound: "outbound"
@@ -8,6 +28,7 @@ class ConversationMessage < ApplicationRecord
   KINDS = {
     customer_email: "customer_email",
     manual_email: "manual_email",
+    manual_reply: "manual_reply",
     customer_reply: "customer_reply",
     scheduled_reminder: "scheduled_reminder",
     manual_reminder: "manual_reminder",
@@ -35,11 +56,32 @@ class ConversationMessage < ApplicationRecord
     failed: "failed",
     received: "received"
   }.freeze
+  REVIEW_OUTCOMES = {
+    manual_match: "manual_match",
+    no_match_needed: "no_match_needed"
+  }.freeze
 
   belongs_to :account, inverse_of: :conversation_messages
   belongs_to :conversation, inverse_of: :conversation_messages
   belongs_to :invoice, optional: true, inverse_of: :conversation_messages
   belongs_to :email_connection, optional: true, inverse_of: :conversation_messages
+  belongs_to :reply_to_message,
+    class_name: "ConversationMessage",
+    optional: true,
+    inverse_of: :replies
+  belongs_to :actor_user,
+    class_name: "User",
+    optional: true,
+    inverse_of: :authored_conversation_messages
+  belongs_to :reviewed_by_user,
+    class_name: "User",
+    optional: true,
+    inverse_of: :reviewed_conversation_messages
+  has_many :replies,
+    class_name: "ConversationMessage",
+    foreign_key: :reply_to_message_id,
+    dependent: :restrict_with_exception,
+    inverse_of: :reply_to_message
   has_one :email_message_receipt,
     dependent: :nullify,
     inverse_of: :conversation_message
@@ -59,11 +101,14 @@ class ConversationMessage < ApplicationRecord
     dependent: :nullify,
     inverse_of: :conversation_message
 
+  attribute :review_outcome, :string
+
   enum :direction, DIRECTIONS, prefix: true, validate: true
   enum :kind, KINDS, prefix: true, validate: true
   enum :status, STATUSES, prefix: true, validate: true
   enum :matching_status, MATCHING_STATUSES, prefix: true, validate: true
   enum :matching_method, MATCHING_METHODS, prefix: true, validate: true
+  enum :review_outcome, REVIEW_OUTCOMES, prefix: true, validate: { allow_nil: true }
 
   attribute :to_addresses, default: -> { [] }
   attribute :cc_addresses, default: -> { [] }
@@ -82,6 +127,9 @@ class ConversationMessage < ApplicationRecord
   normalizes :provider_account_id,
     :provider_message_id,
     :provider_thread_id,
+    :requested_provider_account_id,
+    :requested_provider_thread_id,
+    :idempotency_key,
     :delivery_job_id,
     with: ->(id) { id.to_s.strip.presence }
 
@@ -104,12 +152,41 @@ class ConversationMessage < ApplicationRecord
   validate :provider_account_matches_email_connection, on: :create
   validate :provider_account_is_immutable, on: :update
   validate :email_connection_generation_is_immutable, on: :update
+  validate :user_associations_match_account
+  validate :reply_anchor_matches_account
+  validate :manual_reply_snapshot_is_complete
+  validate :manual_reply_snapshot_is_immutable, on: :update
+  validate :review_completion_is_immutable, on: :update
+  validate :review_outcome_matches_completion
+  validate :delivery_uncertainty_matches_status
 
   scope :successful_outbound, -> { direction_outbound.status_sent }
   scope :awaiting_review, -> do
     where.not(email_connection_id: nil).where(review_required: true, reviewed_at: nil)
   end
   scope :sent_after, ->(time) { where(arel_table[:sent_at].gt(time)) }
+  scope :chronological, -> do
+    order(
+      Arel.sql("COALESCE(received_at, sent_at, created_at) ASC"),
+      :id
+    )
+  end
+  scope :trusted_for_matching, -> do
+    joins(:conversation).where(
+      <<~SQL.squish,
+        conversation_messages.matching_status <> :ambiguous
+        OR (
+          conversation_messages.matching_status = :ambiguous
+          AND conversation_messages.review_outcome = :manual_match
+          AND conversation_messages.reviewed_at IS NOT NULL
+          AND conversation_messages.invoice_id IS NOT NULL
+          AND conversations.canonical_conversation_id IS NOT NULL
+        )
+      SQL
+      ambiguous: MATCHING_STATUSES.fetch(:ambiguous),
+      manual_match: REVIEW_OUTCOMES.fetch(:manual_match)
+    )
+  end
   scope :stale_pending_deliveries, ->(before:) do
     pending_messages = direction_outbound.status_pending
     attempted = pending_messages.where(delivery_attempted_at: ...before)
@@ -127,11 +204,14 @@ class ConversationMessage < ApplicationRecord
   def refresh_delivery_attempt!(job_id:, mail_message:, attempted_at: Time.current)
     with_owned_pending_delivery(job_id:) do
       apply_internet_message_id!(mail_message)
-      update!(
-        ConversationMessages::Content.from_mail(mail_message).attributes.merge(
-          delivery_attempted_at: attempted_at
-        )
-      )
+      attributes = { delivery_attempted_at: attempted_at }
+      unless kind_manual_reply?
+        attributes = ConversationMessages::Content
+          .from_mail(mail_message)
+          .attributes
+          .merge(attributes)
+      end
+      update!(attributes)
     end
   end
 
@@ -206,28 +286,105 @@ class ConversationMessage < ApplicationRecord
         sent_at:,
         provider_message_id:,
         provider_thread_id:,
-        failure_reason: nil
+        failure_reason: nil,
+        delivery_uncertain: false
       )
     end
   end
 
-  def mark_delivery_failed!(job_id:, failure_reason:)
+  def mark_delivery_failed!(job_id:, failure_reason:, delivery_uncertain: false)
     with_owned_pending_delivery(job_id:) do
-      fail_delivery!(failure_reason:)
+      fail_delivery!(failure_reason:, delivery_uncertain:)
     end
   end
 
-  def reconcile_stale_delivery!(before:, failure_reason:)
+  def reconcile_stale_delivery!(before:, failure_reason:, delivery_uncertain: false)
     reconciled = false
 
     with_lock do
       next unless stale_pending_delivery?(before:)
 
-      fail_delivery!(failure_reason:)
+      fail_delivery!(failure_reason:, delivery_uncertain:)
       payment_promise_follow_up&.follow_up_failed!
       reconciled = true
     end
 
+    reconciled
+  end
+
+  def occurred_at
+    received_at || sent_at || created_at
+  end
+
+  def awaiting_review?
+    email_connection_id.present? && review_required? && reviewed_at.nil?
+  end
+
+  def trusted_matching_anchor?
+    !matching_status_ambiguous? ||
+      (
+        review_outcome_manual_match? &&
+        reviewed_at.present? &&
+        invoice_id.present? &&
+        conversation.canonical_conversation_id.present?
+      )
+  end
+
+  def correct_review_to_manual_match!(actor_user:, at: Time.current)
+    return false if review_outcome_manual_match?
+    unless review_outcome_no_match_needed? && reviewed_at.present? &&
+        actor_user.account_id == account_id
+      raise ActiveRecord::RecordInvalid, self
+    end
+
+    @review_outcome_correction = true
+    update!(review_outcome: :manual_match)
+    ConversationEvent.record_once!(
+      conversation:,
+      conversation_message: self,
+      kind: :conversation_message_review_corrected,
+      actor_kind: :user,
+      actor_user:,
+      metadata: {
+        "previous_outcome" => "no_match_needed",
+        "outcome" => "manual_match",
+        "matching_status" => matching_status,
+        "matching_method" => matching_method,
+        "review_reasons" => review_reasons
+      },
+      created_at: at
+    )
+    true
+  ensure
+    @review_outcome_correction = false
+  end
+
+  def reconcile_imported_manual_reply!(
+    receipt:,
+    parsed_message:,
+    provider_account_id:
+  )
+    reconciled = false
+    with_lock do
+      next unless kind_manual_reply? && direction_outbound?
+      next unless requested_provider_account_id == provider_account_id.to_s.strip
+      next unless internet_message_id == parsed_message.internet_message_id
+
+      with_delivery_mailbox_binding_change do
+        update!(
+          email_connection: receipt.email_connection,
+          email_connection_generation: receipt.email_connection_generation,
+          provider_account_id:,
+          provider_message_id: parsed_message.provider_message_id,
+          provider_thread_id: parsed_message.provider_thread_id,
+          status: :sent,
+          sent_at: parsed_message.internal_date,
+          failure_reason: nil,
+          delivery_uncertain: false
+        )
+      end
+      reconciled = true
+    end
     reconciled
   end
 
@@ -251,13 +408,14 @@ class ConversationMessage < ApplicationRecord
       (delivery_attempted_at || created_at) < before
     end
 
-    def fail_delivery!(failure_reason:)
+    def fail_delivery!(failure_reason:, delivery_uncertain: false)
       update!(
         status: :failed,
         sent_at: nil,
         provider_message_id: nil,
         provider_thread_id: nil,
-        failure_reason:
+        failure_reason:,
+        delivery_uncertain:
       )
     end
 
@@ -286,6 +444,10 @@ class ConversationMessage < ApplicationRecord
         return if invoice == conversation.invoice
 
         errors.add(:invoice, "must match conversation invoice")
+      elsif conversation.canonical_conversation&.invoice.present?
+        return if invoice == conversation.canonical_conversation.invoice
+
+        errors.add(:invoice, "must match the canonical conversation invoice")
       elsif invoice.present?
         errors.add(:invoice, "must be blank for an unmatched conversation")
       end
@@ -406,6 +568,102 @@ class ConversationMessage < ApplicationRecord
       return if initial_pending_email_connection_generation_binding?
 
       errors.add(:email_connection_generation, "cannot be changed")
+    end
+
+    def user_associations_match_account
+      if actor_user.present? && account.present? && actor_user.account != account
+        errors.add(:actor_user, "must belong to the message account")
+      end
+      if reviewed_by_user.present? && account.present? && reviewed_by_user.account != account
+        errors.add(:reviewed_by_user, "must belong to the message account")
+      end
+    end
+
+    def reply_anchor_matches_account
+      return if reply_to_message.blank? || account.blank?
+      return if reply_to_message.account == account
+
+      errors.add(:reply_to_message, "must belong to the message account")
+    end
+
+    def manual_reply_snapshot_is_complete
+      return unless kind_manual_reply?
+
+      {
+        reply_to_message:,
+        actor_user:,
+        idempotency_key:,
+        requested_provider_account_id:,
+        requested_provider_thread_id:,
+        internet_message_id:,
+        delivery_job_id:
+      }.each do |attribute_name, value|
+        errors.add(attribute_name, "must be present for a manual reply") if value.blank?
+      end
+      errors.add(:body, "must be present for a manual reply") if body.blank?
+      errors.add(:to_addresses, "must contain exactly one recipient") unless to_addresses.one?
+    end
+
+    def manual_reply_snapshot_is_immutable
+      return unless kind_manual_reply?
+
+      %i[
+        account_id
+        conversation_id
+        invoice_id
+        reply_to_message_id
+        actor_user_id
+        requested_provider_account_id
+        requested_provider_thread_id
+        idempotency_key
+        delivery_job_id
+        internet_message_id
+        from_address
+        to_addresses
+        cc_addresses
+        bcc_addresses
+        subject
+        body
+        in_reply_to_message_ids
+        reference_message_ids
+      ].each do |attribute_name|
+        if will_save_change_to_attribute?(attribute_name)
+          errors.add(attribute_name, "cannot be changed after the reply is queued")
+        end
+      end
+    end
+
+    def review_completion_is_immutable
+      return if reviewed_at_was.nil?
+
+      if will_save_change_to_reviewed_at? || will_save_change_to_reviewed_by_user_id?
+        errors.add(:reviewed_at, "cannot be changed after review")
+      end
+      if will_save_change_to_matching_status? ||
+          will_save_change_to_matching_method? ||
+          will_save_change_to_review_reasons?
+        errors.add(:matching_status, "evidence cannot be changed after review")
+      end
+      if will_save_change_to_review_outcome? && !@review_outcome_correction
+        errors.add(:review_outcome, "cannot be changed after review")
+      end
+    end
+
+    def review_outcome_matches_completion
+      if review_outcome.present?
+        unless review_required? && reviewed_at.present? && reviewed_by_user.present?
+          errors.add(:review_outcome, "requires a completed human review")
+        end
+      elsif review_required? && reviewed_at.present?
+        errors.add(:review_outcome, "must identify how review was completed")
+      end
+    end
+
+    def delivery_uncertainty_matches_status
+      return unless delivery_uncertain?
+      return if status_failed?
+
+      errors.add(:delivery_uncertain, "is only valid for a failed delivery")
     end
 
     def initial_pending_provider_account_binding?

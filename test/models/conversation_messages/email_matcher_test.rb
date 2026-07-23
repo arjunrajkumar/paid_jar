@@ -511,6 +511,96 @@ class ConversationMessages::EmailMatcherTest < ActiveSupport::TestCase
     assert_nil rfc_result.conversation
   end
 
+  test "uses an explicitly invoice-matched ambiguous message as a Gmail-thread anchor" do
+    source, ambiguous = create_ambiguous_anchor(
+      provider_message_id: "manual-gmail-anchor",
+      provider_thread_id: "manual-gmail-thread",
+      internet_message_id: "<manual-gmail-anchor@example.net>"
+    )
+    target = Conversations::ManualMatcher.call(
+      source_conversation: source,
+      reviewed_message: ambiguous,
+      target_invoice: @invoice,
+      actor_user: users(:arjun),
+      work_unit_token: conversation_work_unit_token(source)
+    )
+
+    result = match_email(parsed_message(
+      provider_thread_id: "manual-gmail-thread",
+      from_address: "unknown-follow-up@example.net"
+    ))
+
+    assert_equal target, result.conversation
+    assert_equal "matched", result.matching_status
+    assert_equal "gmail_thread", result.matching_method
+    assert_predicate ambiguous.reload, :matching_status_ambiguous?
+    assert_predicate ambiguous, :review_outcome_manual_match?
+  end
+
+  test "uses an explicitly invoice-matched ambiguous message as an RFC anchor" do
+    source, ambiguous = create_ambiguous_anchor(
+      provider_message_id: "manual-rfc-anchor",
+      provider_thread_id: "manual-rfc-source-thread",
+      internet_message_id: "<manual-rfc-anchor@example.net>"
+    )
+    target = Conversations::ManualMatcher.call(
+      source_conversation: source,
+      reviewed_message: ambiguous,
+      target_invoice: @invoice,
+      actor_user: users(:arjun),
+      work_unit_token: conversation_work_unit_token(source)
+    )
+
+    result = match_email(parsed_message(
+      provider_thread_id: "manual-rfc-follow-up-thread",
+      in_reply_to_message_ids: [ "<manual-rfc-anchor@example.net>" ],
+      from_address: "unknown-follow-up@example.net"
+    ))
+
+    assert_equal target, result.conversation
+    assert_equal "matched", result.matching_status
+    assert_equal "rfc_headers", result.matching_method
+    assert_predicate ambiguous.reload, :matching_status_ambiguous?
+    assert_predicate ambiguous, :review_outcome_manual_match?
+  end
+
+  test "uses a corrected no-match review as both Gmail and RFC anchors" do
+    source, ambiguous = create_ambiguous_anchor(
+      provider_message_id: "corrected-review-anchor",
+      provider_thread_id: "corrected-review-thread",
+      internet_message_id: "<corrected-review-anchor@example.net>"
+    )
+    ConversationMessages::Review.complete!(
+      conversation: source,
+      message: ambiguous,
+      actor_user: users(:arjun),
+      outcome: :no_match_needed,
+      work_unit_token: conversation_work_unit_token(source)
+    )
+    target = Conversations::ManualMatcher.call(
+      source_conversation: source,
+      reviewed_message: ambiguous,
+      target_invoice: @invoice,
+      actor_user: users(:arjun),
+      work_unit_token: conversation_work_unit_token(source)
+    )
+
+    gmail_result = match_email(parsed_message(
+      provider_thread_id: "corrected-review-thread",
+      from_address: "unknown-gmail-follow-up@example.net"
+    ))
+    rfc_result = match_email(parsed_message(
+      provider_thread_id: "corrected-review-rfc-thread",
+      in_reply_to_message_ids: [ "<corrected-review-anchor@example.net>" ],
+      from_address: "unknown-rfc-follow-up@example.net"
+    ))
+
+    assert_equal target, gmail_result.conversation
+    assert_equal "gmail_thread", gmail_result.matching_method
+    assert_equal target, rfc_result.conversation
+    assert_equal "rfc_headers", rfc_result.matching_method
+  end
+
   private
     def match_email(parsed_message, direction: :inbound)
       ConversationMessages::EmailMatcher.call(
@@ -527,6 +617,34 @@ class ConversationMessages::EmailMatcherTest < ActiveSupport::TestCase
         invoice.number = number
         invoice.save!
       end
+    end
+
+    def create_ambiguous_anchor(
+      provider_message_id:,
+      provider_thread_id:,
+      internet_message_id:
+    )
+      connection = email_connections(:paid_jar_gmail)
+      conversation = @account.conversations.create!
+      message = conversation.conversation_messages.create!(
+        account: @account,
+        email_connection: connection,
+        email_connection_generation: connection.credential_generation,
+        provider_account_id: @provider_account_id,
+        provider_message_id:,
+        provider_thread_id:,
+        internet_message_id:,
+        direction: :inbound,
+        kind: :customer_email,
+        status: :received,
+        received_at: Time.current,
+        from_address: "unknown-anchor@example.net",
+        matching_status: :ambiguous,
+        matching_method: :none,
+        review_required: true,
+        review_reasons: [ "invoice_thread_conflict" ]
+      )
+      [ conversation, message ]
     end
 
     def create_unmatched_thread(provider_thread_id)

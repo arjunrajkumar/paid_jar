@@ -72,8 +72,11 @@ ordinary user, and operator behavior exposed through the platform-admin panel.
 - **Available:** account owners and admins can add or remove extra reminder recipients. Invalid
   synchronized addresses are shown but excluded from delivery; valid addresses are normalized and
   deduplicated.
-- **Not built:** a dedicated customer profile, conversation/inbox view, invoice detail page, search,
-  user-entered invoice editing, or accounting-provider write-back.
+- **Available:** account users have a paginated conversation Inbox with attention and review
+  filters, canonical invoice conversations, unmatched sender identity, and a chronological
+  message/event timeline.
+- **Not built:** a dedicated customer profile, invoice detail page, search, user-entered invoice
+  editing, or accounting-provider write-back.
 
 ### Debtor ratings
 
@@ -105,9 +108,10 @@ ordinary user, and operator behavior exposed through the platform-admin panel.
   seven-day screened initial sync and an overlapping recovery scan for expired cursors. Relevant
   inbound customer mail and manually sent Gmail mail are imported; unrelated content is ignored at
   receipt level. Imported manual mail participates in the 48-hour cooldown.
-- **Available as data, not ordinary UI:** automatic, spam, unmatched, ambiguous, and parse-problem
-  messages are persisted for future human review. Gmail state is never modified; raw MIME and
-  attachments are not retained.
+- **Available:** automatic, spam, unmatched, ambiguous, and parse-problem messages are persisted as
+  account-user review work. Users can review a Gmail-thread work unit, manually match it to a
+  customer or invoice when safe, and send a verified threaded reply from an invoice conversation.
+  Gmail state is never modified; raw MIME and attachments are not retained.
 - **Available:** users can independently opt in to emails when a reminder succeeds and when the last
   overdue stage requires manual follow-up.
 - **Available:** an active payment promise or a successful outbound conversation message in the previous
@@ -167,11 +171,11 @@ then records the promise transactionally. It does not pretend that an email was 
 
 ### Conversation and reply types
 
-The application has a latent, provider-neutral conversation foundation. A `Conversation` groups one
-logical accounts-receivable case, with one canonical conversation for each invoice and support for
-account-only unmatched conversations. Every conversation message belongs to a conversation, while
-provider thread identifiers remain on individual messages so multiple provider threads can belong
-to the same case.
+The application has a provider-neutral conversation foundation exposed through the account-user
+Inbox. A `Conversation` groups one logical accounts-receivable case, with one canonical conversation
+for each invoice and support for account-only unmatched conversations. Every conversation message
+belongs to a conversation, while provider thread identifiers remain on individual messages so
+multiple provider threads can belong to the same case.
 
 Conversation creation, resolution, and reopening are recorded as immutable audit facts with system,
 user, or future AI actor attribution. This event ledger does not execute actions or change invoices,
@@ -189,7 +193,8 @@ promises, or email delivery state.
 Scheduled reminders, operator-initiated manual reminders, promise follow-ups, manually recorded
 customer replies, and screened Gmail imports have complete producers. Gmail ingestion is
 deterministic and contains no automatic email understanding, AI classification/response pipeline,
-or customer conversation Inbox.
+or automatic customer response pipeline. Human review, manual matching, and verified threaded
+manual replies are available in the account-user Conversation Inbox.
 
 ### Other latent operations
 
@@ -365,8 +370,9 @@ process; it does not prove that queue workers or recurring jobs are healthy.
 These items were found during review but were not silently changed because they require product,
 privacy, security, or deployment decisions:
 
-- There is no ordinary-user accounts-receivable Inbox, AI extraction, automated answer generation,
-  or human approval workflow. Reviewable Gmail records currently require admin/data access.
+- There is no AI extraction, automated answer generation, or AI-response approval workflow. The
+  ordinary-user accounts-receivable Inbox supports deterministic human review, manual matching,
+  and user-authored threaded replies.
 - Provider synchronization intentionally preserves an existing customer email when a later provider
   payload has a blank email. This may retain a stale recipient, but existing tests define the
   behavior and it needs an explicit product decision.

@@ -1,0 +1,13 @@
+<section class="app-empty-state">
+  <h2>
+    <%= {
+      "needs_attention" => "Nothing needs attention",
+      "needs_review" => "Nothing needs review"
+    }.fetch(filter, "No conversations yet") %>
+  </h2>
+  <p>
+    <%= filter == "all" ?
+      "Customer email and reminder history will appear here." :
+      "You are all caught up." %>
+  </p>
+</section>

@@ -7,7 +7,7 @@ application email:
 | --- | --- | --- |
 | Xero | Read-only import plus webhooks | Invoices and the customer details embedded in them |
 | Stripe App | Read-only import plus supported connected-account events | Invoices, provider links, payment state |
-| Gmail / Google Workspace | Send and readonly OAuth | Customer reminders and screened shadow ingestion |
+| Gmail / Google Workspace | Send and readonly OAuth | Customer reminders and screened Gmail import |
 | SMTP / Amazon SES | Outbound SMTP | Sign-in codes and notifications from the installation |
 
 Configure only the services needed by the installation. Prefer isolated provider applications and
@@ -281,7 +281,7 @@ Useful Stripe references:
 - [Distribution options](https://docs.stripe.com/stripe-apps/distribution-options)
 - [Webhook signature verification](https://docs.stripe.com/webhooks/signature)
 
-## Gmail reminder delivery and shadow ingestion
+## Gmail reminder delivery and screened import
 
 Each PaymentReminder account can connect one Gmail or Google Workspace mailbox. Its address becomes
 the customer reminder From address; an account owner or admin can customize the visible sender
@@ -306,9 +306,10 @@ retry independently after the mailbox cursor advances.
 Only mail with an exact Gmail/RFC thread, known customer address, or exact invoice reference is
 imported as a conversation message. Unrelated mailbox content is not copied into PaymentReminder.
 Relevant automatic replies, spam, unmatched, ambiguous, and malformed messages remain marked for
-future human review. PaymentReminder does not change Gmail labels or read state, and does not store
-raw MIME or attachment bodies. Gmail push notifications, an account-user Inbox, AI processing, and
-automatic actions are not implemented.
+human review in the account-user Inbox. Users can review or manually match a Gmail-thread work unit
+and send a verified threaded reply from an invoice conversation. PaymentReminder does not change
+Gmail labels or read state, and does not store raw MIME or attachment bodies. Gmail push
+notifications, AI processing, and automatic actions are not implemented.
 
 ### Create the Google OAuth application
 

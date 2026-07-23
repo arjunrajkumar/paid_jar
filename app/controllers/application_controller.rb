@@ -9,4 +9,15 @@ class ApplicationController < ActionController::Base
 
   # Only allow modern browsers supporting webp images, web push, badges, import maps, CSS nesting, and CSS :has.
   allow_browser versions: :modern
+
+  helper_method :inbox_attention_count
+
+  private
+    def inbox_attention_count
+      @inbox_attention_count ||= if Current.account
+        Conversations::AttentionSummary.call(account: Current.account).count
+      else
+        0
+      end
+    end
 end

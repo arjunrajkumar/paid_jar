@@ -1,0 +1,56 @@
+<% conversation = @detail.conversation %>
+<% work_unit_token = Conversations::WorkUnitSnapshot.token_for(
+  conversation:
+) %>
+<% @page_title = conversation_name(conversation) %>
+<% @body_class = "app-workspace" %>
+
+<%= render "layouts/shared/application_nav", active: :inbox %>
+
+<header class="app-page-header app-conversation-header">
+  <div class="app-page-header__content">
+    <%= link_to "← Inbox", conversations_path, class: "app-conversation-back" %>
+    <h1 class="app-page-title"><%= conversation_name(conversation) %></h1>
+    <p class="app-page-description"><%= conversation_invoice_reference(conversation) %></p>
+  </div>
+
+  <% if conversation.attention_required_at? %>
+    <%= button_to "Mark handled",
+      conversation_acknowledgement_path(conversation),
+      params: {
+        acknowledgement: {
+          work_unit_token:
+        }
+      },
+      class: "app-secondary-button" %>
+  <% end %>
+</header>
+
+<%= render "conversations/health", health: @health %>
+
+<section class="app-conversation-timeline" aria-label="Conversation timeline">
+  <% @detail.timeline.items.each do |item| %>
+    <% if item.type == :message %>
+      <%= render "conversations/message",
+        message: item.record,
+        conversation: conversation,
+        work_unit_token: work_unit_token %>
+    <% else %>
+      <%= render "conversations/event", event: item.record %>
+    <% end %>
+  <% end %>
+</section>
+
+<% if @detail.reply_targets.any? %>
+  <% @detail.reply_targets.each do |target| %>
+    <%= render "conversations/reply_composer",
+      conversation: conversation,
+      target:,
+      health: @health %>
+  <% end %>
+<% else %>
+  <%= render "conversations/reply_composer",
+    conversation: conversation,
+    target: nil,
+    health: @health %>
+<% end %>

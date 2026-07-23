@@ -39,6 +39,173 @@ class ConversationMessages::ReconcilePendingDeliveriesJobTest < ActiveJob::TestC
     end
   end
 
+  test "marks a stale manual reply delivery unconfirmed and keeps it duplicate protected" do
+    travel_to Time.zone.local(2026, 7, 22, 12) do
+      conversation = Conversation.for_invoice!(invoice: @invoice)
+      connection = email_connections(:paid_jar_gmail)
+      anchor = conversation.conversation_messages.create!(
+        account: @invoice.account,
+        invoice: @invoice,
+        email_connection: connection,
+        email_connection_generation: connection.credential_generation,
+        provider_account_id: connection.provider_account_id,
+        provider_message_id: "stale-manual-anchor",
+        provider_thread_id: "stale-manual-thread",
+        internet_message_id: "<stale-manual-anchor@example.com>",
+        direction: :inbound,
+        kind: :customer_email,
+        status: :received,
+        received_at: 4.hours.ago,
+        from_address: @invoice.customer.email,
+        matching_status: :matched,
+        matching_method: :gmail_thread
+      )
+      reply = ConversationMessages::ManualReply.enqueue!(
+        conversation:,
+        reply_to_message: anchor,
+        actor_user: users(:arjun),
+        body: "A reply whose worker stopped after calling Gmail.",
+        idempotency_key: "stale-manual-reply",
+        composer_token: composer_token_for(conversation, anchor)
+      )
+      reply.update!(delivery_attempted_at: 3.hours.ago)
+      clear_enqueued_jobs
+
+      ConversationMessages::ReconcilePendingDeliveriesJob.perform_now
+
+      assert_predicate reply.reload, :status_failed?
+      assert_predicate reply, :delivery_uncertain?
+      assert_equal ConversationMessages::ProviderDelivery::UNCONFIRMED_FAILURE_REASON,
+        reply.failure_reason
+      assert_predicate reply.conversation_events
+        .kind_conversation_manual_reply_unconfirmed
+        .sole,
+        :actor_kind_system?
+      assert_raises ConversationMessages::ManualReply::StaleComposer do
+        ConversationMessages::ManualReply.enqueue!(
+          conversation:,
+          reply_to_message: anchor,
+          actor_user: users(:arjun),
+          body: "Do not duplicate it.",
+          idempotency_key: "duplicate-stale-manual-reply",
+          composer_token: composer_token_for(conversation, anchor)
+        )
+      end
+    end
+  end
+
+  test "marks a never-attempted stale manual reply as a definite failure" do
+    travel_to Time.zone.local(2026, 7, 22, 12) do
+      conversation = Conversation.for_invoice!(invoice: @invoice)
+      connection = email_connections(:paid_jar_gmail)
+      anchor = conversation.conversation_messages.create!(
+        account: @invoice.account,
+        invoice: @invoice,
+        email_connection: connection,
+        email_connection_generation: connection.credential_generation,
+        provider_account_id: connection.provider_account_id,
+        provider_message_id: "never-attempted-anchor",
+        provider_thread_id: "never-attempted-thread",
+        internet_message_id: "<never-attempted-anchor@example.com>",
+        direction: :inbound,
+        kind: :customer_email,
+        status: :received,
+        received_at: 4.hours.ago,
+        from_address: @invoice.customer.email,
+        matching_status: :matched,
+        matching_method: :gmail_thread
+      )
+      reply = ConversationMessages::ManualReply.enqueue!(
+        conversation:,
+        reply_to_message: anchor,
+        actor_user: users(:arjun),
+        body: "This reply never reached its worker.",
+        idempotency_key: "never-attempted-reply",
+        composer_token: composer_token_for(conversation, anchor)
+      )
+      reply.update_column(:created_at, 3.hours.ago)
+      clear_enqueued_jobs
+
+      ConversationMessages::ReconcilePendingDeliveriesJob.perform_now
+
+      assert_predicate reply.reload, :status_failed?
+      assert_not_predicate reply, :delivery_uncertain?
+      assert_equal ConversationMessages::ReconcilePendingDeliveriesJob::FAILURE_REASON,
+        reply.failure_reason
+      assert_predicate reply.conversation_events
+        .kind_conversation_manual_reply_failed
+        .sole,
+        :actor_kind_system?
+      assert_enqueued_with(job: ConversationMessages::ManualReplyJob) do
+        ConversationMessages::ManualReply.enqueue!(
+          conversation:,
+          reply_to_message: anchor,
+          actor_user: users(:arjun),
+          body: "A safe replacement reply.",
+          idempotency_key: "replacement-after-never-attempted",
+          composer_token: composer_token_for(conversation, anchor)
+        )
+      end
+    end
+  end
+
+  test "a later reconciliation repairs missing unconfirmed finalization" do
+    travel_to Time.zone.local(2026, 7, 22, 12) do
+      conversation = Conversation.for_invoice!(invoice: @invoice)
+      connection = email_connections(:paid_jar_gmail)
+      anchor = conversation.conversation_messages.create!(
+        account: @invoice.account,
+        invoice: @invoice,
+        email_connection: connection,
+        email_connection_generation: connection.credential_generation,
+        provider_account_id: connection.provider_account_id,
+        provider_message_id: "repair-reconciliation-anchor",
+        provider_thread_id: "repair-reconciliation-thread",
+        internet_message_id: "<repair-reconciliation-anchor@example.com>",
+        direction: :inbound,
+        kind: :customer_email,
+        status: :received,
+        received_at: 4.hours.ago,
+        from_address: @invoice.customer.email,
+        matching_status: :matched,
+        matching_method: :gmail_thread
+      )
+      reply = ConversationMessages::ManualReply.enqueue!(
+        conversation:,
+        reply_to_message: anchor,
+        actor_user: users(:arjun),
+        body: "Finalize this without resending.",
+        idempotency_key: "repair-reconciliation",
+        composer_token: composer_token_for(conversation, anchor)
+      )
+      reply.update!(delivery_attempted_at: 3.hours.ago)
+      clear_enqueued_jobs
+      ConversationEvent.stubs(:record_once!).raises(
+        RuntimeError,
+        "event store unavailable"
+      )
+
+      assert_raises RuntimeError do
+        ConversationMessages::ReconcilePendingDeliveriesJob.perform_now
+      end
+
+      assert_predicate reply.reload, :status_failed?
+      assert_predicate reply, :delivery_uncertain?
+      assert_empty reply.conversation_events
+        .kind_conversation_manual_reply_unconfirmed
+      ConversationEvent.unstub(:record_once!)
+
+      ConversationMessages::ReconcilePendingDeliveriesJob.perform_now
+
+      assert_predicate reply.conversation_events
+        .kind_conversation_manual_reply_unconfirmed
+        .sole,
+        :actor_kind_system?
+      assert_equal anchor.received_at,
+        conversation.reload.attention_required_at
+    end
+  end
+
   test "deserializes and performs a job queued with the former class name" do
     travel_to Time.zone.local(2026, 7, 22, 12) do
       stale_message = create_message(
@@ -108,6 +275,17 @@ class ConversationMessages::ReconcilePendingDeliveriesJobTest < ActiveJob::TestC
   end
 
   private
+    def composer_token_for(conversation, anchor)
+      target = ConversationMessages::ManualReply.reply_target_for(
+        conversation:,
+        reply_to_message: anchor
+      )
+      ConversationMessages::ManualReply.composer_token_for(
+        conversation:,
+        target:
+      )
+    end
+
     def create_message(attributes = {})
       ConversationMessage.create!(
         {

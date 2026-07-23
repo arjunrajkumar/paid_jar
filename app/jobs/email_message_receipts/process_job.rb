@@ -139,7 +139,7 @@ class EmailMessageReceipts::ProcessJob < ApplicationJob
   private
     def enqueue_reconsidered_thread_receipts(receipt, recorded_message)
       return unless recorded_message.is_a?(ConversationMessage)
-      return if recorded_message.matching_status_ambiguous?
+      return unless recorded_message.trusted_matching_anchor?
       return if receipt.provider_thread_id.blank?
 
       EmailMessageReceipt.where(

@@ -35,6 +35,21 @@
   </div>
 
   <div id="application-navigation-links" class="app-nav-list" data-toggle-class-target="panel">
+    <%= link_to conversations_path, class: [ "app-nav-item", ("app-nav-item--active" if active == :inbox) ], aria: { current: ("page" if active == :inbox) } do %>
+      <svg class="app-nav-item__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 5h16v12H7l-3 3z"></path>
+        <path d="M8 9h8"></path>
+        <path d="M8 13h5"></path>
+      </svg>
+      <span>Inbox</span>
+      <% if inbox_attention_count.positive? %>
+        <span
+          class="app-nav-badge"
+          aria-label="<%= pluralize(inbox_attention_count, "conversation") %> needs attention"
+        ><%= inbox_attention_count > 99 ? "99+" : inbox_attention_count %></span>
+      <% end %>
+    <% end %>
+
     <%= link_to invoices_path, class: [ "app-nav-item", ("app-nav-item--active" if active == :invoices) ], aria: { current: ("page" if active == :invoices) } do %>
       <svg class="app-nav-item__icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"></path>

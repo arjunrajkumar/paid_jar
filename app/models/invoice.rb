@@ -23,6 +23,7 @@ class Invoice < ApplicationRecord
     -> { order(created_at: :desc, id: :desc) },
     dependent: :destroy,
     inverse_of: :invoice
+  before_destroy :destroy_conversation_messages_in_dependency_order
   has_many :conversation_messages,
     -> { order(created_at: :desc, id: :desc) },
     dependent: :destroy,
@@ -111,6 +112,10 @@ class Invoice < ApplicationRecord
   end
 
   private
+    def destroy_conversation_messages_in_dependency_order
+      ConversationMessage.destroy_in_dependency_order!(conversation_messages)
+    end
+
     def synchronize_conversation_customer
       association(:conversation).reset
       conversation&.update!(customer:)

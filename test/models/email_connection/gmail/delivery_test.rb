@@ -279,6 +279,42 @@ class EmailConnection::Gmail::DeliveryTest < ActiveSupport::TestCase
     end
   end
 
+  test "sends a plain-text reply in the requested Gmail thread with RFC reply headers" do
+    connection = email_connections(:paid_jar_gmail)
+    service = mock
+    captured_request = nil
+    service.expects(:authorization=).with("gmail-access-token")
+    service.expects(:send_user_message).with do |user_id, request|
+      captured_request = request
+      user_id == "me"
+    end.returns(
+      Struct.new(:id, :thread_id).new("threaded-reply-id", "requested-thread")
+    )
+    mail_message = Mail.new(
+      to: "customer@example.com",
+      subject: "Re: Invoice question",
+      body: "Thanks for your message."
+    )
+    mail_message["In-Reply-To"] = "<customer-message@example.com>"
+    mail_message["References"] = "<older@example.com> <customer-message@example.com>"
+
+    result = EmailConnection::Gmail::Delivery.new(
+      account: connection.account,
+      connection:,
+      provider_account_id: connection.provider_account_id,
+      credential_generation: connection.credential_generation,
+      requested_provider_thread_id: "requested-thread",
+      service:
+    ).deliver(mail_message)
+
+    delivered_mail = Mail.read_from_string(captured_request.raw)
+    assert_equal "requested-thread", captured_request.thread_id
+    assert_equal "<customer-message@example.com>", delivered_mail["In-Reply-To"].value
+    assert_equal "<older@example.com> <customer-message@example.com>",
+      delivered_mail["References"].value
+    assert_equal "threaded-reply-id", result.provider_message_id
+  end
+
   private
     def gmail_client_error(reason, status: nil)
       errors = status ? [] : [ { reason: } ]

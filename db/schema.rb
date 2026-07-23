@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_22_160000) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_23_100000) do
   create_table "account_external_id_sequences", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "value", default: 0, null: false
     t.index ["value"], name: "index_account_external_id_sequences_on_value", unique: true
@@ -40,11 +40,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_160000) do
     t.index ["account_id", "kind", "created_at"], name: "index_conversation_events_on_account_kind_created_at"
     t.index ["actor_user_id"], name: "index_conversation_events_on_actor_user_id"
     t.index ["conversation_id", "created_at", "id"], name: "index_conversation_events_on_conversation_created_at_id"
+    t.index ["conversation_message_id", "kind"], name: "index_conversation_events_on_message_and_kind", unique: true
     t.index ["conversation_message_id"], name: "index_conversation_events_on_conversation_message_id"
   end
 
   create_table "conversation_messages", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
+    t.bigint "actor_user_id"
     t.boolean "automatic", default: false, null: false
     t.json "bcc_addresses", null: false
     t.text "body"
@@ -53,11 +55,13 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_160000) do
     t.datetime "created_at", null: false
     t.datetime "delivery_attempted_at"
     t.string "delivery_job_id", collation: "utf8mb4_0900_bin"
+    t.boolean "delivery_uncertain", default: false, null: false
     t.string "direction", null: false
-    t.bigint "email_connection_id"
     t.integer "email_connection_generation"
+    t.bigint "email_connection_id"
     t.text "failure_reason"
     t.string "from_address"
+    t.string "idempotency_key", collation: "utf8mb4_0900_bin"
     t.json "in_reply_to_message_ids", null: false
     t.text "internet_message_id"
     t.string "internet_message_id_digest", limit: 64, collation: "utf8mb4_0900_bin"
@@ -72,36 +76,51 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_160000) do
     t.datetime "received_at"
     t.json "reference_message_ids", null: false
     t.json "reply_to_addresses", null: false
+    t.bigint "reply_to_message_id"
+    t.string "requested_provider_account_id", collation: "utf8mb4_0900_bin"
+    t.string "requested_provider_thread_id", collation: "utf8mb4_0900_bin"
+    t.string "review_outcome"
     t.json "review_reasons", null: false
     t.boolean "review_required", default: false, null: false
     t.datetime "reviewed_at"
+    t.bigint "reviewed_by_user_id"
     t.datetime "sent_at"
     t.string "status", default: "pending", null: false
     t.text "subject"
     t.json "to_addresses", null: false
     t.datetime "updated_at", null: false
+    t.index ["account_id", "idempotency_key"], name: "index_conversation_messages_on_account_idempotency", unique: true
     t.index ["account_id", "provider_account_id", "internet_message_id_digest"], name: "index_conversation_messages_on_account_rfc_message"
     t.index ["account_id", "provider_account_id", "provider_message_id"], name: "index_conversation_messages_on_provider_message", unique: true
     t.index ["account_id", "provider_account_id", "provider_thread_id"], name: "index_conversation_messages_on_provider_thread"
+    t.index ["account_id", "requested_provider_account_id", "requested_provider_thread_id", "status"], name: "index_conversation_messages_on_requested_thread"
     t.index ["account_id", "review_required", "reviewed_at", "received_at"], name: "index_conversation_messages_for_review"
     t.index ["account_id"], name: "index_conversation_messages_on_account_id"
+    t.index ["actor_user_id"], name: "index_conversation_messages_on_actor_user_id"
     t.index ["conversation_id", "created_at", "id"], name: "index_conversation_messages_on_conversation_created_at_id"
     t.index ["delivery_job_id"], name: "index_conversation_messages_on_delivery_job_id"
     t.index ["email_connection_id"], name: "index_conversation_messages_on_email_connection_id"
     t.index ["invoice_id", "direction", "status", "sent_at"], name: "index_conversation_messages_on_outbound_delivery"
     t.index ["invoice_id"], name: "index_conversation_messages_on_invoice_id"
+    t.index ["reply_to_message_id"], name: "index_conversation_messages_on_reply_to_message_id"
+    t.index ["reviewed_by_user_id"], name: "index_conversation_messages_on_reviewed_by_user_id"
     t.index ["status", "delivery_attempted_at"], name: "index_conversation_messages_on_pending_delivery_age"
   end
 
   create_table "conversations", charset: "utf8mb4", collation: "utf8mb4_0900_ai_ci", force: :cascade do |t|
     t.bigint "account_id", null: false
+    t.datetime "attention_required_at"
+    t.bigint "canonical_conversation_id"
     t.datetime "created_at", null: false
     t.bigint "customer_id"
     t.bigint "invoice_id"
     t.datetime "resolved_at"
     t.string "status", default: "open", null: false
     t.datetime "updated_at", null: false
+    t.index ["account_id", "attention_required_at", "id"], name: "index_conversations_for_attention"
+    t.index ["account_id", "canonical_conversation_id"], name: "index_conversations_on_account_and_canonical"
     t.index ["account_id", "status", "updated_at"], name: "index_conversations_on_account_status_updated_at"
+    t.index ["canonical_conversation_id"], name: "fk_rails_d4cd3b561f"
     t.index ["customer_id", "status", "updated_at"], name: "index_conversations_on_customer_status_updated_at"
     t.index ["invoice_id"], name: "index_conversations_on_invoice_id", unique: true
     t.check_constraint "((`status` = _utf8mb4'open') and (`resolved_at` is null)) or ((`status` = _utf8mb4'resolved') and (`resolved_at` is not null))", name: "conversations_status_and_resolved_at_consistent"
@@ -176,8 +195,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_160000) do
     t.datetime "created_at", null: false
     t.string "direction"
     t.datetime "discovered_at", null: false
-    t.bigint "email_connection_id", null: false
     t.integer "email_connection_generation", null: false
+    t.bigint "email_connection_id", null: false
     t.text "last_error"
     t.json "metadata", null: false
     t.datetime "next_retry_at"
@@ -192,6 +211,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_160000) do
     t.string "provider_thread_id", collation: "utf8mb4_0900_bin"
     t.string "status", default: "pending", null: false
     t.datetime "updated_at", null: false
+    t.index ["account_id"], name: "fk_rails_40541bf8eb"
     t.index ["conversation_message_id"], name: "index_email_message_receipts_on_conversation_message_id"
     t.index ["email_connection_id", "provider_account_id", "provider_message_id"], name: "index_email_receipts_on_connection_message", unique: true
     t.index ["status", "next_retry_at", "id"], name: "index_email_receipts_for_retry"
@@ -450,10 +470,14 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_22_160000) do
   add_foreign_key "conversation_events", "conversations"
   add_foreign_key "conversation_events", "users", column: "actor_user_id", on_delete: :nullify
   add_foreign_key "conversation_messages", "accounts"
+  add_foreign_key "conversation_messages", "conversation_messages", column: "reply_to_message_id"
   add_foreign_key "conversation_messages", "conversations"
   add_foreign_key "conversation_messages", "email_connections", on_delete: :nullify
   add_foreign_key "conversation_messages", "invoices"
+  add_foreign_key "conversation_messages", "users", column: "actor_user_id", on_delete: :nullify
+  add_foreign_key "conversation_messages", "users", column: "reviewed_by_user_id", on_delete: :nullify
   add_foreign_key "conversations", "accounts"
+  add_foreign_key "conversations", "conversations", column: "canonical_conversation_id"
   add_foreign_key "conversations", "customers", on_delete: :nullify
   add_foreign_key "conversations", "invoices"
   add_foreign_key "customer_email_addresses", "customers", on_delete: :cascade

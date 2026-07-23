@@ -10,7 +10,16 @@ class ConversationEvent < ApplicationRecord
     conversation_resolved: "conversation_resolved",
     conversation_reopened: "conversation_reopened",
     conversation_message_received: "conversation_message_received",
-    conversation_message_imported: "conversation_message_imported"
+    conversation_message_imported: "conversation_message_imported",
+    conversation_message_reviewed: "conversation_message_reviewed",
+    conversation_message_review_corrected: "conversation_message_review_corrected",
+    conversation_attention_cleared: "conversation_attention_cleared",
+    conversation_manually_matched: "conversation_manually_matched",
+    conversations_linked: "conversations_linked",
+    conversation_manual_reply_queued: "conversation_manual_reply_queued",
+    conversation_manual_reply_sent: "conversation_manual_reply_sent",
+    conversation_manual_reply_failed: "conversation_manual_reply_failed",
+    conversation_manual_reply_unconfirmed: "conversation_manual_reply_unconfirmed"
   }.freeze
 
   belongs_to :account, inverse_of: :conversation_events
@@ -42,7 +51,8 @@ class ConversationEvent < ApplicationRecord
       actor_kind:,
       actor_user: nil,
       conversation_message: nil,
-      metadata: {}
+      metadata: {},
+      created_at: Time.current
     )
       create!(
         conversation:,
@@ -50,8 +60,30 @@ class ConversationEvent < ApplicationRecord
         actor_kind:,
         actor_user:,
         conversation_message:,
-        metadata:
+        metadata:,
+        created_at:
       )
+    end
+
+    def record_once!(
+      conversation:,
+      kind:,
+      actor_kind:,
+      conversation_message:,
+      actor_user: nil,
+      metadata: {},
+      created_at: Time.current
+    )
+      create_or_find_by!(
+        conversation_message:,
+        kind:
+      ) do |event|
+        event.conversation = conversation
+        event.actor_kind = actor_kind
+        event.actor_user = actor_user
+        event.metadata = metadata
+        event.created_at = created_at
+      end
     end
   end
 
